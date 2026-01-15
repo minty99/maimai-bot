@@ -1,7 +1,7 @@
 use scraper::{ElementRef, Html, Selector};
 
 use crate::maimai::models::{ChartType, ParsedPlayRecord};
-use crate::maimai::song_key::song_key_from_title;
+use crate::maimai::song_key::song_key_from_title_and_chart;
 
 pub fn parse_recent_html(html: &str) -> eyre::Result<Vec<ParsedPlayRecord>> {
     let document = Html::parse_document(html);
@@ -113,7 +113,7 @@ pub fn parse_recent_html(html: &str) -> eyre::Result<Vec<ParsedPlayRecord>> {
             sync = merge_sync(sync.take(), parse_sync_from_playlog_icon_src(src));
         }
 
-        let song_key = song_key_from_title(&title)?;
+        let song_key = song_key_from_title_and_chart(&title, chart_type)?;
 
         out.push(ParsedPlayRecord {
             playlog_idx,

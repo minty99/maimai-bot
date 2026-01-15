@@ -2,7 +2,7 @@ use eyre::WrapErr;
 use scraper::{ElementRef, Html, Selector};
 
 use crate::maimai::models::{ChartType, ParsedScoreEntry};
-use crate::maimai::song_key::song_key_from_title;
+use crate::maimai::song_key::song_key_from_title_and_chart;
 
 pub fn parse_scores_html(html: &str, diff: u8) -> eyre::Result<Vec<ParsedScoreEntry>> {
     let document = Html::parse_document(html);
@@ -79,7 +79,8 @@ pub fn parse_scores_html(html: &str, diff: u8) -> eyre::Result<Vec<ParsedScoreEn
             })
             .unwrap_or(ChartType::Std);
 
-        let song_key = song_key_from_title(&title).wrap_err("derive song_key")?;
+        let song_key =
+            song_key_from_title_and_chart(&title, chart_type).wrap_err("derive song_key")?;
 
         entries.push(ParsedScoreEntry {
             song_key,

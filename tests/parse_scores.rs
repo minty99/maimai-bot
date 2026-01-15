@@ -34,6 +34,25 @@ fn run_fixture_test(diff: u8, filename: &str) {
                 .iter()
                 .any(|e| e.chart_type == maimai_bot::maimai::models::ChartType::Dx)
         );
+
+        let mut saw_both = false;
+        for entry in &entries {
+            if entry.title.trim().is_empty() {
+                continue;
+            }
+            let mut found_other = false;
+            for other in &entries {
+                if other.title == entry.title && other.chart_type != entry.chart_type {
+                    found_other = true;
+                    assert_ne!(entry.song_key, other.song_key);
+                }
+            }
+            if found_other {
+                saw_both = true;
+                break;
+            }
+        }
+        println!("debug found title with both chart types: {saw_both}");
     }
 
     println!("diff={diff} entries={}", entries.len());
