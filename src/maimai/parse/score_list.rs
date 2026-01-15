@@ -1,0 +1,196 @@
+use eyre::WrapErr;
+use scraper::{ElementRef, Html, Selector};
+
+use crate::maimai::models::ParsedScoreEntry;
+use crate::maimai::song_key::song_key_from_title;
+
+pub fn parse_scores_html(html: &str, diff: u8) -> eyre::Result<Vec<ParsedScoreEntry>> {
+    let document = Html::parse_document(html);
+
+    let entry_selector = Selector::parse(r#"div[class*="music_"][class*="_score_back"]"#).unwrap();
+    let title_selector = Selector::parse(".music_name_block").unwrap();
+    let score_block_selector = Selector::parse(".music_score_block").unwrap();
+    let icon_selector = Selector::parse("img").unwrap();
+    let idx_selector = Selector::parse(r#"input[name="idx"]"#).unwrap();
+
+    let mut entries = Vec::new();
+    for entry in document.select(&entry_selector) {
+        let title = entry
+            .select(&title_selector)
+            .next()
+            .map(|e| collect_text(&e))
+            .unwrap_or_default()
+            .trim()
+            .to_string();
+
+        let source_idx = entry
+            .select(&idx_selector)
+            .next()
+            .and_then(|e| e.value().attr("value"))
+            .map(|s| s.to_string());
+
+        let mut achievement_percent: Option<f32> = None;
+        let mut dx_score: Option<i32> = None;
+        for block in entry.select(&score_block_selector) {
+            let text = collect_text(&block);
+            if achievement_percent.is_none()
+                && let Some(p) = parse_percent(&text)
+            {
+                achievement_percent = Some(p);
+                continue;
+            }
+            if dx_score.is_none()
+                && let Some(v) = parse_dx_score(&text)
+            {
+                dx_score = Some(v);
+                continue;
+            }
+        }
+
+        let mut rank: Option<String> = None;
+        let mut fc: Option<String> = None;
+        let mut sync: Option<String> = None;
+
+        for img in entry.select(&icon_selector) {
+            let Some(src) = img.value().attr("src") else {
+                continue;
+            };
+
+            if rank.is_none() {
+                rank = parse_rank_from_icon_src(src);
+            }
+            if fc.is_none() {
+                fc = parse_fc_from_icon_src(src);
+            }
+            sync = merge_sync(sync.take(), parse_sync_from_icon_src(src));
+        }
+
+        let song_key = song_key_from_title(&title).wrap_err("derive song_key")?;
+
+        entries.push(ParsedScoreEntry {
+            song_key,
+            title,
+            diff,
+            achievement_percent,
+            rank,
+            fc,
+            sync,
+            dx_score,
+            source_idx,
+        });
+    }
+
+    Ok(entries)
+}
+
+fn collect_text(element: &ElementRef<'_>) -> String {
+    element.text().collect::<Vec<_>>().join("")
+}
+
+fn parse_percent(text: &str) -> Option<f32> {
+    let trimmed = text.trim();
+    if !trimmed.contains('%') {
+        return None;
+    }
+    let number = trimmed.replace(['%', ' ', '\n'], "");
+    number.parse::<f32>().ok()
+}
+
+fn parse_dx_score(text: &str) -> Option<i32> {
+    if !text.contains('/') {
+        return None;
+    }
+    let before = text.split('/').next()?.trim();
+    let digits = before
+        .chars()
+        .filter(|c| c.is_ascii_digit())
+        .collect::<String>();
+    if digits.is_empty() {
+        return None;
+    }
+    digits.parse::<i32>().ok()
+}
+
+fn parse_rank_from_icon_src(src: &str) -> Option<String> {
+    let key = icon_key(src)?;
+    Some(
+        match key.as_str() {
+            "s" => "S",
+            "sp" => "S+",
+            "ss" => "SS",
+            "ssp" => "SS+",
+            "sss" => "SSS",
+            "sssp" => "SSS+",
+            _ => return None,
+        }
+        .to_string(),
+    )
+}
+
+fn parse_fc_from_icon_src(src: &str) -> Option<String> {
+    let key = icon_key(src)?;
+    Some(
+        match key.as_str() {
+            "fc" => "FC",
+            "fcp" => "FC+",
+            "ap" => "AP",
+            "app" => "AP+",
+            _ => return None,
+        }
+        .to_string(),
+    )
+}
+
+fn parse_sync_from_icon_src(src: &str) -> Option<String> {
+    let key = icon_key(src)?;
+    Some(
+        match key.as_str() {
+            "fdxp" => "FDX+",
+            "fdx" => "FDX",
+            "fsp" => "FS+",
+            "fs" => "FS",
+            "sync" => "SYNC",
+            _ => return None,
+        }
+        .to_string(),
+    )
+}
+
+fn merge_sync(existing: Option<String>, candidate: Option<String>) -> Option<String> {
+    let Some(candidate) = candidate else {
+        return existing;
+    };
+    let Some(existing) = existing else {
+        return Some(candidate);
+    };
+    let existing_rank = sync_rank(&existing);
+    let candidate_rank = sync_rank(&candidate);
+    if candidate_rank > existing_rank {
+        Some(candidate)
+    } else {
+        Some(existing)
+    }
+}
+
+fn sync_rank(s: &str) -> u8 {
+    match s {
+        "FDX+" => 5,
+        "FDX" => 4,
+        "FS+" => 3,
+        "FS" => 2,
+        "SYNC" => 1,
+        _ => 0,
+    }
+}
+
+fn icon_key(src: &str) -> Option<String> {
+    let file = src.rsplit('/').next()?;
+    let file = file.split('?').next().unwrap_or(file);
+    let prefix = "music_icon_";
+    if !file.starts_with(prefix) {
+        return None;
+    }
+    let key = file.strip_prefix(prefix)?;
+    let key = key.strip_suffix(".png")?;
+    Some(key.to_string())
+}
