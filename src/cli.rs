@@ -13,6 +13,9 @@ pub struct RootArgs {
     #[arg(long, default_value = "data/cookies.json")]
     pub cookie_path: PathBuf,
 
+    #[arg(long, default_value = "data/maimai.sqlite3")]
+    pub db_path: PathBuf,
+
     #[command(subcommand)]
     pub command: Command,
 }
@@ -30,6 +33,10 @@ pub enum Command {
     Crawl {
         #[command(subcommand)]
         command: CrawlCommand,
+    },
+    Db {
+        #[command(subcommand)]
+        command: DbCommand,
     },
 }
 
@@ -58,4 +65,14 @@ pub enum CrawlCommand {
         #[arg(long, default_value = "data/out/scores.json")]
         out: PathBuf,
     },
+}
+
+#[derive(Debug, Subcommand)]
+pub enum DbCommand {
+    Init,
+    SyncScores {
+        #[arg(long)]
+        diff: Option<u8>,
+    },
+    SyncRecent,
 }

@@ -1,9 +1,11 @@
 use clap::Parser;
 use eyre::WrapErr;
 
-use maimai_bot::cli::{AuthCommand, Command, CrawlCommand, FetchCommand, RootArgs};
+use maimai_bot::cli::{AuthCommand, Command, CrawlCommand, DbCommand, FetchCommand, RootArgs};
 use maimai_bot::config::AppConfig;
+use maimai_bot::db;
 use maimai_bot::http::MaimaiClient;
+use maimai_bot::maimai::parse::recent::parse_recent_html;
 use maimai_bot::maimai::parse::score_list::parse_scores_html;
 use reqwest::Url;
 
@@ -83,6 +85,69 @@ async fn main() -> eyre::Result<()> {
             std::fs::write(&out, json).wrap_err("write json")?;
             println!("saved={}", out.display());
         }
+        Command::Db { command } => match command {
+            DbCommand::Init => {
+                ensure_parent_dir(&args.db_path).wrap_err("create db parent directory")?;
+                let pool = db::connect(&args.db_path).await.wrap_err("connect db")?;
+                db::migrate(&pool).await.wrap_err("migrate db")?;
+                println!("db_init=ok path={}", args.db_path.display());
+            }
+            DbCommand::SyncScores { diff } => {
+                client
+                    .ensure_logged_in()
+                    .await
+                    .wrap_err("ensure logged in")?;
+                ensure_parent_dir(&args.db_path).wrap_err("create db parent directory")?;
+                let pool = db::connect(&args.db_path).await.wrap_err("connect db")?;
+                db::migrate(&pool).await.wrap_err("migrate db")?;
+
+                let diffs: Vec<u8> = match diff {
+                    Some(d) => vec![d],
+                    None => vec![0, 1, 2, 3, 4],
+                };
+
+                let scraped_at = unix_timestamp();
+                let mut all = Vec::new();
+                for d in diffs {
+                    let url = scores_url(d)?;
+                    let bytes = client.get_bytes(&url).await.wrap_err("fetch scores url")?;
+                    let html = String::from_utf8(bytes).wrap_err("scores response is not utf-8")?;
+                    let mut entries = parse_scores_html(&html, d).wrap_err("parse scores html")?;
+                    all.append(&mut entries);
+                }
+
+                let count = all.len();
+                db::upsert_scores(&pool, scraped_at, &all)
+                    .await
+                    .wrap_err("upsert scores")?;
+                println!("db_sync_scores=ok entries={count}");
+            }
+            DbCommand::SyncRecent => {
+                client
+                    .ensure_logged_in()
+                    .await
+                    .wrap_err("ensure logged in")?;
+                ensure_parent_dir(&args.db_path).wrap_err("create db parent directory")?;
+                let pool = db::connect(&args.db_path).await.wrap_err("connect db")?;
+                db::migrate(&pool).await.wrap_err("migrate db")?;
+
+                let url = Url::parse("https://maimaidx-eng.com/maimai-mobile/record/")
+                    .wrap_err("parse record url")?;
+                let bytes = client.get_bytes(&url).await.wrap_err("fetch record url")?;
+                let html = String::from_utf8(bytes).wrap_err("record response is not utf-8")?;
+                let entries = parse_recent_html(&html).wrap_err("parse recent html")?;
+
+                let scraped_at = unix_timestamp();
+                let count_total = entries.len();
+                let count_with_idx = entries.iter().filter(|e| e.playlog_idx.is_some()).count();
+                db::upsert_playlogs(&pool, scraped_at, &entries)
+                    .await
+                    .wrap_err("upsert playlogs")?;
+                println!(
+                    "db_sync_recent=ok entries_total={count_total} entries_with_idx={count_with_idx}"
+                );
+            }
+        },
     }
 
     Ok(())
@@ -102,4 +167,23 @@ fn scores_url(diff: u8) -> eyre::Result<Url> {
         "https://maimaidx-eng.com/maimai-mobile/record/musicGenre/search/?genre=99&diff={diff}"
     ))
     .wrap_err("parse scores url")
+}
+
+fn unix_timestamp() -> i64 {
+    use std::time::{SystemTime, UNIX_EPOCH};
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs() as i64
+}
+
+fn ensure_parent_dir(path: &std::path::Path) -> eyre::Result<()> {
+    let Some(parent) = path.parent() else {
+        return Err(eyre::eyre!("invalid path: {path:?}"));
+    };
+    if parent.as_os_str().is_empty() {
+        return Ok(());
+    }
+    std::fs::create_dir_all(parent).wrap_err("create parent dir")?;
+    Ok(())
 }

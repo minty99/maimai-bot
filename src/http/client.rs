@@ -121,6 +121,11 @@ impl MaimaiClient {
         let final_url = resp.url().clone();
         let bytes = resp.bytes().await.wrap_err("read response bytes")?;
         if !status.is_success() {
+            if status == reqwest::StatusCode::SERVICE_UNAVAILABLE {
+                return Err(eyre::eyre!(
+                    "site unavailable (503). maimai DX NET may be under maintenance. url={final_url}"
+                ));
+            }
             return Err(eyre::eyre!("non-success status: {status} url={final_url}"));
         }
         Ok(bytes.to_vec())
