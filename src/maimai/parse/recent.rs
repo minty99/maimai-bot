@@ -1,6 +1,6 @@
 use scraper::{ElementRef, Html, Selector};
 
-use crate::maimai::models::ParsedPlayRecord;
+use crate::maimai::models::{ChartType, ParsedPlayRecord};
 use crate::maimai::song_key::song_key_from_title;
 
 pub fn parse_recent_html(html: &str) -> eyre::Result<Vec<ParsedPlayRecord>> {
@@ -16,6 +16,7 @@ pub fn parse_recent_html(html: &str) -> eyre::Result<Vec<ParsedPlayRecord>> {
     let achievement_selector = Selector::parse(".playlog_achievement_txt").unwrap();
     let scorerank_selector = Selector::parse("img.playlog_scorerank").unwrap();
     let dx_score_selector = Selector::parse(".playlog_score_block .white").unwrap();
+    let chart_type_selector = Selector::parse("img.playlog_music_kind_icon").unwrap();
     let idx_selector = Selector::parse(r#"input[name="idx"]"#).unwrap();
     let img_selector = Selector::parse("img").unwrap();
 
@@ -86,10 +87,19 @@ pub fn parse_recent_html(html: &str) -> eyre::Result<Vec<ParsedPlayRecord>> {
             .and_then(|e| e.value().attr("src"))
             .and_then(parse_rank_from_playlog_icon_src);
 
-        let dx_score = entry
+        let (dx_score, dx_score_max) = entry
             .select(&dx_score_selector)
             .next()
-            .and_then(|e| parse_dx_score_from_fraction_text(&collect_text(&e)));
+            .and_then(|e| parse_dx_score_pair_from_fraction_text(&collect_text(&e)))
+            .map(|(cur, max)| (Some(cur), Some(max)))
+            .unwrap_or((None, None));
+
+        let chart_type = entry
+            .select(&chart_type_selector)
+            .next()
+            .and_then(|e| e.value().attr("src"))
+            .and_then(parse_chart_type_from_icon_src)
+            .unwrap_or(ChartType::Std);
 
         let mut fc: Option<String> = None;
         let mut sync: Option<String> = None;
@@ -111,12 +121,14 @@ pub fn parse_recent_html(html: &str) -> eyre::Result<Vec<ParsedPlayRecord>> {
             played_at,
             song_key,
             title,
+            chart_type,
             diff,
             achievement_percent,
             score_rank,
             fc,
             sync,
             dx_score,
+            dx_score_max,
         });
     }
 
@@ -173,19 +185,28 @@ fn parse_percent(text: &str) -> Option<f32> {
     number.parse::<f32>().ok()
 }
 
-fn parse_dx_score_from_fraction_text(text: &str) -> Option<i32> {
+fn parse_dx_score_pair_from_fraction_text(text: &str) -> Option<(i32, i32)> {
     if !text.contains('/') {
         return None;
     }
-    let before = text.split('/').next()?.trim();
-    let digits = before
+    let mut iter = text.split('/');
+    let left = iter.next()?.trim();
+    let right = iter.next()?.trim();
+    let left_digits = left
         .chars()
         .filter(|c| c.is_ascii_digit())
         .collect::<String>();
-    if digits.is_empty() {
+    let right_digits = right
+        .chars()
+        .filter(|c| c.is_ascii_digit())
+        .collect::<String>();
+    if left_digits.is_empty() || right_digits.is_empty() {
         return None;
     }
-    digits.parse::<i32>().ok()
+    Some((
+        left_digits.parse::<i32>().ok()?,
+        right_digits.parse::<i32>().ok()?,
+    ))
 }
 
 fn parse_diff_from_icon_src(src: &str) -> Option<u8> {
@@ -202,6 +223,16 @@ fn parse_diff_from_icon_src(src: &str) -> Option<u8> {
         "diff_remaster.png" => Some(4),
         _ => None,
     }
+}
+
+fn parse_chart_type_from_icon_src(src: &str) -> Option<ChartType> {
+    if src.contains("/img/music_dx.png") {
+        return Some(ChartType::Dx);
+    }
+    if src.contains("/img/music_standard.png") {
+        return Some(ChartType::Std);
+    }
+    None
 }
 
 fn parse_rank_from_playlog_icon_src(src: &str) -> Option<String> {

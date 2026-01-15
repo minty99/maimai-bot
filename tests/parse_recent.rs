@@ -1,5 +1,6 @@
 use std::path::PathBuf;
 
+use maimai_bot::maimai::models::ChartType;
 use maimai_bot::maimai::parse::recent::parse_recent_html;
 
 fn fixture_path(name: &str) -> PathBuf {
@@ -23,13 +24,22 @@ fn parse_recent_record_fixture() {
             .iter()
             .all(|e| e.played_at.as_deref().unwrap_or("").len() >= 10)
     );
+    assert!(
+        entries
+            .iter()
+            .filter(|e| e.dx_score.is_some())
+            .all(|e| e.dx_score_max.is_some())
+    );
+    assert!(entries.iter().any(|e| e.chart_type == ChartType::Std));
+    assert!(entries.iter().any(|e| e.chart_type == ChartType::Dx));
 
     println!("recent entries={}", entries.len());
     for e in entries.iter().take(5) {
         println!(
-            "  track={:?} played_at={:?} diff={:?} title={:?} achv={:?} rank={:?} fc={:?} sync={:?} dx={:?} idx={:?}",
+            "  track={:?} played_at={:?} chart={:?} diff={:?} title={:?} achv={:?} rank={:?} fc={:?} sync={:?} dx={:?}/{:?} idx={:?}",
             e.track,
             e.played_at,
+            e.chart_type,
             e.diff,
             e.title,
             e.achievement_percent,
@@ -37,6 +47,7 @@ fn parse_recent_record_fixture() {
             e.fc,
             e.sync,
             e.dx_score,
+            e.dx_score_max,
             e.playlog_idx
         );
     }

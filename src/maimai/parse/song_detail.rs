@@ -1,40 +1,45 @@
 use eyre::WrapErr;
-use scraper::{ElementRef, Html, Selector};
+use scraper::{Html, Selector};
 
-use crate::maimai::models::{ChartType, ParsedScoreEntry};
+use crate::maimai::models::{ChartType, ParsedSongDetail, ParsedSongDifficultyDetail};
 use crate::maimai::song_key::song_key_from_title;
 
-pub fn parse_scores_html(html: &str, diff: u8) -> eyre::Result<Vec<ParsedScoreEntry>> {
+pub fn parse_song_detail_html(html: &str) -> eyre::Result<ParsedSongDetail> {
     let document = Html::parse_document(html);
 
-    let entry_selector = Selector::parse(r#"div[class*="music_"][class*="_score_back"]"#).unwrap();
-    let title_selector = Selector::parse(".music_name_block").unwrap();
+    let title_selector = Selector::parse("div.basic_block div.f_15.break").unwrap();
+    let page_kind_selector = Selector::parse("div.basic_block img").unwrap();
+    let detail_selector =
+        Selector::parse(r#"div[id][class*="music_"][class*="_score_back"]"#).unwrap();
     let score_block_selector = Selector::parse(".music_score_block").unwrap();
     let icon_selector = Selector::parse("img").unwrap();
-    let chart_type_selector = Selector::parse("img.music_kind_icon").unwrap();
-    let idx_selector = Selector::parse(r#"input[name="idx"]"#).unwrap();
 
-    let mut entries = Vec::new();
-    for entry in document.select(&entry_selector) {
-        let title = entry
-            .select(&title_selector)
-            .next()
-            .map(|e| collect_text(&e))
-            .unwrap_or_default()
-            .trim()
-            .to_string();
+    let title = document
+        .select(&title_selector)
+        .next()
+        .map(|e| e.text().collect::<Vec<_>>().join(""))
+        .unwrap_or_default()
+        .trim()
+        .to_string();
 
-        let source_idx = entry
-            .select(&idx_selector)
-            .next()
-            .and_then(|e| e.value().attr("value"))
-            .map(|s| s.to_string());
+    let song_key = song_key_from_title(&title).wrap_err("derive song_key")?;
+    let page_chart_type = document
+        .select(&page_kind_selector)
+        .filter_map(|e| e.value().attr("src"))
+        .find_map(parse_chart_type_from_icon_src)
+        .unwrap_or(ChartType::Std);
+
+    let mut difficulties = Vec::new();
+    for section in document.select(&detail_selector) {
+        let Some(diff) = section.value().attr("id").and_then(diff_from_id) else {
+            continue;
+        };
 
         let mut achievement_percent: Option<f32> = None;
         let mut dx_score: Option<i32> = None;
         let mut dx_score_max: Option<i32> = None;
-        for block in entry.select(&score_block_selector) {
-            let text = collect_text(&block);
+        for block in section.select(&score_block_selector) {
+            let text = block.text().collect::<Vec<_>>().join("");
             if achievement_percent.is_none()
                 && let Some(p) = parse_percent(&text)
             {
@@ -53,11 +58,14 @@ pub fn parse_scores_html(html: &str, diff: u8) -> eyre::Result<Vec<ParsedScoreEn
         let mut rank: Option<String> = None;
         let mut fc: Option<String> = None;
         let mut sync: Option<String> = None;
-        for img in entry.select(&icon_selector) {
+        let mut chart_type: Option<ChartType> = None;
+        for img in section.select(&icon_selector) {
             let Some(src) = img.value().attr("src") else {
                 continue;
             };
-
+            if chart_type.is_none() {
+                chart_type = parse_chart_type_from_icon_src(src);
+            }
             if rank.is_none() {
                 rank = parse_rank_from_icon_src(src);
             }
@@ -67,40 +75,37 @@ pub fn parse_scores_html(html: &str, diff: u8) -> eyre::Result<Vec<ParsedScoreEn
             sync = merge_sync(sync.take(), parse_sync_from_icon_src(src));
         }
 
-        let chart_type = entry
-            .ancestors()
-            .filter_map(ElementRef::wrap)
-            .find_map(|ancestor| {
-                ancestor
-                    .select(&chart_type_selector)
-                    .next()
-                    .and_then(|e| e.value().attr("src"))
-                    .and_then(parse_chart_type_from_icon_src)
-            })
-            .unwrap_or(ChartType::Std);
-
-        let song_key = song_key_from_title(&title).wrap_err("derive song_key")?;
-
-        entries.push(ParsedScoreEntry {
-            song_key,
-            title,
-            chart_type,
+        difficulties.push(ParsedSongDifficultyDetail {
             diff,
+            chart_type: chart_type.unwrap_or(page_chart_type),
             achievement_percent,
             rank,
             fc,
             sync,
             dx_score,
             dx_score_max,
-            source_idx,
         });
     }
 
-    Ok(entries)
+    difficulties.sort_by_key(|d| d.diff);
+
+    Ok(ParsedSongDetail {
+        song_key,
+        title,
+        chart_type: page_chart_type,
+        difficulties,
+    })
 }
 
-fn collect_text(element: &ElementRef<'_>) -> String {
-    element.text().collect::<Vec<_>>().join("")
+fn diff_from_id(id: &str) -> Option<u8> {
+    match id {
+        "basic" => Some(0),
+        "advanced" => Some(1),
+        "expert" => Some(2),
+        "master" => Some(3),
+        "remaster" => Some(4),
+        _ => None,
+    }
 }
 
 fn parse_percent(text: &str) -> Option<f32> {

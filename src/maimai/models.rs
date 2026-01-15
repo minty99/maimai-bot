@@ -1,15 +1,24 @@
 use serde::{Deserialize, Serialize};
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "UPPERCASE")]
+pub enum ChartType {
+    Std,
+    Dx,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ParsedScoreEntry {
     pub song_key: String,
     pub title: String,
+    pub chart_type: ChartType,
     pub diff: u8,
     pub achievement_percent: Option<f32>,
     pub rank: Option<String>,
     pub fc: Option<String>,
     pub sync: Option<String>,
     pub dx_score: Option<i32>,
+    pub dx_score_max: Option<i32>,
     pub source_idx: Option<String>,
 }
 
@@ -21,6 +30,7 @@ pub struct ParsedPlayRecord {
 
     pub song_key: String,
     pub title: String,
+    pub chart_type: ChartType,
     pub diff: Option<u8>,
 
     pub achievement_percent: Option<f32>,
@@ -28,4 +38,25 @@ pub struct ParsedPlayRecord {
     pub fc: Option<String>,
     pub sync: Option<String>,
     pub dx_score: Option<i32>,
+    pub dx_score_max: Option<i32>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ParsedSongDetail {
+    pub song_key: String,
+    pub title: String,
+    pub chart_type: ChartType,
+    pub difficulties: Vec<ParsedSongDifficultyDetail>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ParsedSongDifficultyDetail {
+    pub diff: u8,
+    pub chart_type: ChartType,
+    pub achievement_percent: Option<f32>,
+    pub rank: Option<String>,
+    pub fc: Option<String>,
+    pub sync: Option<String>,
+    pub dx_score: Option<i32>,
+    pub dx_score_max: Option<i32>,
 }

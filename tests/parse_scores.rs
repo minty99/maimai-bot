@@ -17,17 +17,37 @@ fn run_fixture_test(diff: u8, filename: &str) {
     assert!(!entries.is_empty());
     assert!(entries.iter().all(|e| e.diff == diff));
     assert!(entries.iter().all(|e| !e.song_key.trim().is_empty()));
+    assert!(
+        entries
+            .iter()
+            .filter(|e| e.dx_score.is_some())
+            .all(|e| e.dx_score_max.is_some())
+    );
+    if diff == 0 {
+        assert!(
+            entries
+                .iter()
+                .any(|e| e.chart_type == maimai_bot::maimai::models::ChartType::Std)
+        );
+        assert!(
+            entries
+                .iter()
+                .any(|e| e.chart_type == maimai_bot::maimai::models::ChartType::Dx)
+        );
+    }
 
     println!("diff={diff} entries={}", entries.len());
     for e in entries.iter().take(5) {
         println!(
-            "  title={:?} achv={:?} rank={:?} fc={:?} sync={:?} dx={:?} key_prefix={}",
+            "  chart={:?} title={:?} achv={:?} rank={:?} fc={:?} sync={:?} dx={:?}/{:?} key_prefix={}",
+            e.chart_type,
             e.title,
             e.achievement_percent,
             e.rank,
             e.fc,
             e.sync,
             e.dx_score,
+            e.dx_score_max,
             &e.song_key[..e.song_key.len().min(12)]
         );
     }
