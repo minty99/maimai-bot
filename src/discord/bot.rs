@@ -485,6 +485,30 @@ async fn mai_score(
 ) -> Result<(), Error> {
     ctx.defer().await?;
 
+    let titles = sqlx::query_scalar::<_, String>("SELECT DISTINCT title FROM scores")
+        .fetch_all(&ctx.data().db)
+        .await
+        .map_err(|e| eyre::eyre!("query failed: {}", e))?;
+
+    if titles.is_empty() {
+        ctx.send(
+            CreateReply::default().embed(
+                embed_base("No scores found")
+                    .description("DB has no `scores` yet. Run the bot once to build it first."),
+            ),
+        )
+        .await?;
+        return Ok(());
+    }
+
+    let (matched_title, exact) = best_title_match(&search, &titles).ok_or_else(|| {
+        eyre::eyre!(
+            "failed to find best match (search={:?} titles={})",
+            search,
+            titles.len()
+        )
+    })?;
+
     let rows = sqlx::query_as::<_, (String, String, String, String, Option<f64>, Option<String>)>(
         r#"
         SELECT
@@ -495,20 +519,10 @@ async fn mai_score(
             sc.achievement_x10000 / 10000.0 as achievement_percent,
             sc.rank
         FROM scores sc
-        WHERE sc.title LIKE ?
-        ORDER BY
-            CASE sc.diff_category
-                WHEN 'BASIC' THEN 0
-                WHEN 'ADVANCED' THEN 1
-                WHEN 'EXPERT' THEN 2
-                WHEN 'MASTER' THEN 3
-                WHEN 'Re:MASTER' THEN 4
-                ELSE 255
-            END,
-            sc.chart_type
+        WHERE sc.title = ?
         "#,
     )
-    .bind(format!("%{}%", search))
+    .bind(&matched_title)
     .fetch_all(&ctx.data().db)
     .await
     .map_err(|e| eyre::eyre!("query failed: {}", e))?;
@@ -516,22 +530,18 @@ async fn mai_score(
     if rows.is_empty() {
         ctx.send(
             CreateReply::default()
-                .embed(embed_base("No records found").description(format!("Query: `{search}`"))),
+                .embed(embed_base("No records found").description("No score rows found.")),
         )
         .await?;
         return Ok(());
     }
 
-    let mut titles = Vec::<String>::new();
     let mut grouped = std::collections::BTreeMap::<
         String,
         Vec<(String, String, String, Option<f64>, Option<String>)>,
     >::new();
 
     for (title, chart_type, diff_category, level, achievement, rank) in rows {
-        if !grouped.contains_key(&title) {
-            titles.push(title.clone());
-        }
         grouped.entry(title).or_default().push((
             chart_type,
             diff_category,
@@ -542,35 +552,45 @@ async fn mai_score(
     }
 
     let mut desc = String::new();
-    for title in titles {
-        let Some(mut entries) = grouped.remove(&title) else {
-            continue;
-        };
-        entries.sort_by(|a, b| {
-            let a_diff =
-                a.1.parse::<DifficultyCategory>()
-                    .ok()
-                    .map(|d| d.as_u8())
-                    .unwrap_or(255);
-            let b_diff =
-                b.1.parse::<DifficultyCategory>()
-                    .ok()
-                    .map(|d| d.as_u8())
-                    .unwrap_or(255);
+    if !exact {
+        desc.push_str(&format!(
+            "_Closest match (not exact):_ **{}**\n\n",
+            matched_title
+        ));
+    }
 
-            a_diff.cmp(&b_diff).then(a.0.cmp(&b.0)).then(a.2.cmp(&b.2))
-        });
+    let Some((title, mut entries)) = grouped.pop_first() else {
+        ctx.send(
+            CreateReply::default()
+                .embed(embed_base("No records found").description("No score rows found.")),
+        )
+        .await?;
+        return Ok(());
+    };
 
-        desc.push_str(&format!("**{}**\n", title));
-        for (chart_type, diff_category, level, achievement, rank) in entries {
-            let achv = format_percent_f64(achievement);
-            let rank = rank.unwrap_or_else(|| "N/A".to_string());
-            desc.push_str(&format!(
-                "- [{}] {diff_category} {level} — {achv} • {rank}\n",
-                chart_type
-            ));
-        }
-        desc.push('\n');
+    entries.sort_by(|a, b| {
+        let a_diff =
+            a.1.parse::<DifficultyCategory>()
+                .ok()
+                .map(|d| d.as_u8())
+                .unwrap_or(255);
+        let b_diff =
+            b.1.parse::<DifficultyCategory>()
+                .ok()
+                .map(|d| d.as_u8())
+                .unwrap_or(255);
+
+        a_diff.cmp(&b_diff).then(a.0.cmp(&b.0)).then(a.2.cmp(&b.2))
+    });
+
+    desc.push_str(&format!("**{}**\n", title));
+    for (chart_type, diff_category, level, achievement, rank) in entries {
+        let achv = format_percent_f64(achievement);
+        let rank = rank.unwrap_or_else(|| "N/A".to_string());
+        desc.push_str(&format!(
+            "- [{}] {diff_category} {level} — {achv} • {rank}\n",
+            chart_type
+        ));
     }
 
     ctx.send(CreateReply::default().embed(
@@ -579,6 +599,66 @@ async fn mai_score(
     .await?;
 
     Ok(())
+}
+
+fn normalize_for_match(s: &str) -> String {
+    s.to_ascii_lowercase()
+        .chars()
+        .filter(|c| !c.is_whitespace())
+        .collect::<String>()
+}
+
+fn best_title_match(search: &str, titles: &[String]) -> Option<(String, bool)> {
+    let search_norm = normalize_for_match(search.trim());
+    if search_norm.is_empty() {
+        return Some((titles.first()?.clone(), false));
+    }
+
+    if let Some(exact) = titles
+        .iter()
+        .find(|t| normalize_for_match(t) == search_norm)
+    {
+        return Some((exact.clone(), true));
+    }
+
+    let mut best: Option<(&String, usize)> = None;
+    for t in titles {
+        let dist = levenshtein(&search_norm, &normalize_for_match(t));
+        best = match best {
+            None => Some((t, dist)),
+            Some((cur, cur_dist)) => Some(if dist < cur_dist {
+                (t, dist)
+            } else {
+                (cur, cur_dist)
+            }),
+        };
+    }
+    Some((best?.0.clone(), false))
+}
+
+fn levenshtein(a: &str, b: &str) -> usize {
+    let a = a.as_bytes();
+    let b = b.as_bytes();
+    if a.is_empty() {
+        return b.len();
+    }
+    if b.is_empty() {
+        return a.len();
+    }
+
+    let mut prev = (0..=b.len()).collect::<Vec<usize>>();
+    let mut cur = vec![0usize; b.len() + 1];
+
+    for (i, &ac) in a.iter().enumerate() {
+        cur[0] = i + 1;
+        for (j, &bc) in b.iter().enumerate() {
+            let cost = usize::from(ac != bc);
+            cur[j + 1] = (prev[j + 1] + 1).min(cur[j] + 1).min(prev[j] + cost);
+        }
+        std::mem::swap(&mut prev, &mut cur);
+    }
+
+    prev[b.len()]
 }
 
 fn latest_credit_len(tracks: &[Option<i64>]) -> usize {
