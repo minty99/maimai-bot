@@ -10,6 +10,8 @@ pub struct AppConfig {
     pub sega_password: String,
     pub data_dir: PathBuf,
     pub cookie_path: PathBuf,
+    pub discord_bot_token: Option<String>,
+    pub discord_user_id: Option<String>,
 }
 
 impl AppConfig {
@@ -17,12 +19,16 @@ impl AppConfig {
         let sega_id = std::env::var("SEGA_ID").wrap_err("missing env var: SEGA_ID")?;
         let sega_password =
             std::env::var("SEGA_PASSWORD").wrap_err("missing env var: SEGA_PASSWORD")?;
+        let discord_bot_token = std::env::var("DISCORD_BOT_TOKEN").ok();
+        let discord_user_id = std::env::var("DISCORD_USER_ID").ok();
 
         Ok(Self {
             sega_id,
             sega_password,
             data_dir: args.data_dir.clone(),
             cookie_path: args.cookie_path.clone(),
+            discord_bot_token,
+            discord_user_id,
         })
     }
 
