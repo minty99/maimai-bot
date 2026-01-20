@@ -102,6 +102,33 @@ pub enum CrawlCommand {
         )]
         out: PathBuf,
     },
+    #[command(about = "Crawl recent play records (latest 50) and write parsed JSON")]
+    Recent {
+        #[arg(
+            long,
+            default_value = "data/out/recent.json",
+            value_name = "FILE",
+            help = "Output JSON file path"
+        )]
+        out: PathBuf,
+    },
+    #[command(about = "Crawl a song detail page (musicDetail) and write parsed JSON")]
+    SongDetail {
+        #[arg(
+            long,
+            value_name = "IDX",
+            help = "musicDetail idx parameter value (use the idx value from scores list)"
+        )]
+        idx: String,
+
+        #[arg(
+            long,
+            default_value = "data/out/song_detail.json",
+            value_name = "FILE",
+            help = "Output JSON file path"
+        )]
+        out: PathBuf,
+    },
 }
 
 #[derive(Debug, Subcommand)]

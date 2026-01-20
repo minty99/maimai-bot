@@ -7,6 +7,7 @@ use maimai_bot::db;
 use maimai_bot::http::MaimaiClient;
 use maimai_bot::maimai::parse::recent::parse_recent_html;
 use maimai_bot::maimai::parse::score_list::parse_scores_html;
+use maimai_bot::maimai::parse::song_detail::parse_song_detail_html;
 use reqwest::Url;
 
 #[tokio::main]
@@ -82,6 +83,51 @@ async fn main() -> eyre::Result<()> {
             .wrap_err("create output directory")?;
 
             let json = serde_json::to_string_pretty(&all).wrap_err("serialize json")?;
+            std::fs::write(&out, json).wrap_err("write json")?;
+            println!("saved={}", out.display());
+        }
+        Command::Crawl {
+            command: CrawlCommand::Recent { out },
+        } => {
+            client
+                .ensure_logged_in()
+                .await
+                .wrap_err("ensure logged in")?;
+            let url = record_url()?;
+            let bytes = client.get_bytes(&url).await.wrap_err("fetch record url")?;
+            let html = String::from_utf8(bytes).wrap_err("record response is not utf-8")?;
+            let entries = parse_recent_html(&html).wrap_err("parse recent html")?;
+
+            std::fs::create_dir_all(
+                out.parent()
+                    .ok_or_else(|| eyre::eyre!("invalid --out path: {out:?}"))?,
+            )
+            .wrap_err("create output directory")?;
+            let json = serde_json::to_string_pretty(&entries).wrap_err("serialize json")?;
+            std::fs::write(&out, json).wrap_err("write json")?;
+            println!("saved={}", out.display());
+        }
+        Command::Crawl {
+            command: CrawlCommand::SongDetail { idx, out },
+        } => {
+            client
+                .ensure_logged_in()
+                .await
+                .wrap_err("ensure logged in")?;
+            let url = song_detail_url(&idx)?;
+            let bytes = client
+                .get_bytes(&url)
+                .await
+                .wrap_err("fetch song detail url")?;
+            let html = String::from_utf8(bytes).wrap_err("song detail response is not utf-8")?;
+            let parsed = parse_song_detail_html(&html).wrap_err("parse song detail html")?;
+
+            std::fs::create_dir_all(
+                out.parent()
+                    .ok_or_else(|| eyre::eyre!("invalid --out path: {out:?}"))?,
+            )
+            .wrap_err("create output directory")?;
+            let json = serde_json::to_string_pretty(&parsed).wrap_err("serialize json")?;
             std::fs::write(&out, json).wrap_err("write json")?;
             println!("saved={}", out.display());
         }
@@ -186,4 +232,15 @@ fn ensure_parent_dir(path: &std::path::Path) -> eyre::Result<()> {
     }
     std::fs::create_dir_all(parent).wrap_err("create parent dir")?;
     Ok(())
+}
+
+fn record_url() -> eyre::Result<Url> {
+    Url::parse("https://maimaidx-eng.com/maimai-mobile/record/").wrap_err("parse record url")
+}
+
+fn song_detail_url(idx: &str) -> eyre::Result<Url> {
+    let mut url = Url::parse("https://maimaidx-eng.com/maimai-mobile/record/musicDetail/")
+        .wrap_err("parse song detail base url")?;
+    url.query_pairs_mut().append_pair("idx", idx);
+    Ok(url)
 }
