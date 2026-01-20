@@ -58,6 +58,11 @@ pub enum Command {
         #[command(subcommand)]
         command: DbCommand,
     },
+    #[command(about = "Run Discord bot")]
+    Bot {
+        #[command(subcommand)]
+        command: BotCommand,
+    },
 }
 
 #[derive(Debug, Subcommand)]
@@ -146,4 +151,10 @@ pub enum DbCommand {
     },
     #[command(about = "Fetch recent play records and upsert into DB")]
     SyncRecent,
+}
+
+#[derive(Debug, Subcommand)]
+pub enum BotCommand {
+    #[command(about = "Start Discord bot")]
+    Run,
 }

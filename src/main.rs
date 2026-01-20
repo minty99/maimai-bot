@@ -1,7 +1,9 @@
 use clap::Parser;
 use eyre::WrapErr;
 
-use maimai_bot::cli::{AuthCommand, Command, CrawlCommand, DbCommand, FetchCommand, RootArgs};
+use maimai_bot::cli::{
+    AuthCommand, BotCommand, Command, CrawlCommand, DbCommand, FetchCommand, RootArgs,
+};
 use maimai_bot::config::AppConfig;
 use maimai_bot::db;
 use maimai_bot::http::MaimaiClient;
@@ -192,6 +194,14 @@ async fn main() -> eyre::Result<()> {
                 println!(
                     "db_sync_recent=ok entries_total={count_total} entries_with_idx={count_with_idx}"
                 );
+            }
+        },
+        Command::Bot { command } => match command {
+            BotCommand::Run => {
+                ensure_parent_dir(&args.db_path).wrap_err("create db parent directory")?;
+                maimai_bot::discord::run_bot(config, args.db_path.clone())
+                    .await
+                    .wrap_err("run discord bot")?;
             }
         },
     }
