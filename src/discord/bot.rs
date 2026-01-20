@@ -106,11 +106,15 @@ pub async fn run_bot(config: AppConfig, db_path: std::path::PathBuf) -> Result<(
             },
             ..Default::default()
         })
-        .setup(move |ctx, _ready, _framework| {
+        .setup(move |ctx, _ready, framework| {
             Box::pin(async move {
                 info!("Bot started as {}", ctx.cache.current_user().name);
 
                 start_background_tasks(bot_data.clone(), ctx.cache.clone());
+
+                poise::builtins::register_globally(ctx, &framework.options().commands)
+                    .await
+                    .map_err(|e| -> Error { Box::new(e) })?;
 
                 Ok(bot_data)
             })
