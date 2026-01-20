@@ -584,7 +584,6 @@ async fn mai_score(
         let reply = ctx
             .send(
                 CreateReply::default()
-                    .ephemeral(true)
                     .embed(
                         embed_base("No exact match")
                             .description(format!("Query: `{search}`\n\n{}", lines.join("\n"))),
@@ -633,6 +632,11 @@ async fn mai_score(
         };
         if idx >= candidates.len() {
             return Ok(());
+        }
+
+        if let Ok(msg) = reply.message().await {
+            let msg = msg.into_owned();
+            let _ = msg.delete(ctx).await;
         }
 
         candidates[idx].clone()
