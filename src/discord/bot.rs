@@ -568,9 +568,11 @@ async fn mai_score(
     }
 
     let mut desc = String::new();
-    if !exact {
+    if exact {
+        desc.push_str(&format!("**{}**\n\n", matched_title));
+    } else {
         desc.push_str(&format!(
-            "_Closest match (not exact):_ **{}**\n\n",
+            "_Query:_ `{search}`\n_Closest match (not exact):_ **{}**\n\n",
             matched_title
         ));
     }
@@ -584,7 +586,9 @@ async fn mai_score(
         return Ok(());
     };
 
-    desc.push_str(&format!("**{}**\n", title));
+    if exact {
+        desc.push_str(&format!("**{}**\n", title));
+    }
     for (chart_type, diff_category, level, achievement, rank) in entries {
         let achv = format_percent_f64(achievement);
         let rank = rank.unwrap_or_else(|| "N/A".to_string());
