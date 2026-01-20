@@ -1,6 +1,6 @@
 use eyre::{Result, WrapErr};
 use poise::serenity_prelude as serenity;
-use poise::{CreateReply, FrameworkOptions, PrefixFrameworkOptions};
+use poise::{CreateReply, FrameworkOptions};
 use reqwest::Url;
 use std::sync::Arc;
 use std::time::Duration;
@@ -65,12 +65,8 @@ pub async fn run_bot(config: AppConfig, db_path: std::path::PathBuf) -> Result<(
 
     let framework = poise::Framework::builder()
         .options(FrameworkOptions {
-            prefix_options: PrefixFrameworkOptions {
-                mention_as_prefix: true,
-                execute_self_messages: false,
-                ..Default::default()
-            },
-            commands: vec![song(), recent(), help()],
+            prefix_options: Default::default(),
+            commands: vec![mai_record(), mai_recent()],
             on_error: |error| {
                 Box::pin(async move {
                     match error {
@@ -121,9 +117,7 @@ pub async fn run_bot(config: AppConfig, db_path: std::path::PathBuf) -> Result<(
         })
         .build();
 
-    let intents = serenity::GatewayIntents::GUILD_MESSAGES
-        | serenity::GatewayIntents::DIRECT_MESSAGES
-        | serenity::GatewayIntents::MESSAGE_CONTENT;
+    let intents = serenity::GatewayIntents::GUILDS;
 
     let mut client = serenity::Client::builder(&discord_bot_token, intents)
         .framework(framework)
@@ -245,8 +239,8 @@ fn format_new_records(records: &[ParsedPlayRecord]) -> String {
 }
 
 /// Get song records by song title or key
-#[poise::command(prefix_command, slash_command)]
-async fn song(
+#[poise::command(slash_command, rename = "mai-record")]
+async fn mai_record(
     ctx: Context<'_>,
     #[description = "Song title or key to search for"] search: String,
 ) -> Result<(), Error> {
@@ -303,15 +297,17 @@ async fn song(
     Ok(())
 }
 
-/// Get most recent credit records
-#[poise::command(prefix_command, slash_command)]
-async fn recent(
-    ctx: Context<'_>,
-    #[description = "Number of recent credits to show"] limit: Option<usize>,
-) -> Result<(), Error> {
-    ctx.defer().await?;
+fn latest_credit_count(tracks: &[Option<i64>]) -> usize {
+    match tracks.iter().position(|t| *t == Some(1)) {
+        Some(idx) => idx + 1,
+        None => tracks.len().min(4),
+    }
+}
 
-    let limit = limit.unwrap_or(1).min(10);
+/// Get most recent credit records
+#[poise::command(slash_command, rename = "mai-recent")]
+async fn mai_recent(ctx: Context<'_>) -> Result<(), Error> {
+    ctx.defer().await?;
 
     let rows = sqlx::query_as::<
         _,
@@ -335,10 +331,9 @@ async fn recent(
         FROM playlogs pl
         WHERE pl.playlog_idx IS NOT NULL
         ORDER BY pl.played_at DESC
-        LIMIT ?
+        LIMIT 50
         "#,
     )
-    .bind(limit as i64)
     .fetch_all(&ctx.data().db)
     .await
     .map_err(|e| eyre::eyre!("query failed: {}", e))?;
@@ -348,9 +343,13 @@ async fn recent(
         return Ok(());
     }
 
-    let mut lines = vec![format!("🕐 Recent {} Credits", limit), String::new()];
+    let take = latest_credit_count(&rows.iter().map(|row| row.2).collect::<Vec<_>>());
+    let mut lines = vec![
+        format!("🕐 Recent 1 Credit ({} plays)", take),
+        String::new(),
+    ];
 
-    for (title, chart_type, track, played_at, achievement, rank) in rows {
+    for (title, chart_type, track, played_at, achievement, rank) in rows.into_iter().take(take) {
         lines.push(format!(
             "**{}** [{}] - {} @ {}",
             title,
@@ -367,23 +366,6 @@ async fn recent(
     }
 
     ctx.say(lines.join("\n")).await?;
-
-    Ok(())
-}
-
-/// Show available commands
-#[poise::command(prefix_command, slash_command)]
-async fn help(ctx: Context<'_>) -> Result<(), Error> {
-    ctx.say(
-        "📋 **Available Commands**\n\
-        \n\
-        `/song <query>` - Search for song records by title or key\n\
-        `/recent [limit]` - Show recent credit records (default: 1, max: 10)\n\
-        `/help` - Show this help message\n\
-        \n\
-        You can also mention the bot with your command!",
-    )
-    .await?;
 
     Ok(())
 }
@@ -418,4 +400,29 @@ fn format_playlog_stats(record: &ParsedPlayRecord) -> String {
             .and_then(|s| record.dx_score_max.map(|m| format!("{}/{}", s, m)))
             .unwrap_or_else(|| "N/A".to_string())
     )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::latest_credit_count;
+
+    #[test]
+    fn latest_credit_count_stops_at_first_track_01() {
+        let tracks = vec![Some(4), Some(3), Some(2), Some(1), Some(4), Some(3)];
+        assert_eq!(latest_credit_count(&tracks), 4);
+    }
+
+    #[test]
+    fn latest_credit_count_includes_only_one_track() {
+        let tracks = vec![Some(1), Some(4), Some(3), Some(2)];
+        assert_eq!(latest_credit_count(&tracks), 1);
+    }
+
+    #[test]
+    fn latest_credit_count_falls_back_when_missing() {
+        let tracks = vec![Some(4), Some(3), Some(2)];
+        assert_eq!(latest_credit_count(&tracks), 3);
+        let tracks = vec![Some(4), Some(3), Some(2), Some(4), Some(3)];
+        assert_eq!(latest_credit_count(&tracks), 4);
+    }
 }

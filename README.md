@@ -12,10 +12,7 @@ Discord 봇은 로컬 SQLite DB에 데이터를 저장하며, 10분마다 최근
 
 ## Discord에서 사용하는 방법
 
-봇은 두 가지 방식으로 명령을 지원합니다.
-
-1) **슬래시 명령어** (`/song`, `/recent`, `/help`)
-2) **멘션 프리픽스 명령어** (봇을 멘션하고 `song`, `recent`, `help` 등을 입력)
+슬래시 명령어로 사용합니다: `/mai-record`, `/mai-recent`
 
 ### 자동 알림 (DM)
 
@@ -28,20 +25,14 @@ Discord 봇은 로컬 SQLite DB에 데이터를 저장하며, 10분마다 최근
 📊 달성률  🏆 등급  🎯 FC  👥 SYNC  💫 DX 점수/최대 점수
 ```
 
-### `/song <query>`: 곡별 기록 조회
+### `/mai-record <query>`: 곡별 기록 조회
 
 곡 제목(부분 일치) 또는 `song_key`로 점수 기록을 조회합니다.
 
 예시:
 
 ```
-/song GALAXY
-```
-
-멘션 방식 예시:
-
-```
-@봇이름 song GALAXY
+/mai-record GALAXY
 ```
 
 출력은 대략 아래처럼 나옵니다(표시 형식은 서버/클라이언트에 따라 달라질 수 있음).
@@ -53,55 +44,32 @@ Discord 봇은 로컬 SQLite DB에 데이터를 저장하며, 10분마다 최근
 **GALAXY** [DX] MASTER: 99.80% - SSS
 ```
 
-### `/recent [limit]`: 최근 크레딧 기록 조회
+### `/mai-recent`: 최근 크레딧 기록 조회
 
 DB에 저장된 최근 플레이 로그를 조회합니다.
-
-- `limit` 기본값: 1
 - `limit` 최대값: 10
 
 예시:
 
 ```
-/recent
+/mai-recent
 ```
 
 ```
-/recent 3
-```
-
-멘션 방식 예시:
-
-```
-@봇이름 recent 3
+`/mai-recent`는 가장 최근 1 크레딧(최근 TRACK 01부터)의 플레이만 보여줘요.
 ```
 
 출력 예시:
 
 ```
-🕐 Recent 1 Credits
+🕐 Recent 1 Credit (4 plays)
 
 **곡 제목** [STD] - Track 1 @ 2026/01/20 22:10
 📊 99.50% - SSS
 ```
 
-### `/help`: 명령어 목록
-
-예시:
-
-```
-/help
-```
-
-멘션 방식 예시:
-
-```
-@봇이름 help
-```
-
 ## Discord 설정/주의사항
 
 - 봇을 서버에 초대하고, 메시지 읽기/전송 권한이 필요합니다.
-- 멘션 프리픽스 명령을 쓰려면 Discord 개발자 포털에서 **Message Content Intent**가 켜져 있어야 정상 동작합니다.
 - DM 알림을 받으려면 봇이 사용자에게 DM을 보낼 수 있어야 합니다(서버 설정/사용자 설정에 따라 DM이 차단될 수 있음).
 - 이 프로젝트는 **단일 사용자** 전용입니다. DM 알림은 `DISCORD_USER_ID`로 지정된 사용자에게만 전송됩니다.
