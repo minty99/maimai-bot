@@ -117,6 +117,10 @@ pub async fn run_bot(config: AppConfig, db_path: std::path::PathBuf) -> Result<(
                     .await
                     .wrap_err("register commands globally")?;
 
+                send_startup_dm(&bot_data)
+                    .await
+                    .wrap_err("send startup DM")?;
+
                 Ok(bot_data)
             })
         })
@@ -257,6 +261,19 @@ async fn send_new_records_dm(bot_data: &BotData, records: &[ParsedPlayRecord]) -
 
     info!("Sent DM with {} new records", records.len());
 
+    Ok(())
+}
+
+async fn send_startup_dm(bot_data: &BotData) -> Result<()> {
+    let http = &bot_data.discord_http;
+    let dm_channel = bot_data
+        .discord_user_id
+        .create_dm_channel(http)
+        .await
+        .wrap_err("create DM channel")?;
+
+    let message = format!("✅ maimai-bot started\n- unix_ts: {}", unix_timestamp());
+    dm_channel.say(http, message).await.wrap_err("send DM")?;
     Ok(())
 }
 
