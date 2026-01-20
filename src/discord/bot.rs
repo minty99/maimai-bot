@@ -13,9 +13,10 @@ use crate::db::{SqlitePool, format_chart_type, format_diff, format_percent_f64, 
 use crate::http::MaimaiClient;
 use crate::maimai::models::ParsedPlayRecord;
 use crate::maimai::parse::recent::parse_recent_html;
+use crate::maimai::parse::score_list::parse_scores_html;
 
 type Context<'a> = poise::Context<'a, BotData, Error>;
-type Error = Box<dyn std::error::Error + Send + Sync>;
+type Error = eyre::Report;
 
 #[derive(Debug, Clone)]
 pub struct BotData {
@@ -106,11 +107,15 @@ pub async fn run_bot(config: AppConfig, db_path: std::path::PathBuf) -> Result<(
             Box::pin(async move {
                 info!("Bot started as {}", ctx.cache.current_user().name);
 
+                initial_scores_sync(&bot_data)
+                    .await
+                    .wrap_err("startup scores sync")?;
+
                 start_background_tasks(bot_data.clone(), ctx.cache.clone());
 
                 poise::builtins::register_globally(ctx, &framework.options().commands)
                     .await
-                    .map_err(|e| -> Error { Box::new(e) })?;
+                    .wrap_err("register commands globally")?;
 
                 Ok(bot_data)
             })
@@ -127,6 +132,35 @@ pub async fn run_bot(config: AppConfig, db_path: std::path::PathBuf) -> Result<(
     info!("Starting Discord bot...");
     client.start().await.wrap_err("client error")?;
 
+    Ok(())
+}
+
+async fn initial_scores_sync(bot_data: &BotData) -> Result<()> {
+    info!("Running startup scores sync (diff 0..4)...");
+
+    let mut client = MaimaiClient::new(&bot_data.config).wrap_err("create HTTP client")?;
+    client
+        .ensure_logged_in()
+        .await
+        .wrap_err("ensure logged in")?;
+
+    let scraped_at = unix_timestamp();
+    let mut all = Vec::new();
+
+    for diff in 0u8..=4 {
+        let url = scores_url(diff).wrap_err("build scores url")?;
+        let bytes = client.get_bytes(&url).await.wrap_err("fetch scores url")?;
+        let html = String::from_utf8(bytes).wrap_err("scores response is not utf-8")?;
+        let mut entries = parse_scores_html(&html, diff).wrap_err("parse scores html")?;
+        all.append(&mut entries);
+    }
+
+    let count = all.len();
+    db::upsert_scores(&bot_data.db, scraped_at, &all)
+        .await
+        .wrap_err("upsert scores")?;
+
+    info!("Startup scores sync completed: entries={count}");
     Ok(())
 }
 
@@ -376,6 +410,16 @@ fn unix_timestamp() -> i64 {
         .duration_since(UNIX_EPOCH)
         .unwrap_or_default()
         .as_secs() as i64
+}
+
+fn scores_url(diff: u8) -> Result<Url> {
+    if diff > 4 {
+        return Err(eyre::eyre!("diff must be 0..4"));
+    }
+    Url::parse(&format!(
+        "https://maimaidx-eng.com/maimai-mobile/record/musicGenre/search/?genre=99&diff={diff}"
+    ))
+    .wrap_err("parse scores url")
 }
 
 fn format_playlog_record(record: &ParsedPlayRecord) -> String {
