@@ -18,7 +18,6 @@ fn parse_recent_record_fixture() {
 
     assert!(!entries.is_empty());
     assert!(entries.len() <= 50);
-    assert!(entries.iter().all(|e| !e.song_key.trim().is_empty()));
     assert!(entries.iter().all(|e| e.diff_category.is_some()));
     assert!(entries.iter().all(|e| e.level.is_some()));
     assert!(

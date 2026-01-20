@@ -15,7 +15,6 @@ fn parse_song_detail_example1() {
     let html = std::fs::read_to_string(fixture_path("example1.html")).unwrap();
     let parsed = parse_song_detail_html(&html).unwrap();
 
-    assert!(!parsed.song_key.trim().is_empty());
     assert!(!parsed.title.trim().is_empty());
     assert_eq!(format!("{:?}", parsed.chart_type), "Dx");
     assert_eq!(
@@ -66,7 +65,6 @@ fn parse_song_detail_example2() {
     let html = std::fs::read_to_string(fixture_path("example2.html")).unwrap();
     let parsed = parse_song_detail_html(&html).unwrap();
 
-    assert!(!parsed.song_key.trim().is_empty());
     assert!(!parsed.title.trim().is_empty());
     assert_eq!(format!("{:?}", parsed.chart_type), "Std");
     assert_eq!(

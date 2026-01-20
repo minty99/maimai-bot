@@ -11,7 +11,7 @@ async fn migrations_run_on_memory_db() -> eyre::Result<()> {
     let (count,): (i64,) = sqlx::query_as(
         r#"
 SELECT COUNT(*) FROM sqlite_master
-WHERE type = 'table' AND name IN ('songs', 'scores', 'playlogs')
+WHERE type = 'table' AND name IN ('scores', 'playlogs', 'app_state')
 "#,
     )
     .fetch_one(&pool)

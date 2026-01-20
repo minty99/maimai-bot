@@ -39,7 +39,6 @@ pub async fn upsert_scores(
     let mut tx = pool.begin().await.wrap_err("begin transaction")?;
 
     for entry in entries {
-        upsert_song(&mut tx, &entry.song_key, &entry.title, scraped_at).await?;
         upsert_score(&mut tx, scraped_at, entry).await?;
     }
 
@@ -58,7 +57,6 @@ pub async fn upsert_playlogs(
         let Some(playlog_idx) = entry.playlog_idx.as_deref() else {
             continue;
         };
-        upsert_song(&mut tx, &entry.song_key, &entry.title, scraped_at).await?;
         upsert_playlog(&mut tx, scraped_at, playlog_idx, entry).await?;
     }
 
@@ -115,30 +113,6 @@ pub async fn set_app_state_u32(
     set_app_state(pool, key, &value.to_string(), updated_at).await
 }
 
-async fn upsert_song(
-    tx: &mut sqlx::Transaction<'_, Sqlite>,
-    song_key: &str,
-    title: &str,
-    now: i64,
-) -> eyre::Result<()> {
-    sqlx::query(
-        r#"
-INSERT INTO songs (song_key, title, created_at, updated_at)
-VALUES (?1, ?2, ?3, ?3)
-ON CONFLICT(song_key) DO UPDATE SET
-  title = excluded.title,
-  updated_at = excluded.updated_at
-"#,
-    )
-    .bind(song_key)
-    .bind(title)
-    .bind(now)
-    .execute(&mut **tx)
-    .await
-    .wrap_err("upsert songs")?;
-    Ok(())
-}
-
 async fn upsert_score(
     tx: &mut sqlx::Transaction<'_, Sqlite>,
     scraped_at: i64,
@@ -146,26 +120,26 @@ async fn upsert_score(
 ) -> eyre::Result<()> {
     sqlx::query(
         r#"
-	INSERT INTO scores (
-	  song_key, chart_type, diff_category, level,
-	  achievement_percent, rank, fc, sync,
-	  dx_score, dx_score_max,
-	  source_idx, scraped_at
-	)
-	VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)
-	ON CONFLICT(song_key, chart_type, diff_category) DO UPDATE SET
-	  level = excluded.level,
-	  achievement_percent = excluded.achievement_percent,
-	  rank = excluded.rank,
-	  fc = excluded.fc,
-	  sync = excluded.sync,
-	  dx_score = excluded.dx_score,
-	  dx_score_max = excluded.dx_score_max,
-	  source_idx = excluded.source_idx,
-	  scraped_at = excluded.scraped_at
-	"#,
+		INSERT INTO scores (
+		  title, chart_type, diff_category, level,
+		  achievement_percent, rank, fc, sync,
+		  dx_score, dx_score_max,
+		  source_idx, scraped_at
+		)
+		VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)
+		ON CONFLICT(title, chart_type, diff_category) DO UPDATE SET
+		  level = excluded.level,
+		  achievement_percent = excluded.achievement_percent,
+		  rank = excluded.rank,
+		  fc = excluded.fc,
+		  sync = excluded.sync,
+		  dx_score = excluded.dx_score,
+		  dx_score_max = excluded.dx_score_max,
+		  source_idx = excluded.source_idx,
+		  scraped_at = excluded.scraped_at
+		"#,
     )
-    .bind(&entry.song_key)
+    .bind(&entry.title)
     .bind(chart_type_str(entry.chart_type))
     .bind(&entry.diff_category)
     .bind(&entry.level)
@@ -194,16 +168,15 @@ async fn upsert_playlog(
 	INSERT INTO playlogs (
 	  playlog_idx,
 	  played_at, track,
-	  song_key, title, chart_type, diff_category, level,
+	  title, chart_type, diff_category, level,
 	  achievement_percent, score_rank, fc, sync,
 	  dx_score, dx_score_max,
 	  scraped_at
 	)
-	VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15)
+	VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)
 	ON CONFLICT(playlog_idx) DO UPDATE SET
 	  played_at = excluded.played_at,
 	  track = excluded.track,
-	  song_key = excluded.song_key,
 	  title = excluded.title,
 	  chart_type = excluded.chart_type,
 	  diff_category = excluded.diff_category,
@@ -220,7 +193,6 @@ async fn upsert_playlog(
     .bind(playlog_idx)
     .bind(entry.played_at.as_deref())
     .bind(entry.track.map(i64::from))
-    .bind(&entry.song_key)
     .bind(&entry.title)
     .bind(chart_type_str(entry.chart_type))
     .bind(entry.diff_category.as_deref())

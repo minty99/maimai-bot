@@ -1,8 +1,6 @@
-use eyre::WrapErr;
 use scraper::{Html, Selector};
 
 use crate::maimai::models::{ChartType, ParsedSongDetail, ParsedSongDifficultyDetail};
-use crate::maimai::song_key::song_key_from_title_and_chart;
 
 pub fn parse_song_detail_html(html: &str) -> eyre::Result<ParsedSongDetail> {
     let document = Html::parse_document(html);
@@ -28,8 +26,6 @@ pub fn parse_song_detail_html(html: &str) -> eyre::Result<ParsedSongDetail> {
         .filter_map(|e| e.value().attr("src"))
         .find_map(parse_chart_type_from_icon_src)
         .unwrap_or(ChartType::Std);
-    let song_key =
-        song_key_from_title_and_chart(&title, page_chart_type).wrap_err("derive song_key")?;
 
     let mut difficulties = Vec::new();
     for section in document.select(&detail_selector) {
@@ -100,7 +96,6 @@ pub fn parse_song_detail_html(html: &str) -> eyre::Result<ParsedSongDetail> {
     difficulties.sort_by_key(|d| diff_category_order(&d.diff_category));
 
     Ok(ParsedSongDetail {
-        song_key,
         title,
         chart_type: page_chart_type,
         difficulties,

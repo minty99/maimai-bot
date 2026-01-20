@@ -9,7 +9,6 @@ pub enum ChartType {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ParsedScoreEntry {
-    pub song_key: String,
     pub title: String,
     pub chart_type: ChartType,
     pub diff_category: String,
@@ -29,7 +28,6 @@ pub struct ParsedPlayRecord {
     pub track: Option<u8>,
     pub played_at: Option<String>,
 
-    pub song_key: String,
     pub title: String,
     pub chart_type: ChartType,
     pub diff_category: Option<String>,
@@ -45,7 +43,6 @@ pub struct ParsedPlayRecord {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ParsedSongDetail {
-    pub song_key: String,
     pub title: String,
     pub chart_type: ChartType,
     pub difficulties: Vec<ParsedSongDifficultyDetail>,

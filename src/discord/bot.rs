@@ -375,22 +375,21 @@ Play count (total): {}",
 #[poise::command(slash_command, rename = "mai-record")]
 async fn mai_record(
     ctx: Context<'_>,
-    #[description = "Song title or key to search for"] search: String,
+    #[description = "Song title to search for"] search: String,
 ) -> Result<(), Error> {
     ctx.defer().await?;
 
     let rows = sqlx::query_as::<_, (String, String, String, String, Option<f64>, Option<String>)>(
         r#"
         SELECT
-            s.title,
+            sc.title,
             sc.chart_type,
             sc.diff_category,
             sc.level,
             sc.achievement_percent,
             sc.rank
         FROM scores sc
-        JOIN songs s ON sc.song_key = s.song_key
-        WHERE s.title LIKE ? OR s.song_key = ?
+        WHERE sc.title LIKE ?
         ORDER BY
             sc.chart_type,
             CASE sc.diff_category
@@ -404,7 +403,6 @@ async fn mai_record(
         "#,
     )
     .bind(format!("%{}%", search))
-    .bind(&search)
     .fetch_all(&ctx.data().db)
     .await
     .map_err(|e| eyre::eyre!("query failed: {}", e))?;

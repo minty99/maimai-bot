@@ -24,7 +24,6 @@ fn run_fixture_test(diff: u8, filename: &str) {
         _ => "Unknown",
     };
     assert!(entries.iter().all(|e| e.diff_category == expected_category));
-    assert!(entries.iter().all(|e| !e.song_key.trim().is_empty()));
     assert!(entries.iter().all(|e| !e.level.trim().is_empty()));
     assert!(
         entries
@@ -43,31 +42,12 @@ fn run_fixture_test(diff: u8, filename: &str) {
                 .iter()
                 .any(|e| e.chart_type == maimai_bot::maimai::models::ChartType::Dx)
         );
-
-        let mut saw_both = false;
-        for entry in &entries {
-            if entry.title.trim().is_empty() {
-                continue;
-            }
-            let mut found_other = false;
-            for other in &entries {
-                if other.title == entry.title && other.chart_type != entry.chart_type {
-                    found_other = true;
-                    assert_ne!(entry.song_key, other.song_key);
-                }
-            }
-            if found_other {
-                saw_both = true;
-                break;
-            }
-        }
-        println!("debug found title with both chart types: {saw_both}");
     }
 
     println!("diff={diff} entries={}", entries.len());
     for e in entries.iter().take(5) {
         println!(
-            "  chart={:?} title={:?} diff={:?} lv={:?} achv={:?} rank={:?} fc={:?} sync={:?} dx={:?}/{:?} key_prefix={}",
+            "  chart={:?} title={:?} diff={:?} lv={:?} achv={:?} rank={:?} fc={:?} sync={:?} dx={:?}/{:?}",
             e.chart_type,
             e.title,
             e.diff_category,
@@ -78,7 +58,6 @@ fn run_fixture_test(diff: u8, filename: &str) {
             e.sync,
             e.dx_score,
             e.dx_score_max,
-            &e.song_key[..e.song_key.len().min(12)]
         );
     }
 }
