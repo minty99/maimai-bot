@@ -889,6 +889,8 @@ fn scores_url(diff: u8) -> Result<Url> {
 
 #[cfg(test)]
 mod tests {
+    use dotenvy::dotenv;
+
     use super::latest_credit_len;
 
     #[test]
@@ -909,5 +911,91 @@ mod tests {
         assert_eq!(latest_credit_len(&tracks), 3);
         let tracks = vec![Some(4), Some(3), Some(2), Some(4), Some(3)];
         assert_eq!(latest_credit_len(&tracks), 4);
+    }
+
+    #[tokio::test]
+    #[ignore = "Sends a real DM to preview embed UI; requires DISCORD_BOT_TOKEN and DISCORD_USER_ID"]
+    async fn preview_embed_player_update_dm() -> eyre::Result<()> {
+        use super::embed_player_update;
+        use crate::maimai::models::{
+            ChartType, DifficultyCategory, ParsedPlayRecord, ParsedPlayerData, ScoreRank,
+        };
+        use eyre::WrapErr;
+        use poise::serenity_prelude as serenity;
+        use serenity::builder::CreateMessage;
+
+        dotenv().ok();
+
+        let token = std::env::var("DISCORD_BOT_TOKEN").ok();
+        let user_id = std::env::var("DISCORD_USER_ID").ok();
+        let (Some(token), Some(user_id)) = (token, user_id) else {
+            return Ok(());
+        };
+
+        let http = serenity::Http::new(&token);
+        let user_id =
+            serenity::UserId::new(user_id.parse::<u64>().wrap_err("parse DISCORD_USER_ID")?);
+
+        let player = ParsedPlayerData {
+            user_name: "maimai-user".to_string(),
+            rating: 12345,
+            current_version_play_count: 67,
+            total_play_count: 890,
+        };
+
+        let credit_entries = vec![
+            ParsedPlayRecord {
+                playlog_idx: None,
+                track: Some(1),
+                played_at: Some("2026/01/20 12:34".to_string()),
+                title: "Sample Song A".to_string(),
+                chart_type: ChartType::Std,
+                diff_category: Some(DifficultyCategory::Expert),
+                level: Some("12+".to_string()),
+                achievement_percent: Some(99.1234),
+                score_rank: Some(ScoreRank::SPlus),
+                fc: None,
+                sync: None,
+                dx_score: Some(1234),
+                dx_score_max: Some(1500),
+            },
+            ParsedPlayRecord {
+                playlog_idx: None,
+                track: Some(2),
+                played_at: Some("2026/01/20 12:38".to_string()),
+                title: "Sample Song B".to_string(),
+                chart_type: ChartType::Dx,
+                diff_category: Some(DifficultyCategory::Master),
+                level: Some("14".to_string()),
+                achievement_percent: Some(100.0000),
+                score_rank: Some(ScoreRank::SssPlus),
+                fc: None,
+                sync: None,
+                dx_score: Some(1499),
+                dx_score_max: Some(1500),
+            },
+        ];
+
+        let dm = user_id
+            .create_dm_channel(&http)
+            .await
+            .wrap_err("create DM channel")?;
+
+        let result = dm
+            .send_message(
+                &http,
+                CreateMessage::new().embed(embed_player_update(
+                    &player,
+                    Some(889),
+                    Some(12340),
+                    &credit_entries,
+                )),
+            )
+            .await
+            .wrap_err("send DM")?;
+
+        println!("DM sent: {}", result.id);
+
+        Ok(())
     }
 }
