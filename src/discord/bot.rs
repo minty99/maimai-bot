@@ -510,14 +510,42 @@ async fn mai_score(
         return Ok(());
     }
 
-    let mut desc = String::new();
+    let mut titles = Vec::<String>::new();
+    let mut grouped = std::collections::BTreeMap::<
+        String,
+        Vec<(String, String, String, Option<f64>, Option<String>)>,
+    >::new();
+
     for (title, chart_type, diff_category, level, achievement, rank) in rows {
-        let achv = format_percent_f64(achievement);
-        let rank = rank.unwrap_or_else(|| "N/A".to_string());
-        desc.push_str(&format!(
-            "**{}** [{}] {diff_category} {level}\n{achv} • {rank}\n\n",
-            title, chart_type
+        if !grouped.contains_key(&title) {
+            titles.push(title.clone());
+        }
+        grouped.entry(title).or_default().push((
+            chart_type,
+            diff_category,
+            level,
+            achievement,
+            rank,
         ));
+    }
+
+    let mut desc = String::new();
+    for title in titles {
+        let Some(mut entries) = grouped.remove(&title) else {
+            continue;
+        };
+        entries.sort_by(|a, b| a.0.cmp(&b.0).then(a.1.cmp(&b.1)).then(a.2.cmp(&b.2)));
+
+        desc.push_str(&format!("**{}**\n", title));
+        for (chart_type, diff_category, level, achievement, rank) in entries {
+            let achv = format_percent_f64(achievement);
+            let rank = rank.unwrap_or_else(|| "N/A".to_string());
+            desc.push_str(&format!(
+                "- [{}] {diff_category} {level} — {achv} • {rank}\n",
+                chart_type
+            ));
+        }
+        desc.push('\n');
     }
 
     ctx.send(
