@@ -13,6 +13,9 @@ async fn sega_login_works() -> eyre::Result<()> {
     let sega_id = std::env::var("SEGA_ID")?;
     let sega_password = std::env::var("SEGA_PASSWORD")?;
 
+    let discord_bot_token = std::env::var("DISCORD_BOT_TOKEN").ok();
+    let discord_user_id = std::env::var("DISCORD_USER_ID").ok();
+
     let temp_dir = tempfile::tempdir()?;
     let cookie_path: PathBuf = temp_dir.path().join("cookies.json");
 
@@ -21,6 +24,8 @@ async fn sega_login_works() -> eyre::Result<()> {
         sega_password,
         data_dir: temp_dir.path().to_path_buf(),
         cookie_path,
+        discord_bot_token,
+        discord_user_id,
     };
 
     let mut client = MaimaiClient::new(&config)?;
