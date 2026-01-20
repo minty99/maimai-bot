@@ -538,6 +538,7 @@ async fn mai_score(
         let reply = ctx
             .send(
                 CreateReply::default()
+                    .ephemeral(true)
                     .embed(
                         embed_base("No exact match")
                             .description(format!("Query: `{search}`\n\n{}", lines.join("\n"))),
