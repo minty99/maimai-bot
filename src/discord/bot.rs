@@ -485,7 +485,6 @@ async fn mai_score(
         FROM scores sc
         WHERE sc.title LIKE ?
         ORDER BY
-            sc.chart_type,
             CASE sc.diff_category
                 WHEN 'BASIC' THEN 0
                 WHEN 'ADVANCED' THEN 1
@@ -493,7 +492,8 @@ async fn mai_score(
                 WHEN 'MASTER' THEN 3
                 WHEN 'Re:MASTER' THEN 4
                 ELSE 255
-            END
+            END,
+            sc.chart_type
         "#,
     )
     .bind(format!("%{}%", search))
@@ -534,7 +534,12 @@ async fn mai_score(
         let Some(mut entries) = grouped.remove(&title) else {
             continue;
         };
-        entries.sort_by(|a, b| a.0.cmp(&b.0).then(a.1.cmp(&b.1)).then(a.2.cmp(&b.2)));
+        entries.sort_by(|a, b| {
+            diff_order_key(&a.1)
+                .cmp(&diff_order_key(&b.1))
+                .then(a.0.cmp(&b.0))
+                .then(a.2.cmp(&b.2))
+        });
 
         desc.push_str(&format!("**{}**\n", title));
         for (chart_type, diff_category, level, achievement, rank) in entries {
@@ -549,15 +554,23 @@ async fn mai_score(
     }
 
     ctx.send(
-        CreateReply::default().embed(embed_base("Scores").description(desc).field(
-            "Query",
-            format!("`{search}`"),
-            false,
-        )),
+        CreateReply::default()
+            .embed(embed_base(&format!("{}'s scores", ctx.author().name)).description(desc)),
     )
     .await?;
 
     Ok(())
+}
+
+fn diff_order_key(diff: &str) -> u8 {
+    match diff {
+        "BASIC" => 0,
+        "ADVANCED" => 1,
+        "EXPERT" => 2,
+        "MASTER" => 3,
+        "Re:MASTER" => 4,
+        _ => 255,
+    }
 }
 
 fn latest_credit_len(tracks: &[Option<i64>]) -> usize {
