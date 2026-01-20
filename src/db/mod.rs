@@ -118,18 +118,19 @@ async fn upsert_score(
     scraped_at: i64,
     entry: &ParsedScoreEntry,
 ) -> eyre::Result<()> {
+    let achievement_x10000 = percent_to_x10000(entry.achievement_percent);
     sqlx::query(
         r#"
 		INSERT INTO scores (
 		  title, chart_type, diff_category, level,
-		  achievement_percent, rank, fc, sync,
+		  achievement_x10000, rank, fc, sync,
 		  dx_score, dx_score_max,
 		  source_idx, scraped_at
 		)
 		VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)
 		ON CONFLICT(title, chart_type, diff_category) DO UPDATE SET
 		  level = excluded.level,
-		  achievement_percent = excluded.achievement_percent,
+		  achievement_x10000 = excluded.achievement_x10000,
 		  rank = excluded.rank,
 		  fc = excluded.fc,
 		  sync = excluded.sync,
@@ -143,7 +144,7 @@ async fn upsert_score(
     .bind(chart_type_str(entry.chart_type))
     .bind(entry.diff_category.as_str())
     .bind(&entry.level)
-    .bind(entry.achievement_percent.map(f64::from))
+    .bind(achievement_x10000)
     .bind(entry.rank.as_deref())
     .bind(entry.fc.as_deref())
     .bind(entry.sync.as_deref())
@@ -163,13 +164,14 @@ async fn upsert_playlog(
     playlog_idx: &str,
     entry: &ParsedPlayRecord,
 ) -> eyre::Result<()> {
+    let achievement_x10000 = percent_to_x10000(entry.achievement_percent);
     sqlx::query(
         r#"
 	INSERT INTO playlogs (
 	  playlog_idx,
 	  played_at, track,
 	  title, chart_type, diff_category, level,
-	  achievement_percent, score_rank, fc, sync,
+	  achievement_x10000, score_rank, fc, sync,
 	  dx_score, dx_score_max,
 	  scraped_at
 	)
@@ -181,7 +183,7 @@ async fn upsert_playlog(
 	  chart_type = excluded.chart_type,
 	  diff_category = excluded.diff_category,
 	  level = excluded.level,
-	  achievement_percent = excluded.achievement_percent,
+	  achievement_x10000 = excluded.achievement_x10000,
 	  score_rank = excluded.score_rank,
 	  fc = excluded.fc,
 	  sync = excluded.sync,
@@ -197,7 +199,7 @@ async fn upsert_playlog(
     .bind(chart_type_str(entry.chart_type))
     .bind(entry.diff_category.map(|d| d.as_str().to_string()))
     .bind(entry.level.as_deref())
-    .bind(entry.achievement_percent.map(f64::from))
+    .bind(achievement_x10000)
     .bind(entry.score_rank.as_deref())
     .bind(entry.fc.as_deref())
     .bind(entry.sync.as_deref())
@@ -230,14 +232,18 @@ pub fn format_chart_type(chart_type: ChartType) -> &'static str {
 
 pub fn format_percent_f32(percent: Option<f32>) -> String {
     percent
-        .map(|p| format!("{:.2}%", p))
+        .map(|p| format!("{:.4}%", p))
         .unwrap_or_else(|| "N/A".to_string())
 }
 
 pub fn format_percent_f64(percent: Option<f64>) -> String {
     percent
-        .map(|p| format!("{:.2}%", p))
+        .map(|p| format!("{:.4}%", p))
         .unwrap_or_else(|| "N/A".to_string())
+}
+
+fn percent_to_x10000(percent: Option<f32>) -> Option<i64> {
+    percent.map(|p| (p as f64 * 10000.0).round() as i64)
 }
 
 pub fn format_track(track: Option<i64>) -> String {

@@ -6,7 +6,7 @@ CREATE TABLE IF NOT EXISTS scores (
   chart_type TEXT NOT NULL, -- 'STD' | 'DX'
   diff_category TEXT NOT NULL, -- 'BASIC' | 'ADVANCED' | 'EXPERT' | 'MASTER' | 'Re:MASTER'
   level TEXT NOT NULL, -- e.g. '13+'
-  achievement_percent REAL,
+  achievement_x10000 INTEGER, -- percent * 10000 (rounded)
   rank TEXT,
   fc TEXT,
   sync TEXT,
@@ -27,7 +27,7 @@ CREATE TABLE IF NOT EXISTS playlogs (
   chart_type TEXT NOT NULL, -- 'STD' | 'DX'
   diff_category TEXT, -- 'BASIC' | 'ADVANCED' | 'EXPERT' | 'MASTER' | 'Re:MASTER'
   level TEXT, -- e.g. '13+'
-  achievement_percent REAL,
+  achievement_x10000 INTEGER, -- percent * 10000 (rounded)
   score_rank TEXT,
   fc TEXT,
   sync TEXT,

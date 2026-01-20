@@ -386,7 +386,7 @@ async fn mai_record(
             sc.chart_type,
             sc.diff_category,
             sc.level,
-            sc.achievement_percent,
+            sc.achievement_x10000 / 10000.0 as achievement_percent,
             sc.rank
         FROM scores sc
         WHERE sc.title LIKE ?
@@ -461,7 +461,7 @@ async fn mai_recent(ctx: Context<'_>) -> Result<(), Error> {
             pl.chart_type,
             pl.track,
             pl.played_at,
-            pl.achievement_percent,
+            pl.achievement_x10000 / 10000.0 as achievement_percent,
             pl.score_rank
         FROM playlogs pl
         WHERE pl.playlog_idx IS NOT NULL
