@@ -19,8 +19,8 @@ use crate::maimai::parse::score_list::parse_scores_html;
 type Context<'a> = poise::Context<'a, BotData, Error>;
 type Error = eyre::Report;
 
-const STATE_KEY_CURRENT_VERSION_PLAY_COUNT: &str = "player.current_version_play_count";
 const STATE_KEY_TOTAL_PLAY_COUNT: &str = "player.total_play_count";
+const STATE_KEY_CURRENT_VERSION_PLAY_COUNT: &str = "player.current_version_play_count";
 
 #[derive(Debug, Clone)]
 pub struct BotData {
@@ -127,8 +127,8 @@ pub async fn run_bot(config: AppConfig, db_path: std::path::PathBuf) -> Result<(
                         .wrap_err("persist play counts")?;
                 } else {
                     info!(
-                        "Skipping startup scores sync (play count unchanged: current_ver={})",
-                        player_data.current_version_play_count
+                        "Skipping startup scores sync (play count unchanged: total={})",
+                        player_data.total_play_count
                     );
                 }
 
@@ -303,12 +303,12 @@ async fn fetch_player_data(bot_data: &BotData) -> Result<ParsedPlayerData> {
 }
 
 async fn should_sync_scores(pool: &SqlitePool, player_data: &ParsedPlayerData) -> Result<bool> {
-    let stored = db::get_app_state_u32(pool, STATE_KEY_CURRENT_VERSION_PLAY_COUNT)
+    let stored = db::get_app_state_u32(pool, STATE_KEY_TOTAL_PLAY_COUNT)
         .await
-        .wrap_err("read stored current version play count")?;
+        .wrap_err("read stored total play count")?;
 
     Ok(match stored {
-        Some(v) => v != player_data.current_version_play_count,
+        Some(v) => v != player_data.total_play_count,
         None => true,
     })
 }
