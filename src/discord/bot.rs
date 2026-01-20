@@ -219,7 +219,7 @@ fn embed_player_update(
         for record in credit_entries {
             let track = record
                 .track
-                .map(|t| format!("T{t:02}"))
+                .map(|t| format!("TRACK {t:02}"))
                 .unwrap_or("?".to_string());
             let played_at = record.played_at.as_deref().unwrap_or("N/A");
             let diff = format_diff_category(record.diff_category);
@@ -359,7 +359,7 @@ async fn periodic_player_poll(bot_data: &BotData) -> Result<()> {
         .await
         .wrap_err("persist player snapshot")?;
 
-    let credit_entries = most_recent_credit_entries(&entries);
+    let credit_entries = latest_credit_entries(&entries);
 
     if stored_total.is_some() {
         send_player_update_dm(
@@ -560,7 +560,7 @@ async fn mai_score(
     Ok(())
 }
 
-fn latest_credit_count(tracks: &[Option<i64>]) -> usize {
+fn latest_credit_len(tracks: &[Option<i64>]) -> usize {
     match tracks.iter().position(|t| *t == Some(1)) {
         Some(idx) => idx + 1,
         None => tracks.len().min(4),
@@ -607,12 +607,14 @@ async fn mai_recent(ctx: Context<'_>) -> Result<(), Error> {
         return Ok(());
     }
 
-    let take = latest_credit_count(&rows.iter().map(|row| row.2).collect::<Vec<_>>());
+    let take = latest_credit_len(&rows.iter().map(|row| row.2).collect::<Vec<_>>());
+    let mut recent = rows.into_iter().take(take).collect::<Vec<_>>();
+    recent.reverse();
     let mut desc = String::new();
-    for (title, chart_type, track, played_at, achievement, rank) in rows.into_iter().take(take) {
+    for (title, chart_type, track, played_at, achievement, rank) in recent {
         let played_at = played_at.unwrap_or_else(|| "N/A".to_string());
         let achv = format_percent_f64(achievement);
-        let rank = rank.unwrap_or_else(|| "N/A".to_string());
+        let rank = rank.as_deref().map(normalize_playlog_rank).unwrap_or("N/A");
         desc.push_str(&format!(
             "`{}` **{}** [{}]\n{achv} • {rank} • {played_at}\n\n",
             format_track(track),
@@ -621,28 +623,31 @@ async fn mai_recent(ctx: Context<'_>) -> Result<(), Error> {
         ));
     }
 
-    ctx.send(
-        CreateReply::default().embed(embed_base("Recent 1 Credit").description(desc).field(
-            "Plays",
-            take.to_string(),
-            true,
-        )),
-    )
-    .await?;
+    ctx.send(CreateReply::default().embed(embed_base("Latest Credit").description(desc)))
+        .await?;
 
     Ok(())
 }
 
-fn most_recent_credit_entries(entries: &[ParsedPlayRecord]) -> Vec<ParsedPlayRecord> {
-    let take = latest_credit_count_u8(&entries.iter().map(|e| e.track).collect::<Vec<_>>());
-    entries.iter().take(take).cloned().collect()
+fn normalize_playlog_rank(rank: &str) -> &str {
+    match rank {
+        "SSSPLUS" => "SSS+",
+        "SSPLUS" => "SS+",
+        "SPLUS" => "S+",
+        _ => rank,
+    }
 }
 
-fn latest_credit_count_u8(tracks: &[Option<u8>]) -> usize {
-    match tracks.iter().position(|t| *t == Some(1)) {
-        Some(idx) => idx + 1,
-        None => tracks.len().min(4),
-    }
+fn latest_credit_entries(entries: &[ParsedPlayRecord]) -> Vec<ParsedPlayRecord> {
+    let take = latest_credit_len(
+        &entries
+            .iter()
+            .map(|e| e.track.map(i64::from))
+            .collect::<Vec<_>>(),
+    );
+    let mut out = entries.iter().take(take).cloned().collect::<Vec<_>>();
+    out.reverse();
+    out
 }
 
 async fn send_player_update_dm(
@@ -694,31 +699,25 @@ fn scores_url(diff: u8) -> Result<Url> {
 
 #[cfg(test)]
 mod tests {
-    use super::{latest_credit_count, latest_credit_count_u8};
+    use super::latest_credit_len;
 
     #[test]
-    fn latest_credit_count_stops_at_first_track_01() {
+    fn latest_credit_len_stops_at_first_track_01() {
         let tracks = vec![Some(4), Some(3), Some(2), Some(1), Some(4), Some(3)];
-        assert_eq!(latest_credit_count(&tracks), 4);
+        assert_eq!(latest_credit_len(&tracks), 4);
     }
 
     #[test]
-    fn latest_credit_count_includes_only_one_track() {
+    fn latest_credit_len_includes_only_one_track() {
         let tracks = vec![Some(1), Some(4), Some(3), Some(2)];
-        assert_eq!(latest_credit_count(&tracks), 1);
+        assert_eq!(latest_credit_len(&tracks), 1);
     }
 
     #[test]
-    fn latest_credit_count_falls_back_when_missing() {
+    fn latest_credit_len_falls_back_when_missing() {
         let tracks = vec![Some(4), Some(3), Some(2)];
-        assert_eq!(latest_credit_count(&tracks), 3);
+        assert_eq!(latest_credit_len(&tracks), 3);
         let tracks = vec![Some(4), Some(3), Some(2), Some(4), Some(3)];
-        assert_eq!(latest_credit_count(&tracks), 4);
-    }
-
-    #[test]
-    fn latest_credit_count_u8_stops_at_track_01() {
-        let tracks = vec![Some(4), Some(3), Some(2), Some(1), Some(4)];
-        assert_eq!(latest_credit_count_u8(&tracks), 4);
+        assert_eq!(latest_credit_len(&tracks), 4);
     }
 }
