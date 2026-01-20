@@ -73,7 +73,7 @@ pub async fn run_bot(config: AppConfig, db_path: std::path::PathBuf) -> Result<(
     let framework = poise::Framework::builder()
         .options(FrameworkOptions {
             prefix_options: Default::default(),
-            commands: vec![mai_record(), mai_recent()],
+            commands: vec![mai_score(), mai_recent()],
             on_error: |error| {
                 Box::pin(async move {
                     match error {
@@ -372,8 +372,8 @@ Play count (total): {}",
 }
 
 /// Get song records by song title or key
-#[poise::command(slash_command, rename = "mai-record")]
-async fn mai_record(
+#[poise::command(slash_command, rename = "mai-score")]
+async fn mai_score(
     ctx: Context<'_>,
     #[description = "Song title to search for"] search: String,
 ) -> Result<(), Error> {

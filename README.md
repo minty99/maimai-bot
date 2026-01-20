@@ -12,7 +12,7 @@ Discord 봇은 로컬 SQLite DB에 데이터를 저장하며, 10분마다 최근
 
 ## Discord에서 사용하는 방법
 
-슬래시 명령어로 사용합니다: `/mai-record`, `/mai-recent`
+슬래시 명령어로 사용합니다: `/mai-score`, `/mai-recent`
 
 ### 자동 알림 (DM)
 
@@ -25,14 +25,14 @@ Discord 봇은 로컬 SQLite DB에 데이터를 저장하며, 10분마다 최근
 📊 달성률  🏆 등급  🎯 FC  👥 SYNC  💫 DX 점수/최대 점수
 ```
 
-### `/mai-record <query>`: 곡별 기록 조회
+### `/mai-score <query>`: 곡별 기록 조회
 
 곡 제목(부분 일치) 또는 `song_key`로 점수 기록을 조회합니다.
 
 예시:
 
 ```
-/mai-record GALAXY
+/mai-score GALAXY
 ```
 
 출력은 대략 아래처럼 나옵니다(표시 형식은 서버/클라이언트에 따라 달라질 수 있음).
