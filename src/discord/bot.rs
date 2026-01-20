@@ -5,7 +5,7 @@ use reqwest::Url;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::time::interval;
-use tracing::{error, info};
+use tracing::{debug, error, info};
 
 use crate::config::AppConfig;
 use crate::db;
@@ -302,14 +302,17 @@ async fn fetch_player_data(bot_data: &BotData) -> Result<ParsedPlayerData> {
 }
 
 async fn should_sync_scores(pool: &SqlitePool, player_data: &ParsedPlayerData) -> Result<bool> {
-    let stored = db::get_app_state_u32(pool, STATE_KEY_TOTAL_PLAY_COUNT)
-        .await
-        .wrap_err("read stored total play count")?;
-
-    Ok(match stored {
-        Some(v) => v != player_data.total_play_count,
-        None => true,
-    })
+    match db::get_app_state_u32(pool, STATE_KEY_TOTAL_PLAY_COUNT).await {
+        Ok(Some(v)) => Ok(v != player_data.total_play_count),
+        Ok(None) => {
+            debug!("No stored total play count; will rebuild DB");
+            Ok(true)
+        }
+        Err(e) => {
+            debug!("Failed to read total play count from DB; will rebuild DB: {e:#}");
+            Ok(true)
+        }
+    }
 }
 
 async fn persist_play_counts(pool: &SqlitePool, player_data: &ParsedPlayerData) -> Result<()> {
