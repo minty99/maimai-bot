@@ -501,13 +501,95 @@ async fn mai_score(
         return Ok(());
     }
 
-    let (matched_title, exact) = best_title_match(&search, &titles).ok_or_else(|| {
-        eyre::eyre!(
-            "failed to find best match (search={:?} titles={})",
-            search,
-            titles.len()
-        )
-    })?;
+    let search_norm = normalize_for_match(&search);
+    let exact_title = titles
+        .iter()
+        .find(|t| normalize_for_match(t) == search_norm)
+        .cloned();
+
+    let matched_title = if let Some(exact) = exact_title {
+        exact
+    } else {
+        let candidates = top_title_matches(&search, &titles, 5);
+        if candidates.is_empty() {
+            ctx.send(
+                CreateReply::default()
+                    .embed(embed_base("No records found").description("No titles to match.")),
+            )
+            .await?;
+            return Ok(());
+        }
+
+        let uuid = ctx.id();
+        let button_prefix = format!("{uuid}:score_pick:");
+
+        let mut buttons = Vec::new();
+        let mut lines = Vec::new();
+        for (i, title) in candidates.iter().enumerate() {
+            let custom_id = format!("{button_prefix}{i}");
+            buttons.push(
+                serenity::CreateButton::new(custom_id)
+                    .style(serenity::ButtonStyle::Secondary)
+                    .label(format!("{}", i + 1)),
+            );
+            lines.push(format!("`{}` {}", i + 1, title));
+        }
+
+        let reply = ctx
+            .send(
+                CreateReply::default()
+                    .embed(
+                        embed_base("No exact match")
+                            .description(format!("Query: `{search}`\n\n{}", lines.join("\n"))),
+                    )
+                    .components(vec![serenity::CreateActionRow::Buttons(buttons)]),
+            )
+            .await?;
+
+        let interaction = serenity::ComponentInteractionCollector::new(ctx)
+            .author_id(ctx.author().id)
+            .channel_id(ctx.channel_id())
+            .timeout(Duration::from_secs(60))
+            .filter({
+                let button_prefix = button_prefix.clone();
+                move |mci| mci.data.custom_id.starts_with(&button_prefix)
+            })
+            .await;
+
+        let Some(mci) = interaction else {
+            if let Ok(msg) = reply.message().await {
+                let mut msg = msg.into_owned();
+                msg.edit(
+                    ctx,
+                    serenity::EditMessage::new()
+                        .embed(embed_base("No exact match").description(
+                            "Timed out. Re-run `/mai-score <title>` with one of the suggested titles.",
+                        ))
+                        .components(Vec::new()),
+                )
+                .await?;
+            }
+            return Ok(());
+        };
+
+        mci.create_response(ctx, serenity::CreateInteractionResponse::Acknowledge)
+            .await?;
+
+        let idx = mci
+            .data
+            .custom_id
+            .strip_prefix(&button_prefix)
+            .and_then(|s| s.parse::<usize>().ok());
+
+        let Some(idx) = idx else {
+            return Ok(());
+        };
+        if idx >= candidates.len() {
+            return Ok(());
+        }
+
+        candidates[idx].clone()
+    };
 
     let rows = sqlx::query_as::<_, (String, String, String, String, Option<f64>, Option<String>)>(
         r#"
@@ -568,16 +650,9 @@ async fn mai_score(
     }
 
     let mut desc = String::new();
-    if exact {
-        desc.push_str(&format!("**{}**\n\n", matched_title));
-    } else {
-        desc.push_str(&format!(
-            "_Query:_ `{search}`\n_Closest match (not exact):_ **{}**\n\n",
-            matched_title
-        ));
-    }
+    desc.push_str(&format!("**{}**\n\n", matched_title));
 
-    let Some((title, entries)) = grouped.pop_first() else {
+    let Some((_title, entries)) = grouped.pop_first() else {
         ctx.send(
             CreateReply::default()
                 .embed(embed_base("No records found").description("No score rows found.")),
@@ -586,9 +661,7 @@ async fn mai_score(
         return Ok(());
     };
 
-    if exact {
-        desc.push_str(&format!("**{}**\n", title));
-    }
+    // title already shown above
     for (chart_type, diff_category, level, achievement, rank) in entries {
         let achv = format_percent_f64(achievement);
         let rank = rank.unwrap_or_else(|| "N/A".to_string());
@@ -613,32 +686,18 @@ fn normalize_for_match(s: &str) -> String {
         .collect::<String>()
 }
 
-fn best_title_match(search: &str, titles: &[String]) -> Option<(String, bool)> {
+fn top_title_matches(search: &str, titles: &[String], limit: usize) -> Vec<String> {
     let search_norm = normalize_for_match(search.trim());
-    if search_norm.is_empty() {
-        return Some((titles.first()?.clone(), false));
-    }
-
-    if let Some(exact) = titles
+    let mut scored = titles
         .iter()
-        .find(|t| normalize_for_match(t) == search_norm)
-    {
-        return Some((exact.clone(), true));
-    }
-
-    let mut best: Option<(&String, usize)> = None;
-    for t in titles {
-        let dist = levenshtein(&search_norm, &normalize_for_match(t));
-        best = match best {
-            None => Some((t, dist)),
-            Some((cur, cur_dist)) => Some(if dist < cur_dist {
-                (t, dist)
-            } else {
-                (cur, cur_dist)
-            }),
-        };
-    }
-    Some((best?.0.clone(), false))
+        .map(|t| (t, levenshtein(&search_norm, &normalize_for_match(t))))
+        .collect::<Vec<_>>();
+    scored.sort_by_key(|(_, d)| *d);
+    scored
+        .into_iter()
+        .take(limit.max(1))
+        .map(|(t, _)| t.clone())
+        .collect()
 }
 
 fn levenshtein(a: &str, b: &str) -> usize {
