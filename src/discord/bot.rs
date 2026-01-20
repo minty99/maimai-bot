@@ -20,6 +20,7 @@ type Context<'a> = poise::Context<'a, BotData, Error>;
 type Error = eyre::Report;
 
 const STATE_KEY_TOTAL_PLAY_COUNT: &str = "player.total_play_count";
+const STATE_KEY_RATING: &str = "player.rating";
 
 #[derive(Debug, Clone)]
 pub struct BotData {
@@ -193,93 +194,82 @@ fn start_background_tasks(bot_data: BotData, _cache: Arc<serenity::Cache>) {
         let mut timer = interval(Duration::from_secs(600));
         timer.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
 
-        info!("Background task started: periodic recent fetch (every 10 minutes)");
+        info!("Background task started: periodic playerData poll (every 10 minutes)");
 
         loop {
             timer.tick().await;
 
-            info!("Running periodic recent fetch...");
+            info!("Running periodic playerData poll...");
 
-            if let Err(e) = periodic_recent_fetch(&bot_data).await {
-                error!("Periodic recent fetch failed: {}", e);
+            if let Err(e) = periodic_player_poll(&bot_data).await {
+                error!("Periodic poll failed: {}", e);
             }
         }
     });
 }
 
-async fn periodic_recent_fetch(bot_data: &BotData) -> Result<()> {
-    let mut client = MaimaiClient::new(&bot_data.config)?;
-    client.login().await.wrap_err("login")?;
+async fn periodic_player_poll(bot_data: &BotData) -> Result<()> {
+    let mut client = MaimaiClient::new(&bot_data.config).wrap_err("create HTTP client")?;
+    client
+        .ensure_logged_in()
+        .await
+        .wrap_err("ensure logged in")?;
 
-    let url = Url::parse("https://maimaidx-eng.com/maimai-mobile/record/")
-        .wrap_err("parse record url")?;
-    let bytes = client.get_bytes(&url).await.wrap_err("fetch record url")?;
-    let html = String::from_utf8(bytes).wrap_err("record response is not utf-8")?;
-    let entries = parse_recent_html(&html).wrap_err("parse recent html")?;
+    let player_data = fetch_player_data_logged_in(&client)
+        .await
+        .wrap_err("fetch player data")?;
 
+    let stored_total = db::get_app_state_u32(&bot_data.db, STATE_KEY_TOTAL_PLAY_COUNT).await;
+    let stored_rating = db::get_app_state_u32(&bot_data.db, STATE_KEY_RATING).await;
+
+    let stored_total = match stored_total {
+        Ok(v) => v,
+        Err(e) => {
+            debug!("Failed to read stored total play count; treating as missing: {e:#}");
+            None
+        }
+    };
+    let stored_rating = match stored_rating {
+        Ok(v) => v,
+        Err(e) => {
+            debug!("Failed to read stored rating; treating as missing: {e:#}");
+            None
+        }
+    };
+
+    if let Some(stored_total) = stored_total
+        && stored_total == player_data.total_play_count
+    {
+        return Ok(());
+    }
+
+    let entries = fetch_recent_entries_logged_in(&client)
+        .await
+        .wrap_err("fetch recent")?;
     let scraped_at = unix_timestamp();
 
-    let new_records = find_new_records(&bot_data.db, scraped_at, &entries)
+    db::upsert_playlogs(&bot_data.db, scraped_at, &entries)
         .await
-        .wrap_err("find new records")?;
+        .wrap_err("upsert playlogs")?;
+    persist_player_snapshot(&bot_data.db, &player_data)
+        .await
+        .wrap_err("persist player snapshot")?;
 
-    if !new_records.is_empty() {
-        info!("Found {} new records", new_records.len());
-        send_new_records_dm(bot_data, &new_records)
-            .await
-            .wrap_err("send new records DM")?;
+    let credit_entries = most_recent_credit_entries(&entries);
+
+    if stored_total.is_some() {
+        send_player_update_dm(
+            bot_data,
+            stored_total,
+            stored_rating,
+            &player_data,
+            &credit_entries,
+        )
+        .await
+        .wrap_err("send player update DM")?;
     } else {
-        info!("No new records found");
+        debug!("No stored total play count; seeded DB without sending DM");
     }
-
-    Ok(())
-}
-
-async fn find_new_records(
-    pool: &SqlitePool,
-    scraped_at: i64,
-    entries: &[ParsedPlayRecord],
-) -> Result<Vec<ParsedPlayRecord>> {
-    let mut new_records = Vec::new();
-
-    for entry in entries {
-        let Some(playlog_idx) = entry.playlog_idx.as_ref() else {
-            continue;
-        };
-
-        let exists: bool =
-            sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM playlogs WHERE playlog_idx = ?)")
-                .bind(playlog_idx)
-                .fetch_one(pool)
-                .await
-                .wrap_err("check playlog existence")?;
-
-        if !exists {
-            new_records.push(entry.clone());
-
-            crate::db::upsert_playlogs(pool, scraped_at, std::slice::from_ref(entry))
-                .await
-                .wrap_err("upsert playlog")?;
-        }
-    }
-
-    Ok(new_records)
-}
-
-async fn send_new_records_dm(bot_data: &BotData, records: &[ParsedPlayRecord]) -> Result<()> {
-    let http = &bot_data.discord_http;
-
-    let dm_channel = bot_data
-        .discord_user_id
-        .create_dm_channel(http)
-        .await
-        .wrap_err("create DM channel")?;
-
-    let message = format_new_records(records);
-
-    dm_channel.say(http, message).await.wrap_err("send DM")?;
-
-    info!("Sent DM with {} new records", records.len());
 
     Ok(())
 }
@@ -291,6 +281,10 @@ async fn fetch_player_data(bot_data: &BotData) -> Result<ParsedPlayerData> {
         .await
         .wrap_err("ensure logged in")?;
 
+    fetch_player_data_logged_in(&client).await
+}
+
+async fn fetch_player_data_logged_in(client: &MaimaiClient) -> Result<ParsedPlayerData> {
     let url = Url::parse("https://maimaidx-eng.com/maimai-mobile/playerData/")
         .wrap_err("parse playerData url")?;
     let bytes = client
@@ -299,6 +293,14 @@ async fn fetch_player_data(bot_data: &BotData) -> Result<ParsedPlayerData> {
         .wrap_err("fetch playerData url")?;
     let html = String::from_utf8(bytes).wrap_err("playerData response is not utf-8")?;
     parse_player_data_html(&html).wrap_err("parse playerData html")
+}
+
+async fn fetch_recent_entries_logged_in(client: &MaimaiClient) -> Result<Vec<ParsedPlayRecord>> {
+    let url = Url::parse("https://maimaidx-eng.com/maimai-mobile/record/")
+        .wrap_err("parse record url")?;
+    let bytes = client.get_bytes(&url).await.wrap_err("fetch record url")?;
+    let html = String::from_utf8(bytes).wrap_err("record response is not utf-8")?;
+    parse_recent_html(&html).wrap_err("parse recent html")
 }
 
 async fn should_sync_scores(pool: &SqlitePool, player_data: &ParsedPlayerData) -> Result<bool> {
@@ -328,6 +330,22 @@ async fn persist_play_counts(pool: &SqlitePool, player_data: &ParsedPlayerData) 
     Ok(())
 }
 
+async fn persist_player_snapshot(pool: &SqlitePool, player_data: &ParsedPlayerData) -> Result<()> {
+    let now = unix_timestamp();
+    db::set_app_state_u32(
+        pool,
+        STATE_KEY_TOTAL_PLAY_COUNT,
+        player_data.total_play_count,
+        now,
+    )
+    .await
+    .wrap_err("store total play count")?;
+    db::set_app_state_u32(pool, STATE_KEY_RATING, player_data.rating, now)
+        .await
+        .wrap_err("store rating")?;
+    Ok(())
+}
+
 async fn send_startup_dm(bot_data: &BotData, player_data: &ParsedPlayerData) -> Result<()> {
     let http = &bot_data.discord_http;
     let dm_channel = bot_data
@@ -349,18 +367,6 @@ Play count (total): {}",
     );
     dm_channel.say(http, message).await.wrap_err("send DM")?;
     Ok(())
-}
-
-fn format_new_records(records: &[ParsedPlayRecord]) -> String {
-    let mut lines = vec!["🎵 **New Records Detected!**".to_string(), String::new()];
-
-    for record in records {
-        lines.push(format_playlog_record(record));
-        lines.push(format_playlog_stats(record));
-        lines.push(String::new());
-    }
-
-    lines.join("\n")
 }
 
 /// Get song records by song title or key
@@ -495,6 +501,70 @@ async fn mai_recent(ctx: Context<'_>) -> Result<(), Error> {
     Ok(())
 }
 
+fn most_recent_credit_entries(entries: &[ParsedPlayRecord]) -> Vec<ParsedPlayRecord> {
+    let take = latest_credit_count_u8(&entries.iter().map(|e| e.track).collect::<Vec<_>>());
+    entries.iter().take(take).cloned().collect()
+}
+
+fn latest_credit_count_u8(tracks: &[Option<u8>]) -> usize {
+    match tracks.iter().position(|t| *t == Some(1)) {
+        Some(idx) => idx + 1,
+        None => tracks.len().min(4),
+    }
+}
+
+async fn send_player_update_dm(
+    bot_data: &BotData,
+    prev_total: Option<u32>,
+    prev_rating: Option<u32>,
+    current: &ParsedPlayerData,
+    credit_entries: &[ParsedPlayRecord],
+) -> Result<()> {
+    let http = &bot_data.discord_http;
+    let dm_channel = bot_data
+        .discord_user_id
+        .create_dm_channel(http)
+        .await
+        .wrap_err("create DM channel")?;
+
+    let total_delta = prev_total.map(|v| current.total_play_count as i64 - v as i64);
+    let rating_delta = prev_rating.map(|v| current.rating as i64 - v as i64);
+
+    let mut lines = vec![
+        "🆕 New plays detected".to_string(),
+        format!("User: {}", current.user_name),
+        match rating_delta {
+            Some(d) if d > 0 => format!("Rating: {} (+{})", current.rating, d),
+            Some(d) if d < 0 => format!("Rating: {} ({})", current.rating, d),
+            Some(_) => format!("Rating: {} (no change)", current.rating),
+            None => format!("Rating: {}", current.rating),
+        },
+        match total_delta {
+            Some(d) if d > 0 => {
+                format!("Total play count: {} (+{})", current.total_play_count, d)
+            }
+            Some(d) if d < 0 => format!("Total play count: {} ({})", current.total_play_count, d),
+            Some(_) => format!("Total play count: {} (no change)", current.total_play_count),
+            None => format!("Total play count: {}", current.total_play_count),
+        },
+        String::new(),
+        "🎮 Recent (1 credit)".to_string(),
+        String::new(),
+    ];
+
+    for record in credit_entries {
+        lines.push(format_playlog_record(record));
+        lines.push(format_playlog_stats(record));
+        lines.push(String::new());
+    }
+
+    dm_channel
+        .say(http, lines.join("\n"))
+        .await
+        .wrap_err("send DM")?;
+    Ok(())
+}
+
 fn unix_timestamp() -> i64 {
     use std::time::{SystemTime, UNIX_EPOCH};
     SystemTime::now()
@@ -539,7 +609,7 @@ fn format_playlog_stats(record: &ParsedPlayRecord) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::latest_credit_count;
+    use super::{latest_credit_count, latest_credit_count_u8};
 
     #[test]
     fn latest_credit_count_stops_at_first_track_01() {
@@ -559,5 +629,11 @@ mod tests {
         assert_eq!(latest_credit_count(&tracks), 3);
         let tracks = vec![Some(4), Some(3), Some(2), Some(4), Some(3)];
         assert_eq!(latest_credit_count(&tracks), 4);
+    }
+
+    #[test]
+    fn latest_credit_count_u8_stops_at_track_01() {
+        let tracks = vec![Some(4), Some(3), Some(2), Some(1), Some(4)];
+        assert_eq!(latest_credit_count_u8(&tracks), 4);
     }
 }
