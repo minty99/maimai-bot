@@ -124,6 +124,9 @@ pub async fn run_bot(config: AppConfig, db_path: std::path::PathBuf) -> Result<(
                     initial_scores_sync(&bot_data)
                         .await
                         .wrap_err("startup scores sync")?;
+                    initial_recent_sync(&bot_data)
+                        .await
+                        .wrap_err("startup recent sync")?;
                     persist_play_counts(&bot_data.db, &player_data)
                         .await
                         .wrap_err("persist play counts")?;
@@ -188,6 +191,32 @@ async fn initial_scores_sync(bot_data: &BotData) -> Result<()> {
         .wrap_err("upsert scores")?;
 
     info!("Startup scores sync completed: entries={count}");
+    Ok(())
+}
+
+async fn initial_recent_sync(bot_data: &BotData) -> Result<()> {
+    info!("Running startup recent sync...");
+
+    let mut client = MaimaiClient::new(&bot_data.config).wrap_err("create HTTP client")?;
+    client
+        .ensure_logged_in()
+        .await
+        .wrap_err("ensure logged in")?;
+
+    let entries = fetch_recent_entries_logged_in(&client)
+        .await
+        .wrap_err("fetch recent entries")?;
+    let scraped_at = unix_timestamp();
+    let count_total = entries.len();
+    let count_with_idx = entries.iter().filter(|e| e.playlog_idx.is_some()).count();
+
+    db::upsert_playlogs(&bot_data.db, scraped_at, &entries)
+        .await
+        .wrap_err("upsert playlogs")?;
+
+    info!(
+        "Startup recent sync completed: entries_total={count_total} entries_with_idx={count_with_idx}"
+    );
     Ok(())
 }
 
