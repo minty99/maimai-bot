@@ -96,7 +96,7 @@ pub fn parse_song_detail_html(html: &str) -> eyre::Result<ParsedSongDetail> {
         });
     }
 
-    difficulties.sort_by_key(|d| d.diff_category.as_u8());
+    difficulties.sort_by_key(|d| d.diff_category);
 
     Ok(ParsedSongDetail {
         title,
