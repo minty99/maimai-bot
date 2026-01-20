@@ -189,19 +189,14 @@ fn format_delta(current: u32, previous: Option<u32>) -> String {
 }
 
 fn embed_startup(player: &ParsedPlayerData) -> CreateEmbed {
+    let play_count = format!(
+        "{} ({})",
+        player.total_play_count, player.current_version_play_count
+    );
     embed_base("maimai-bot started")
         .field("User", &player.user_name, true)
         .field("Rating", player.rating.to_string(), true)
-        .field(
-            "Play count (current ver)",
-            player.current_version_play_count.to_string(),
-            true,
-        )
-        .field(
-            "Play count (total)",
-            player.total_play_count.to_string(),
-            true,
-        )
+        .field("Play count", play_count, true)
 }
 
 fn embed_player_update(
