@@ -13,7 +13,7 @@ use crate::config::AppConfig;
 use crate::db;
 use crate::db::{SqlitePool, format_chart_type, format_diff_category, format_percent_f64};
 use crate::http::MaimaiClient;
-use crate::maimai::models::{ChartType, DifficultyCategory, ParsedPlayRecord, ParsedPlayerData};
+use crate::maimai::models::{ParsedPlayRecord, ParsedPlayerData};
 use crate::maimai::parse::player_data::parse_player_data_html;
 use crate::maimai::parse::recent::parse_recent_html;
 use crate::maimai::parse::score_list::parse_scores_html;
@@ -520,6 +520,21 @@ async fn mai_score(
             sc.rank
         FROM scores sc
         WHERE sc.title = ?
+        ORDER BY
+            CASE sc.chart_type
+                WHEN 'STD' THEN 0
+                WHEN 'DX' THEN 1
+                ELSE 255
+            END,
+            CASE sc.diff_category
+                WHEN 'BASIC' THEN 0
+                WHEN 'ADVANCED' THEN 1
+                WHEN 'EXPERT' THEN 2
+                WHEN 'MASTER' THEN 3
+                WHEN 'Re:MASTER' THEN 4
+                ELSE 255
+            END,
+            sc.level
         "#,
     )
     .bind(&matched_title)
@@ -559,7 +574,7 @@ async fn mai_score(
         ));
     }
 
-    let Some((title, mut entries)) = grouped.pop_first() else {
+    let Some((title, entries)) = grouped.pop_first() else {
         ctx.send(
             CreateReply::default()
                 .embed(embed_base("No records found").description("No score rows found.")),
@@ -567,34 +582,6 @@ async fn mai_score(
         .await?;
         return Ok(());
     };
-
-    entries.sort_by(|a, b| {
-        let a_chart =
-            a.0.parse::<ChartType>()
-                .ok()
-                .map(|t| t.as_u8())
-                .unwrap_or(255);
-        let b_chart =
-            b.0.parse::<ChartType>()
-                .ok()
-                .map(|t| t.as_u8())
-                .unwrap_or(255);
-        let a_diff =
-            a.1.parse::<DifficultyCategory>()
-                .ok()
-                .map(|d| d.as_u8())
-                .unwrap_or(255);
-        let b_diff =
-            b.1.parse::<DifficultyCategory>()
-                .ok()
-                .map(|d| d.as_u8())
-                .unwrap_or(255);
-
-        a_chart
-            .cmp(&b_chart)
-            .then(a_diff.cmp(&b_diff))
-            .then(a.2.cmp(&b.2))
-    });
 
     desc.push_str(&format!("**{}**\n", title));
     for (chart_type, diff_category, level, achievement, rank) in entries {
