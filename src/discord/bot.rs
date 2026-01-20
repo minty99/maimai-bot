@@ -11,7 +11,8 @@ use crate::config::AppConfig;
 use crate::db;
 use crate::db::{SqlitePool, format_chart_type, format_diff, format_percent_f64, format_track};
 use crate::http::MaimaiClient;
-use crate::maimai::models::ParsedPlayRecord;
+use crate::maimai::models::{ParsedPlayRecord, ParsedPlayerData};
+use crate::maimai::parse::player_data::parse_player_data_html;
 use crate::maimai::parse::recent::parse_recent_html;
 use crate::maimai::parse::score_list::parse_scores_html;
 
@@ -117,7 +118,10 @@ pub async fn run_bot(config: AppConfig, db_path: std::path::PathBuf) -> Result<(
                     .await
                     .wrap_err("register commands globally")?;
 
-                send_startup_dm(&bot_data)
+                let player_data = fetch_player_data(&bot_data)
+                    .await
+                    .wrap_err("fetch player data")?;
+                send_startup_dm(&bot_data, &player_data)
                     .await
                     .wrap_err("send startup DM")?;
 
@@ -264,7 +268,24 @@ async fn send_new_records_dm(bot_data: &BotData, records: &[ParsedPlayRecord]) -
     Ok(())
 }
 
-async fn send_startup_dm(bot_data: &BotData) -> Result<()> {
+async fn fetch_player_data(bot_data: &BotData) -> Result<ParsedPlayerData> {
+    let mut client = MaimaiClient::new(&bot_data.config).wrap_err("create HTTP client")?;
+    client
+        .ensure_logged_in()
+        .await
+        .wrap_err("ensure logged in")?;
+
+    let url = Url::parse("https://maimaidx-eng.com/maimai-mobile/playerData/")
+        .wrap_err("parse playerData url")?;
+    let bytes = client
+        .get_bytes(&url)
+        .await
+        .wrap_err("fetch playerData url")?;
+    let html = String::from_utf8(bytes).wrap_err("playerData response is not utf-8")?;
+    parse_player_data_html(&html).wrap_err("parse playerData html")
+}
+
+async fn send_startup_dm(bot_data: &BotData, player_data: &ParsedPlayerData) -> Result<()> {
     let http = &bot_data.discord_http;
     let dm_channel = bot_data
         .discord_user_id
@@ -272,7 +293,17 @@ async fn send_startup_dm(bot_data: &BotData) -> Result<()> {
         .await
         .wrap_err("create DM channel")?;
 
-    let message = format!("✅ maimai-bot started\n- unix_ts: {}", unix_timestamp());
+    let message = format!(
+        "✅ maimai-bot started\n\
+User: {}\n\
+Rating: {}\n\
+Play count (current ver): {}\n\
+Play count (total): {}",
+        player_data.user_name,
+        player_data.rating,
+        player_data.current_version_play_count,
+        player_data.total_play_count
+    );
     dm_channel.say(http, message).await.wrap_err("send DM")?;
     Ok(())
 }
