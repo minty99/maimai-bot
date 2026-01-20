@@ -10,9 +10,12 @@ pub fn parse_scores_html(html: &str, diff: u8) -> eyre::Result<Vec<ParsedScoreEn
     let entry_selector = Selector::parse(r#"div[class*="music_"][class*="_score_back"]"#).unwrap();
     let title_selector = Selector::parse(".music_name_block").unwrap();
     let score_block_selector = Selector::parse(".music_score_block").unwrap();
+    let level_selector = Selector::parse(".music_lv_block").unwrap();
     let icon_selector = Selector::parse("img").unwrap();
     let chart_type_selector = Selector::parse("img.music_kind_icon").unwrap();
     let idx_selector = Selector::parse(r#"input[name="idx"]"#).unwrap();
+
+    let diff_category = diff_category_from_u8(diff);
 
     let mut entries = Vec::new();
     for entry in document.select(&entry_selector) {
@@ -29,6 +32,13 @@ pub fn parse_scores_html(html: &str, diff: u8) -> eyre::Result<Vec<ParsedScoreEn
             .next()
             .and_then(|e| e.value().attr("value"))
             .map(|s| s.to_string());
+
+        let level = entry
+            .select(&level_selector)
+            .next()
+            .map(|e| collect_text(&e).trim().to_string())
+            .filter(|s| !s.is_empty())
+            .ok_or_else(|| eyre::eyre!("missing level (.music_lv_block)"))?;
 
         let mut achievement_percent: Option<f32> = None;
         let mut dx_score: Option<i32> = None;
@@ -86,7 +96,8 @@ pub fn parse_scores_html(html: &str, diff: u8) -> eyre::Result<Vec<ParsedScoreEn
             song_key,
             title,
             chart_type,
-            diff,
+            diff_category: diff_category.to_string(),
+            level,
             achievement_percent,
             rank,
             fc,
@@ -98,6 +109,17 @@ pub fn parse_scores_html(html: &str, diff: u8) -> eyre::Result<Vec<ParsedScoreEn
     }
 
     Ok(entries)
+}
+
+fn diff_category_from_u8(diff: u8) -> &'static str {
+    match diff {
+        0 => "BASIC",
+        1 => "ADVANCED",
+        2 => "EXPERT",
+        3 => "MASTER",
+        4 => "Re:MASTER",
+        _ => "Unknown",
+    }
 }
 
 fn collect_text(element: &ElementRef<'_>) -> String {

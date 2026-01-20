@@ -146,27 +146,29 @@ async fn upsert_score(
 ) -> eyre::Result<()> {
     sqlx::query(
         r#"
-INSERT INTO scores (
-  song_key, chart_type, diff,
-  achievement_percent, rank, fc, sync,
-  dx_score, dx_score_max,
-  source_idx, scraped_at
-)
-VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)
-ON CONFLICT(song_key, chart_type, diff) DO UPDATE SET
-  achievement_percent = excluded.achievement_percent,
-  rank = excluded.rank,
-  fc = excluded.fc,
-  sync = excluded.sync,
-  dx_score = excluded.dx_score,
-  dx_score_max = excluded.dx_score_max,
-  source_idx = excluded.source_idx,
-  scraped_at = excluded.scraped_at
-"#,
+	INSERT INTO scores (
+	  song_key, chart_type, diff_category, level,
+	  achievement_percent, rank, fc, sync,
+	  dx_score, dx_score_max,
+	  source_idx, scraped_at
+	)
+	VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)
+	ON CONFLICT(song_key, chart_type, diff_category) DO UPDATE SET
+	  level = excluded.level,
+	  achievement_percent = excluded.achievement_percent,
+	  rank = excluded.rank,
+	  fc = excluded.fc,
+	  sync = excluded.sync,
+	  dx_score = excluded.dx_score,
+	  dx_score_max = excluded.dx_score_max,
+	  source_idx = excluded.source_idx,
+	  scraped_at = excluded.scraped_at
+	"#,
     )
     .bind(&entry.song_key)
     .bind(chart_type_str(entry.chart_type))
-    .bind(i64::from(entry.diff))
+    .bind(&entry.diff_category)
+    .bind(&entry.level)
     .bind(entry.achievement_percent.map(f64::from))
     .bind(entry.rank.as_deref())
     .bind(entry.fc.as_deref())
@@ -189,30 +191,31 @@ async fn upsert_playlog(
 ) -> eyre::Result<()> {
     sqlx::query(
         r#"
-INSERT INTO playlogs (
-  playlog_idx,
-  played_at, track,
-  song_key, title, chart_type, diff,
-  achievement_percent, score_rank, fc, sync,
-  dx_score, dx_score_max,
-  scraped_at
-)
-VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)
-ON CONFLICT(playlog_idx) DO UPDATE SET
-  played_at = excluded.played_at,
-  track = excluded.track,
-  song_key = excluded.song_key,
-  title = excluded.title,
-  chart_type = excluded.chart_type,
-  diff = excluded.diff,
-  achievement_percent = excluded.achievement_percent,
-  score_rank = excluded.score_rank,
-  fc = excluded.fc,
-  sync = excluded.sync,
-  dx_score = excluded.dx_score,
-  dx_score_max = excluded.dx_score_max,
-  scraped_at = excluded.scraped_at
-"#,
+	INSERT INTO playlogs (
+	  playlog_idx,
+	  played_at, track,
+	  song_key, title, chart_type, diff_category, level,
+	  achievement_percent, score_rank, fc, sync,
+	  dx_score, dx_score_max,
+	  scraped_at
+	)
+	VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15)
+	ON CONFLICT(playlog_idx) DO UPDATE SET
+	  played_at = excluded.played_at,
+	  track = excluded.track,
+	  song_key = excluded.song_key,
+	  title = excluded.title,
+	  chart_type = excluded.chart_type,
+	  diff_category = excluded.diff_category,
+	  level = excluded.level,
+	  achievement_percent = excluded.achievement_percent,
+	  score_rank = excluded.score_rank,
+	  fc = excluded.fc,
+	  sync = excluded.sync,
+	  dx_score = excluded.dx_score,
+	  dx_score_max = excluded.dx_score_max,
+	  scraped_at = excluded.scraped_at
+	"#,
     )
     .bind(playlog_idx)
     .bind(entry.played_at.as_deref())
@@ -220,7 +223,8 @@ ON CONFLICT(playlog_idx) DO UPDATE SET
     .bind(&entry.song_key)
     .bind(&entry.title)
     .bind(chart_type_str(entry.chart_type))
-    .bind(entry.diff.map(i64::from))
+    .bind(entry.diff_category.as_deref())
+    .bind(entry.level.as_deref())
     .bind(entry.achievement_percent.map(f64::from))
     .bind(entry.score_rank.as_deref())
     .bind(entry.fc.as_deref())
@@ -241,15 +245,8 @@ fn chart_type_str(t: ChartType) -> &'static str {
     }
 }
 
-pub fn format_diff(diff: Option<u8>) -> &'static str {
-    match diff {
-        Some(0) => "BASIC",
-        Some(1) => "ADVANCED",
-        Some(2) => "EXPERT",
-        Some(3) => "MASTER",
-        Some(4) => "Re:MASTER",
-        _ => "Unknown",
-    }
+pub fn format_diff_category(diff_category: Option<&str>) -> &str {
+    diff_category.unwrap_or("Unknown")
 }
 
 pub fn format_chart_type(chart_type: ChartType) -> &'static str {

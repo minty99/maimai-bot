@@ -9,7 +9,9 @@ use tracing::{debug, error, info};
 
 use crate::config::AppConfig;
 use crate::db;
-use crate::db::{SqlitePool, format_chart_type, format_diff, format_percent_f64, format_track};
+use crate::db::{
+    SqlitePool, format_chart_type, format_diff_category, format_percent_f64, format_track,
+};
 use crate::http::MaimaiClient;
 use crate::maimai::models::{ParsedPlayRecord, ParsedPlayerData};
 use crate::maimai::parse::player_data::parse_player_data_html;
@@ -377,25 +379,28 @@ async fn mai_record(
 ) -> Result<(), Error> {
     ctx.defer().await?;
 
-    let rows = sqlx::query_as::<_, (String, String, String, Option<f64>, Option<String>)>(
+    let rows = sqlx::query_as::<_, (String, String, String, String, Option<f64>, Option<String>)>(
         r#"
         SELECT
             s.title,
             sc.chart_type,
-            CASE sc.diff
-                WHEN 0 THEN 'BASIC'
-                WHEN 1 THEN 'ADVANCED'
-                WHEN 2 THEN 'EXPERT'
-                WHEN 3 THEN 'MASTER'
-                WHEN 4 THEN 'Re:MASTER'
-                ELSE 'Unknown'
-            END as diff_name,
+            sc.diff_category,
+            sc.level,
             sc.achievement_percent,
             sc.rank
         FROM scores sc
         JOIN songs s ON sc.song_key = s.song_key
         WHERE s.title LIKE ? OR s.song_key = ?
-        ORDER BY sc.chart_type, sc.diff
+        ORDER BY
+            sc.chart_type,
+            CASE sc.diff_category
+                WHEN 'BASIC' THEN 0
+                WHEN 'ADVANCED' THEN 1
+                WHEN 'EXPERT' THEN 2
+                WHEN 'MASTER' THEN 3
+                WHEN 'Re:MASTER' THEN 4
+                ELSE 255
+            END
         "#,
     )
     .bind(format!("%{}%", search))
@@ -412,12 +417,13 @@ async fn mai_record(
 
     let mut lines = vec![format!("📊 Records for '{}'", search), String::new()];
 
-    for (title, chart_type, diff_name, achievement, rank) in rows {
+    for (title, chart_type, diff_category, level, achievement, rank) in rows {
         lines.push(format!(
-            "**{} [{}] {}**: {} - {}",
+            "**{} [{}] {} {}**: {} - {}",
             title,
             chart_type,
-            diff_name,
+            diff_category,
+            level,
             format_percent_f64(achievement),
             rank.unwrap_or_else(|| "N/A".to_string())
         ));
@@ -588,7 +594,7 @@ fn format_playlog_record(record: &ParsedPlayRecord) -> String {
         "**{}** [{}] {} - {}",
         record.title,
         format_chart_type(record.chart_type),
-        format_diff(record.diff),
+        format_diff_category(record.diff_category.as_deref()),
         record.played_at.as_deref().unwrap_or("N/A")
     )
 }

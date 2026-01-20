@@ -15,8 +15,17 @@ fn run_fixture_test(diff: u8, filename: &str) {
     let entries = parse_scores_html(&html, diff).unwrap();
 
     assert!(!entries.is_empty());
-    assert!(entries.iter().all(|e| e.diff == diff));
+    let expected_category = match diff {
+        0 => "BASIC",
+        1 => "ADVANCED",
+        2 => "EXPERT",
+        3 => "MASTER",
+        4 => "Re:MASTER",
+        _ => "Unknown",
+    };
+    assert!(entries.iter().all(|e| e.diff_category == expected_category));
     assert!(entries.iter().all(|e| !e.song_key.trim().is_empty()));
+    assert!(entries.iter().all(|e| !e.level.trim().is_empty()));
     assert!(
         entries
             .iter()
@@ -58,9 +67,11 @@ fn run_fixture_test(diff: u8, filename: &str) {
     println!("diff={diff} entries={}", entries.len());
     for e in entries.iter().take(5) {
         println!(
-            "  chart={:?} title={:?} achv={:?} rank={:?} fc={:?} sync={:?} dx={:?}/{:?} key_prefix={}",
+            "  chart={:?} title={:?} diff={:?} lv={:?} achv={:?} rank={:?} fc={:?} sync={:?} dx={:?}/{:?} key_prefix={}",
             e.chart_type,
             e.title,
+            e.diff_category,
+            e.level,
             e.achievement_percent,
             e.rank,
             e.fc,

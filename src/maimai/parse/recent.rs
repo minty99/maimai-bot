@@ -34,11 +34,12 @@ pub fn parse_recent_html(html: &str) -> eyre::Result<Vec<ParsedPlayRecord>> {
             continue;
         };
 
-        let diff = entry
+        let diff_category = entry
             .select(&diff_selector)
             .next()
             .and_then(|img| img.value().attr("src"))
-            .and_then(parse_diff_from_icon_src);
+            .and_then(parse_diff_category_from_icon_src)
+            .map(|s| s.to_string());
 
         let (track, played_at) = entry
             .select(&subtitle_selector)
@@ -66,9 +67,11 @@ pub fn parse_recent_html(html: &str) -> eyre::Result<Vec<ParsedPlayRecord>> {
             .next()
             .map(|e| collect_text(&e))
             .unwrap_or_default();
+        let level = level.trim().to_string();
+        let level = (!level.is_empty()).then_some(level);
 
         let title_raw = collect_text(&song_block);
-        let title = strip_level_from_title(&title_raw, &level);
+        let title = strip_level_from_title(&title_raw, level.as_deref().unwrap_or(""));
 
         let playlog_idx = entry
             .select(&idx_selector)
@@ -122,7 +125,8 @@ pub fn parse_recent_html(html: &str) -> eyre::Result<Vec<ParsedPlayRecord>> {
             song_key,
             title,
             chart_type,
-            diff,
+            diff_category,
+            level,
             achievement_percent,
             score_rank,
             fc,
@@ -209,18 +213,18 @@ fn parse_dx_score_pair_from_fraction_text(text: &str) -> Option<(i32, i32)> {
     ))
 }
 
-fn parse_diff_from_icon_src(src: &str) -> Option<u8> {
+fn parse_diff_category_from_icon_src(src: &str) -> Option<&'static str> {
     let file = src.rsplit('/').next()?;
     let file = file.split('?').next().unwrap_or(file);
     if !file.starts_with("diff_") || !file.ends_with(".png") {
         return None;
     }
     match file {
-        "diff_basic.png" => Some(0),
-        "diff_advanced.png" => Some(1),
-        "diff_expert.png" => Some(2),
-        "diff_master.png" => Some(3),
-        "diff_remaster.png" => Some(4),
+        "diff_basic.png" => Some("BASIC"),
+        "diff_advanced.png" => Some("ADVANCED"),
+        "diff_expert.png" => Some("EXPERT"),
+        "diff_master.png" => Some("MASTER"),
+        "diff_remaster.png" => Some("Re:MASTER"),
         _ => None,
     }
 }

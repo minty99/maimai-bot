@@ -22,9 +22,15 @@ fn parse_song_detail_example1() {
         parsed
             .difficulties
             .iter()
-            .map(|d| d.diff)
+            .map(|d| d.diff_category.as_str())
             .collect::<Vec<_>>(),
-        vec![2, 3]
+        vec!["EXPERT", "MASTER"]
+    );
+    assert!(
+        parsed
+            .difficulties
+            .iter()
+            .all(|d| !d.level.trim().is_empty())
     );
     assert!(
         parsed
@@ -41,9 +47,10 @@ fn parse_song_detail_example1() {
     );
     for d in &parsed.difficulties {
         println!(
-            "  chart={:?} diff={} achv={:?} rank={:?} fc={:?} sync={:?} dx={:?}/{:?}",
+            "  chart={:?} diff={} lv={} achv={:?} rank={:?} fc={:?} sync={:?} dx={:?}/{:?}",
             d.chart_type,
-            d.diff,
+            d.diff_category,
+            d.level,
             d.achievement_percent,
             d.rank,
             d.fc,
@@ -66,9 +73,15 @@ fn parse_song_detail_example2() {
         parsed
             .difficulties
             .iter()
-            .map(|d| d.diff)
+            .map(|d| d.diff_category.as_str())
             .collect::<Vec<_>>(),
-        vec![1, 2, 3, 4]
+        vec!["ADVANCED", "EXPERT", "MASTER", "Re:MASTER"]
+    );
+    assert!(
+        parsed
+            .difficulties
+            .iter()
+            .all(|d| !d.level.trim().is_empty())
     );
     assert!(
         parsed
@@ -85,9 +98,10 @@ fn parse_song_detail_example2() {
     );
     for d in &parsed.difficulties {
         println!(
-            "  chart={:?} diff={} achv={:?} rank={:?} fc={:?} sync={:?} dx={:?}/{:?}",
+            "  chart={:?} diff={} lv={} achv={:?} rank={:?} fc={:?} sync={:?} dx={:?}/{:?}",
             d.chart_type,
-            d.diff,
+            d.diff_category,
+            d.level,
             d.achievement_percent,
             d.rank,
             d.fc,

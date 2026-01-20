@@ -19,6 +19,8 @@ fn parse_recent_record_fixture() {
     assert!(!entries.is_empty());
     assert!(entries.len() <= 50);
     assert!(entries.iter().all(|e| !e.song_key.trim().is_empty()));
+    assert!(entries.iter().all(|e| e.diff_category.is_some()));
+    assert!(entries.iter().all(|e| e.level.is_some()));
     assert!(
         entries
             .iter()
@@ -36,11 +38,12 @@ fn parse_recent_record_fixture() {
     println!("recent entries={}", entries.len());
     for e in entries.iter().take(5) {
         println!(
-            "  track={:?} played_at={:?} chart={:?} diff={:?} title={:?} achv={:?} rank={:?} fc={:?} sync={:?} dx={:?}/{:?} idx={:?}",
+            "  track={:?} played_at={:?} chart={:?} diff={:?} lv={:?} title={:?} achv={:?} rank={:?} fc={:?} sync={:?} dx={:?}/{:?} idx={:?}",
             e.track,
             e.played_at,
             e.chart_type,
-            e.diff,
+            e.diff_category,
+            e.level,
             e.title,
             e.achievement_percent,
             e.score_rank,

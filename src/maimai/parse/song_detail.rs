@@ -11,6 +11,7 @@ pub fn parse_song_detail_html(html: &str) -> eyre::Result<ParsedSongDetail> {
     let page_kind_selector = Selector::parse("div.basic_block img").unwrap();
     let detail_selector =
         Selector::parse(r#"div[id][class*="music_"][class*="_score_back"]"#).unwrap();
+    let level_selector = Selector::parse(".music_lv_back").unwrap();
     let score_block_selector = Selector::parse(".music_score_block").unwrap();
     let icon_selector = Selector::parse("img").unwrap();
 
@@ -32,9 +33,16 @@ pub fn parse_song_detail_html(html: &str) -> eyre::Result<ParsedSongDetail> {
 
     let mut difficulties = Vec::new();
     for section in document.select(&detail_selector) {
-        let Some(diff) = section.value().attr("id").and_then(diff_from_id) else {
+        let Some(diff_category) = section.value().attr("id").and_then(diff_category_from_id) else {
             continue;
         };
+
+        let level = section
+            .select(&level_selector)
+            .next()
+            .map(|e| e.text().collect::<Vec<_>>().join("").trim().to_string())
+            .filter(|s| !s.is_empty())
+            .ok_or_else(|| eyre::eyre!("missing level (.music_lv_back)"))?;
 
         let mut achievement_percent: Option<f32> = None;
         let mut dx_score: Option<i32> = None;
@@ -77,7 +85,8 @@ pub fn parse_song_detail_html(html: &str) -> eyre::Result<ParsedSongDetail> {
         }
 
         difficulties.push(ParsedSongDifficultyDetail {
-            diff,
+            diff_category: diff_category.to_string(),
+            level,
             chart_type: chart_type.unwrap_or(page_chart_type),
             achievement_percent,
             rank,
@@ -88,7 +97,7 @@ pub fn parse_song_detail_html(html: &str) -> eyre::Result<ParsedSongDetail> {
         });
     }
 
-    difficulties.sort_by_key(|d| d.diff);
+    difficulties.sort_by_key(|d| diff_category_order(&d.diff_category));
 
     Ok(ParsedSongDetail {
         song_key,
@@ -98,14 +107,25 @@ pub fn parse_song_detail_html(html: &str) -> eyre::Result<ParsedSongDetail> {
     })
 }
 
-fn diff_from_id(id: &str) -> Option<u8> {
+fn diff_category_from_id(id: &str) -> Option<&'static str> {
     match id {
-        "basic" => Some(0),
-        "advanced" => Some(1),
-        "expert" => Some(2),
-        "master" => Some(3),
-        "remaster" => Some(4),
+        "basic" => Some("BASIC"),
+        "advanced" => Some("ADVANCED"),
+        "expert" => Some("EXPERT"),
+        "master" => Some("MASTER"),
+        "remaster" => Some("Re:MASTER"),
         _ => None,
+    }
+}
+
+fn diff_category_order(category: &str) -> u8 {
+    match category {
+        "BASIC" => 0,
+        "ADVANCED" => 1,
+        "EXPERT" => 2,
+        "MASTER" => 3,
+        "Re:MASTER" => 4,
+        _ => 255,
     }
 }
 

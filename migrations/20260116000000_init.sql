@@ -11,7 +11,8 @@ CREATE TABLE IF NOT EXISTS songs (
 CREATE TABLE IF NOT EXISTS scores (
   song_key TEXT NOT NULL,
   chart_type TEXT NOT NULL, -- 'STD' | 'DX'
-  diff INTEGER NOT NULL, -- 0..4
+  diff_category TEXT NOT NULL, -- 'BASIC' | 'ADVANCED' | 'EXPERT' | 'MASTER' | 'Re:MASTER'
+  level TEXT NOT NULL, -- e.g. '13+'
   achievement_percent REAL,
   rank TEXT,
   fc TEXT,
@@ -20,7 +21,7 @@ CREATE TABLE IF NOT EXISTS scores (
   dx_score_max INTEGER,
   source_idx TEXT,
   scraped_at INTEGER NOT NULL,
-  PRIMARY KEY (song_key, chart_type, diff),
+  PRIMARY KEY (song_key, chart_type, diff_category),
   FOREIGN KEY (song_key) REFERENCES songs(song_key)
 );
 
@@ -33,7 +34,8 @@ CREATE TABLE IF NOT EXISTS playlogs (
   song_key TEXT NOT NULL,
   title TEXT NOT NULL,
   chart_type TEXT NOT NULL, -- 'STD' | 'DX'
-  diff INTEGER,
+  diff_category TEXT, -- 'BASIC' | 'ADVANCED' | 'EXPERT' | 'MASTER' | 'Re:MASTER'
+  level TEXT, -- e.g. '13+'
   achievement_percent REAL,
   score_rank TEXT,
   fc TEXT,
@@ -45,4 +47,3 @@ CREATE TABLE IF NOT EXISTS playlogs (
 );
 
 CREATE INDEX IF NOT EXISTS idx_playlogs_scraped_at ON playlogs(scraped_at);
-

@@ -12,7 +12,8 @@ pub struct ParsedScoreEntry {
     pub song_key: String,
     pub title: String,
     pub chart_type: ChartType,
-    pub diff: u8,
+    pub diff_category: String,
+    pub level: String,
     pub achievement_percent: Option<f32>,
     pub rank: Option<String>,
     pub fc: Option<String>,
@@ -31,7 +32,8 @@ pub struct ParsedPlayRecord {
     pub song_key: String,
     pub title: String,
     pub chart_type: ChartType,
-    pub diff: Option<u8>,
+    pub diff_category: Option<String>,
+    pub level: Option<String>,
 
     pub achievement_percent: Option<f32>,
     pub score_rank: Option<String>,
@@ -51,7 +53,8 @@ pub struct ParsedSongDetail {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ParsedSongDifficultyDetail {
-    pub diff: u8,
+    pub diff_category: String,
+    pub level: String,
     pub chart_type: ChartType,
     pub achievement_percent: Option<f32>,
     pub rank: Option<String>,
