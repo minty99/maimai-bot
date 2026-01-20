@@ -5,6 +5,7 @@ use reqwest::Url;
 use serenity::builder::{CreateEmbed, CreateMessage};
 use std::sync::Arc;
 use std::time::Duration;
+use tokio::sync::RwLock;
 use tokio::time::interval;
 use tracing::{debug, error, info};
 
@@ -32,6 +33,7 @@ pub struct BotData {
     pub config: AppConfig,
     pub discord_user_id: serenity::UserId,
     pub discord_http: Arc<serenity::Http>,
+    pub maimai_user_name: Arc<RwLock<String>>,
 }
 
 pub async fn run_bot(config: AppConfig, db_path: std::path::PathBuf) -> Result<()> {
@@ -69,6 +71,7 @@ pub async fn run_bot(config: AppConfig, db_path: std::path::PathBuf) -> Result<(
         config: config.clone(),
         discord_user_id,
         discord_http,
+        maimai_user_name: Arc::new(RwLock::new(String::new())),
     };
 
     let framework = poise::Framework::builder()
@@ -117,6 +120,7 @@ pub async fn run_bot(config: AppConfig, db_path: std::path::PathBuf) -> Result<(
                 let player_data = fetch_player_data(&bot_data)
                     .await
                     .wrap_err("fetch player data")?;
+                *bot_data.maimai_user_name.write().await = player_data.user_name.clone();
 
                 if should_sync_scores(&bot_data.db, &player_data)
                     .await
@@ -164,6 +168,15 @@ pub async fn run_bot(config: AppConfig, db_path: std::path::PathBuf) -> Result<(
     client.start().await.wrap_err("client error")?;
 
     Ok(())
+}
+
+async fn display_user_name(ctx: &poise::Context<'_, BotData, Error>) -> String {
+    let name = ctx.data().maimai_user_name.read().await.clone();
+    if name.trim().is_empty() {
+        ctx.author().name.clone()
+    } else {
+        name
+    }
 }
 
 fn embed_base(title: &str) -> CreateEmbed {
@@ -320,6 +333,7 @@ async fn periodic_player_poll(bot_data: &BotData) -> Result<()> {
     let player_data = fetch_player_data_logged_in(&client)
         .await
         .wrap_err("fetch player data")?;
+    *bot_data.maimai_user_name.write().await = player_data.user_name.clone();
 
     let stored_total = db::get_app_state_u32(&bot_data.db, STATE_KEY_TOTAL_PLAY_COUNT).await;
     let stored_rating = db::get_app_state_u32(&bot_data.db, STATE_KEY_RATING).await;
@@ -559,10 +573,9 @@ async fn mai_score(
         desc.push('\n');
     }
 
-    ctx.send(
-        CreateReply::default()
-            .embed(embed_base(&format!("{}'s scores", ctx.author().name)).description(desc)),
-    )
+    ctx.send(CreateReply::default().embed(
+        embed_base(&format!("{}'s scores", display_user_name(&ctx).await)).description(desc),
+    ))
     .await?;
 
     Ok(())
@@ -648,8 +661,13 @@ async fn mai_recent(ctx: Context<'_>) -> Result<(), Error> {
     }
 
     ctx.send(
-        CreateReply::default()
-            .embed(embed_base(&format!("{}'s recent credit", ctx.author().name)).description(desc)),
+        CreateReply::default().embed(
+            embed_base(&format!(
+                "{}'s recent credit",
+                display_user_name(&ctx).await
+            ))
+            .description(desc),
+        ),
     )
     .await?;
 
