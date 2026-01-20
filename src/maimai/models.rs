@@ -144,6 +144,109 @@ impl ScoreRank {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum FcStatus {
+    #[serde(rename = "AP+")]
+    ApPlus,
+    #[serde(rename = "AP")]
+    Ap,
+    #[serde(rename = "FC+")]
+    FcPlus,
+    #[serde(rename = "FC")]
+    Fc,
+}
+
+impl FcStatus {
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::ApPlus => "AP+",
+            Self::Ap => "AP",
+            Self::FcPlus => "FC+",
+            Self::Fc => "FC",
+        }
+    }
+
+    pub fn from_score_icon_key(key: &str) -> Option<Self> {
+        Some(match key {
+            "app" => Self::ApPlus,
+            "ap" => Self::Ap,
+            "fcp" => Self::FcPlus,
+            "fc" => Self::Fc,
+            _ => return None,
+        })
+    }
+
+    pub fn from_playlog_key(key: &str) -> Option<Self> {
+        let s = key.trim().to_ascii_lowercase();
+        Some(match s.as_str() {
+            "app" => Self::ApPlus,
+            "ap" => Self::Ap,
+            "fcp" => Self::FcPlus,
+            "fc" => Self::Fc,
+            _ => return None,
+        })
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum SyncStatus {
+    #[serde(rename = "FDX+")]
+    FdxPlus,
+    #[serde(rename = "FDX")]
+    Fdx,
+    #[serde(rename = "FS+")]
+    FsPlus,
+    #[serde(rename = "FS")]
+    Fs,
+    #[serde(rename = "SYNC")]
+    Sync,
+}
+
+impl SyncStatus {
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::FdxPlus => "FDX+",
+            Self::Fdx => "FDX",
+            Self::FsPlus => "FS+",
+            Self::Fs => "FS",
+            Self::Sync => "SYNC",
+        }
+    }
+
+    pub const fn priority(self) -> u8 {
+        match self {
+            Self::FdxPlus => 5,
+            Self::Fdx => 4,
+            Self::FsPlus => 3,
+            Self::Fs => 2,
+            Self::Sync => 1,
+        }
+    }
+
+    pub fn from_score_icon_key(key: &str) -> Option<Self> {
+        Some(match key {
+            "fdxp" => Self::FdxPlus,
+            "fdx" => Self::Fdx,
+            "fsp" => Self::FsPlus,
+            "fs" => Self::Fs,
+            "sync" => Self::Sync,
+            _ => return None,
+        })
+    }
+
+    pub fn from_playlog_key(key: &str) -> Option<Self> {
+        let s = key.trim().to_ascii_lowercase();
+        Some(match s.as_str() {
+            "fdxp" => Self::FdxPlus,
+            "fdx" => Self::Fdx,
+            "fsp" => Self::FsPlus,
+            "fs" => Self::Fs,
+            "sync" => Self::Sync,
+            _ => return None,
+        })
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ParsedScoreEntry {
     pub title: String,
@@ -152,8 +255,8 @@ pub struct ParsedScoreEntry {
     pub level: String,
     pub achievement_percent: Option<f32>,
     pub rank: Option<ScoreRank>,
-    pub fc: Option<String>,
-    pub sync: Option<String>,
+    pub fc: Option<FcStatus>,
+    pub sync: Option<SyncStatus>,
     pub dx_score: Option<i32>,
     pub dx_score_max: Option<i32>,
     pub source_idx: Option<String>,
@@ -172,8 +275,8 @@ pub struct ParsedPlayRecord {
 
     pub achievement_percent: Option<f32>,
     pub score_rank: Option<ScoreRank>,
-    pub fc: Option<String>,
-    pub sync: Option<String>,
+    pub fc: Option<FcStatus>,
+    pub sync: Option<SyncStatus>,
     pub dx_score: Option<i32>,
     pub dx_score_max: Option<i32>,
 }
@@ -192,8 +295,8 @@ pub struct ParsedSongDifficultyDetail {
     pub chart_type: ChartType,
     pub achievement_percent: Option<f32>,
     pub rank: Option<ScoreRank>,
-    pub fc: Option<String>,
-    pub sync: Option<String>,
+    pub fc: Option<FcStatus>,
+    pub sync: Option<SyncStatus>,
     pub dx_score: Option<i32>,
     pub dx_score_max: Option<i32>,
 }

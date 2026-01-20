@@ -1,6 +1,8 @@
 use scraper::{ElementRef, Html, Selector};
 
-use crate::maimai::models::{ChartType, DifficultyCategory, ParsedScoreEntry, ScoreRank};
+use crate::maimai::models::{
+    ChartType, DifficultyCategory, FcStatus, ParsedScoreEntry, ScoreRank, SyncStatus,
+};
 
 pub fn parse_scores_html(html: &str, diff: u8) -> eyre::Result<Vec<ParsedScoreEntry>> {
     let document = Html::parse_document(html);
@@ -59,8 +61,8 @@ pub fn parse_scores_html(html: &str, diff: u8) -> eyre::Result<Vec<ParsedScoreEn
         }
 
         let mut rank: Option<ScoreRank> = None;
-        let mut fc: Option<String> = None;
-        let mut sync: Option<String> = None;
+        let mut fc: Option<FcStatus> = None;
+        let mut sync: Option<SyncStatus> = None;
         for img in entry.select(&icon_selector) {
             let Some(src) = img.value().attr("src") else {
                 continue;
@@ -158,59 +160,27 @@ fn parse_rank_from_icon_src(src: &str) -> Option<ScoreRank> {
     ScoreRank::from_score_icon_key(&key)
 }
 
-fn parse_fc_from_icon_src(src: &str) -> Option<String> {
+fn parse_fc_from_icon_src(src: &str) -> Option<FcStatus> {
     let key = icon_key(src)?;
-    Some(
-        match key.as_str() {
-            "fc" => "FC",
-            "fcp" => "FC+",
-            "ap" => "AP",
-            "app" => "AP+",
-            _ => return None,
-        }
-        .to_string(),
-    )
+    FcStatus::from_score_icon_key(&key)
 }
 
-fn parse_sync_from_icon_src(src: &str) -> Option<String> {
+fn parse_sync_from_icon_src(src: &str) -> Option<SyncStatus> {
     let key = icon_key(src)?;
-    Some(
-        match key.as_str() {
-            "fdxp" => "FDX+",
-            "fdx" => "FDX",
-            "fsp" => "FS+",
-            "fs" => "FS",
-            "sync" => "SYNC",
-            _ => return None,
-        }
-        .to_string(),
-    )
+    SyncStatus::from_score_icon_key(&key)
 }
 
-fn merge_sync(existing: Option<String>, candidate: Option<String>) -> Option<String> {
+fn merge_sync(existing: Option<SyncStatus>, candidate: Option<SyncStatus>) -> Option<SyncStatus> {
     let Some(candidate) = candidate else {
         return existing;
     };
     let Some(existing) = existing else {
         return Some(candidate);
     };
-    let existing_rank = sync_rank(&existing);
-    let candidate_rank = sync_rank(&candidate);
-    if candidate_rank > existing_rank {
+    if candidate.priority() > existing.priority() {
         Some(candidate)
     } else {
         Some(existing)
-    }
-}
-
-fn sync_rank(s: &str) -> u8 {
-    match s {
-        "FDX+" => 5,
-        "FDX" => 4,
-        "FS+" => 3,
-        "FS" => 2,
-        "SYNC" => 1,
-        _ => 0,
     }
 }
 

@@ -1,6 +1,8 @@
 use scraper::{ElementRef, Html, Selector};
 
-use crate::maimai::models::{ChartType, DifficultyCategory, ParsedPlayRecord, ScoreRank};
+use crate::maimai::models::{
+    ChartType, DifficultyCategory, FcStatus, ParsedPlayRecord, ScoreRank, SyncStatus,
+};
 
 pub fn parse_recent_html(html: &str) -> eyre::Result<Vec<ParsedPlayRecord>> {
     let document = Html::parse_document(html);
@@ -102,8 +104,8 @@ pub fn parse_recent_html(html: &str) -> eyre::Result<Vec<ParsedPlayRecord>> {
             .and_then(parse_chart_type_from_icon_src)
             .unwrap_or(ChartType::Std);
 
-        let mut fc: Option<String> = None;
-        let mut sync: Option<String> = None;
+        let mut fc: Option<FcStatus> = None;
+        let mut sync: Option<SyncStatus> = None;
         for img in entry.select(&img_selector) {
             let Some(src) = img.value().attr("src") else {
                 continue;
@@ -241,7 +243,7 @@ fn parse_rank_from_playlog_icon_src(src: &str) -> Option<ScoreRank> {
     ScoreRank::from_playlog_stem(stem)
 }
 
-fn parse_fc_from_playlog_icon_src(src: &str) -> Option<String> {
+fn parse_fc_from_playlog_icon_src(src: &str) -> Option<FcStatus> {
     let file = src.rsplit('/').next()?;
     let file = file.split('?').next().unwrap_or(file);
     let stem = file.strip_suffix(".png")?;
@@ -249,10 +251,10 @@ fn parse_fc_from_playlog_icon_src(src: &str) -> Option<String> {
     if stem == "dummy" {
         return None;
     }
-    Some(stem.to_ascii_uppercase())
+    FcStatus::from_playlog_key(stem)
 }
 
-fn parse_sync_from_playlog_icon_src(src: &str) -> Option<String> {
+fn parse_sync_from_playlog_icon_src(src: &str) -> Option<SyncStatus> {
     let file = src.rsplit('/').next()?;
     let file = file.split('?').next().unwrap_or(file);
     let stem = file.strip_suffix(".png")?;
@@ -260,32 +262,19 @@ fn parse_sync_from_playlog_icon_src(src: &str) -> Option<String> {
     if stem == "dummy" {
         return None;
     }
-    Some(stem.to_ascii_uppercase())
+    SyncStatus::from_playlog_key(stem)
 }
 
-fn merge_sync(existing: Option<String>, candidate: Option<String>) -> Option<String> {
+fn merge_sync(existing: Option<SyncStatus>, candidate: Option<SyncStatus>) -> Option<SyncStatus> {
     let Some(candidate) = candidate else {
         return existing;
     };
     let Some(existing) = existing else {
         return Some(candidate);
     };
-    let existing_rank = sync_rank(&existing);
-    let candidate_rank = sync_rank(&candidate);
-    if candidate_rank > existing_rank {
+    if candidate.priority() > existing.priority() {
         Some(candidate)
     } else {
         Some(existing)
-    }
-}
-
-fn sync_rank(s: &str) -> u8 {
-    match s {
-        "FDX+" => 5,
-        "FDX" => 4,
-        "FS+" => 3,
-        "FS" => 2,
-        "SYNC" => 1,
-        _ => 0,
     }
 }
