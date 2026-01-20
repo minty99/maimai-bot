@@ -1,6 +1,6 @@
 use scraper::{ElementRef, Html, Selector};
 
-use crate::maimai::models::{ChartType, ParsedPlayRecord};
+use crate::maimai::models::{ChartType, DifficultyCategory, ParsedPlayRecord};
 
 pub fn parse_recent_html(html: &str) -> eyre::Result<Vec<ParsedPlayRecord>> {
     let document = Html::parse_document(html);
@@ -37,8 +37,7 @@ pub fn parse_recent_html(html: &str) -> eyre::Result<Vec<ParsedPlayRecord>> {
             .select(&diff_selector)
             .next()
             .and_then(|img| img.value().attr("src"))
-            .and_then(parse_diff_category_from_icon_src)
-            .map(|s| s.to_string());
+            .and_then(parse_diff_category_from_icon_src);
 
         let (track, played_at) = entry
             .select(&subtitle_selector)
@@ -209,18 +208,18 @@ fn parse_dx_score_pair_from_fraction_text(text: &str) -> Option<(i32, i32)> {
     ))
 }
 
-fn parse_diff_category_from_icon_src(src: &str) -> Option<&'static str> {
+fn parse_diff_category_from_icon_src(src: &str) -> Option<DifficultyCategory> {
     let file = src.rsplit('/').next()?;
     let file = file.split('?').next().unwrap_or(file);
     if !file.starts_with("diff_") || !file.ends_with(".png") {
         return None;
     }
     match file {
-        "diff_basic.png" => Some("BASIC"),
-        "diff_advanced.png" => Some("ADVANCED"),
-        "diff_expert.png" => Some("EXPERT"),
-        "diff_master.png" => Some("MASTER"),
-        "diff_remaster.png" => Some("Re:MASTER"),
+        "diff_basic.png" => Some(DifficultyCategory::Basic),
+        "diff_advanced.png" => Some(DifficultyCategory::Advanced),
+        "diff_expert.png" => Some(DifficultyCategory::Expert),
+        "diff_master.png" => Some(DifficultyCategory::Master),
+        "diff_remaster.png" => Some(DifficultyCategory::ReMaster),
         _ => None,
     }
 }

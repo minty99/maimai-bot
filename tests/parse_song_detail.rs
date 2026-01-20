@@ -21,9 +21,12 @@ fn parse_song_detail_example1() {
         parsed
             .difficulties
             .iter()
-            .map(|d| d.diff_category.as_str())
+            .map(|d| d.diff_category)
             .collect::<Vec<_>>(),
-        vec!["EXPERT", "MASTER"]
+        vec![
+            maimai_bot::maimai::models::DifficultyCategory::Expert,
+            maimai_bot::maimai::models::DifficultyCategory::Master,
+        ]
     );
     assert!(
         parsed
@@ -71,9 +74,14 @@ fn parse_song_detail_example2() {
         parsed
             .difficulties
             .iter()
-            .map(|d| d.diff_category.as_str())
+            .map(|d| d.diff_category)
             .collect::<Vec<_>>(),
-        vec!["ADVANCED", "EXPERT", "MASTER", "Re:MASTER"]
+        vec![
+            maimai_bot::maimai::models::DifficultyCategory::Advanced,
+            maimai_bot::maimai::models::DifficultyCategory::Expert,
+            maimai_bot::maimai::models::DifficultyCategory::Master,
+            maimai_bot::maimai::models::DifficultyCategory::ReMaster,
+        ]
     );
     assert!(
         parsed

@@ -592,7 +592,7 @@ fn format_playlog_record(record: &ParsedPlayRecord) -> String {
         "**{}** [{}] {} - {}",
         record.title,
         format_chart_type(record.chart_type),
-        format_diff_category(record.diff_category.as_deref()),
+        format_diff_category(record.diff_category),
         record.played_at.as_deref().unwrap_or("N/A")
     )
 }

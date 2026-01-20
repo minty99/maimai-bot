@@ -14,3 +14,14 @@ fn parse_player_data_fixture() {
     assert!(parsed.current_version_play_count > 0);
     assert!(parsed.total_play_count > 0);
 }
+
+#[test]
+fn difficulty_category_numeric_values_are_stable() {
+    use maimai_bot::maimai::models::DifficultyCategory;
+
+    assert_eq!(DifficultyCategory::Basic.as_u8(), 0);
+    assert_eq!(DifficultyCategory::Advanced.as_u8(), 1);
+    assert_eq!(DifficultyCategory::Expert.as_u8(), 2);
+    assert_eq!(DifficultyCategory::Master.as_u8(), 3);
+    assert_eq!(DifficultyCategory::ReMaster.as_u8(), 4);
+}

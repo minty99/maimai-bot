@@ -1,6 +1,8 @@
 use scraper::{Html, Selector};
 
-use crate::maimai::models::{ChartType, ParsedSongDetail, ParsedSongDifficultyDetail};
+use crate::maimai::models::{
+    ChartType, DifficultyCategory, ParsedSongDetail, ParsedSongDifficultyDetail,
+};
 
 pub fn parse_song_detail_html(html: &str) -> eyre::Result<ParsedSongDetail> {
     let document = Html::parse_document(html);
@@ -81,7 +83,7 @@ pub fn parse_song_detail_html(html: &str) -> eyre::Result<ParsedSongDetail> {
         }
 
         difficulties.push(ParsedSongDifficultyDetail {
-            diff_category: diff_category.to_string(),
+            diff_category,
             level,
             chart_type: chart_type.unwrap_or(page_chart_type),
             achievement_percent,
@@ -93,7 +95,7 @@ pub fn parse_song_detail_html(html: &str) -> eyre::Result<ParsedSongDetail> {
         });
     }
 
-    difficulties.sort_by_key(|d| diff_category_order(&d.diff_category));
+    difficulties.sort_by_key(|d| d.diff_category.as_u8());
 
     Ok(ParsedSongDetail {
         title,
@@ -102,25 +104,14 @@ pub fn parse_song_detail_html(html: &str) -> eyre::Result<ParsedSongDetail> {
     })
 }
 
-fn diff_category_from_id(id: &str) -> Option<&'static str> {
+fn diff_category_from_id(id: &str) -> Option<DifficultyCategory> {
     match id {
-        "basic" => Some("BASIC"),
-        "advanced" => Some("ADVANCED"),
-        "expert" => Some("EXPERT"),
-        "master" => Some("MASTER"),
-        "remaster" => Some("Re:MASTER"),
+        "basic" => Some(DifficultyCategory::Basic),
+        "advanced" => Some(DifficultyCategory::Advanced),
+        "expert" => Some(DifficultyCategory::Expert),
+        "master" => Some(DifficultyCategory::Master),
+        "remaster" => Some(DifficultyCategory::ReMaster),
         _ => None,
-    }
-}
-
-fn diff_category_order(category: &str) -> u8 {
-    match category {
-        "BASIC" => 0,
-        "ADVANCED" => 1,
-        "EXPERT" => 2,
-        "MASTER" => 3,
-        "Re:MASTER" => 4,
-        _ => 255,
     }
 }
 

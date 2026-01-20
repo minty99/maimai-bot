@@ -4,7 +4,7 @@ use eyre::WrapErr;
 use sqlx::sqlite::{SqliteConnectOptions, SqliteJournalMode, SqlitePoolOptions, SqliteSynchronous};
 use sqlx::{Pool, Sqlite};
 
-use crate::maimai::models::{ChartType, ParsedPlayRecord, ParsedScoreEntry};
+use crate::maimai::models::{ChartType, DifficultyCategory, ParsedPlayRecord, ParsedScoreEntry};
 
 pub type SqlitePool = Pool<Sqlite>;
 
@@ -141,7 +141,7 @@ async fn upsert_score(
     )
     .bind(&entry.title)
     .bind(chart_type_str(entry.chart_type))
-    .bind(&entry.diff_category)
+    .bind(entry.diff_category.as_str())
     .bind(&entry.level)
     .bind(entry.achievement_percent.map(f64::from))
     .bind(entry.rank.as_deref())
@@ -195,7 +195,7 @@ async fn upsert_playlog(
     .bind(entry.track.map(i64::from))
     .bind(&entry.title)
     .bind(chart_type_str(entry.chart_type))
-    .bind(entry.diff_category.as_deref())
+    .bind(entry.diff_category.map(|d| d.as_str().to_string()))
     .bind(entry.level.as_deref())
     .bind(entry.achievement_percent.map(f64::from))
     .bind(entry.score_rank.as_deref())
@@ -217,8 +217,8 @@ fn chart_type_str(t: ChartType) -> &'static str {
     }
 }
 
-pub fn format_diff_category(diff_category: Option<&str>) -> &str {
-    diff_category.unwrap_or("Unknown")
+pub fn format_diff_category(diff_category: Option<DifficultyCategory>) -> &'static str {
+    diff_category.map(|d| d.as_str()).unwrap_or("Unknown")
 }
 
 pub fn format_chart_type(chart_type: ChartType) -> &'static str {

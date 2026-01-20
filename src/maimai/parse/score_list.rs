@@ -1,6 +1,6 @@
 use scraper::{ElementRef, Html, Selector};
 
-use crate::maimai::models::{ChartType, ParsedScoreEntry};
+use crate::maimai::models::{ChartType, DifficultyCategory, ParsedScoreEntry};
 
 pub fn parse_scores_html(html: &str, diff: u8) -> eyre::Result<Vec<ParsedScoreEntry>> {
     let document = Html::parse_document(html);
@@ -13,7 +13,7 @@ pub fn parse_scores_html(html: &str, diff: u8) -> eyre::Result<Vec<ParsedScoreEn
     let chart_type_selector = Selector::parse("img.music_kind_icon").unwrap();
     let idx_selector = Selector::parse(r#"input[name="idx"]"#).unwrap();
 
-    let diff_category = diff_category_from_u8(diff);
+    let diff_category = diff_category_from_u8(diff)?;
 
     let mut entries = Vec::new();
     for entry in document.select(&entry_selector) {
@@ -90,7 +90,7 @@ pub fn parse_scores_html(html: &str, diff: u8) -> eyre::Result<Vec<ParsedScoreEn
         entries.push(ParsedScoreEntry {
             title,
             chart_type,
-            diff_category: diff_category.to_string(),
+            diff_category,
             level,
             achievement_percent,
             rank,
@@ -105,14 +105,14 @@ pub fn parse_scores_html(html: &str, diff: u8) -> eyre::Result<Vec<ParsedScoreEn
     Ok(entries)
 }
 
-fn diff_category_from_u8(diff: u8) -> &'static str {
+fn diff_category_from_u8(diff: u8) -> eyre::Result<DifficultyCategory> {
     match diff {
-        0 => "BASIC",
-        1 => "ADVANCED",
-        2 => "EXPERT",
-        3 => "MASTER",
-        4 => "Re:MASTER",
-        _ => "Unknown",
+        0 => Ok(DifficultyCategory::Basic),
+        1 => Ok(DifficultyCategory::Advanced),
+        2 => Ok(DifficultyCategory::Expert),
+        3 => Ok(DifficultyCategory::Master),
+        4 => Ok(DifficultyCategory::ReMaster),
+        _ => Err(eyre::eyre!("diff must be 0..4")),
     }
 }
 
