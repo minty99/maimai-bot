@@ -1,6 +1,6 @@
 use scraper::{ElementRef, Html, Selector};
 
-use crate::maimai::models::{ChartType, DifficultyCategory, ParsedScoreEntry};
+use crate::maimai::models::{ChartType, DifficultyCategory, ParsedScoreEntry, ScoreRank};
 
 pub fn parse_scores_html(html: &str, diff: u8) -> eyre::Result<Vec<ParsedScoreEntry>> {
     let document = Html::parse_document(html);
@@ -58,7 +58,7 @@ pub fn parse_scores_html(html: &str, diff: u8) -> eyre::Result<Vec<ParsedScoreEn
             }
         }
 
-        let mut rank: Option<String> = None;
+        let mut rank: Option<ScoreRank> = None;
         let mut fc: Option<String> = None;
         let mut sync: Option<String> = None;
         for img in entry.select(&icon_selector) {
@@ -153,20 +153,9 @@ fn parse_dx_score_pair(text: &str) -> Option<(i32, i32)> {
     ))
 }
 
-fn parse_rank_from_icon_src(src: &str) -> Option<String> {
+fn parse_rank_from_icon_src(src: &str) -> Option<ScoreRank> {
     let key = icon_key(src)?;
-    Some(
-        match key.as_str() {
-            "s" => "S",
-            "sp" => "S+",
-            "ss" => "SS",
-            "ssp" => "SS+",
-            "sss" => "SSS",
-            "sssp" => "SSS+",
-            _ => return None,
-        }
-        .to_string(),
-    )
+    ScoreRank::from_score_icon_key(&key)
 }
 
 fn parse_fc_from_icon_src(src: &str) -> Option<String> {

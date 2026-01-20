@@ -225,7 +225,7 @@ fn embed_player_update(
             let diff = format_diff_category(record.diff_category);
             let level = record.level.as_deref().unwrap_or("N/A");
             let achv = format_percent_f64(record.achievement_percent.map(|p| p as f64));
-            let rank = record.score_rank.as_deref().unwrap_or("N/A");
+            let rank = record.score_rank.map(|r| r.as_str()).unwrap_or("N/A");
             desc.push_str(&format!(
                 "`{track}` **{}** [{}] {diff} {level}\n{achv} • {rank} • {played_at}\n\n",
                 record.title,

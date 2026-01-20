@@ -1,6 +1,6 @@
 use scraper::{ElementRef, Html, Selector};
 
-use crate::maimai::models::{ChartType, DifficultyCategory, ParsedPlayRecord};
+use crate::maimai::models::{ChartType, DifficultyCategory, ParsedPlayRecord, ScoreRank};
 
 pub fn parse_recent_html(html: &str) -> eyre::Result<Vec<ParsedPlayRecord>> {
     let document = Html::parse_document(html);
@@ -234,11 +234,11 @@ fn parse_chart_type_from_icon_src(src: &str) -> Option<ChartType> {
     None
 }
 
-fn parse_rank_from_playlog_icon_src(src: &str) -> Option<String> {
+fn parse_rank_from_playlog_icon_src(src: &str) -> Option<ScoreRank> {
     let file = src.rsplit('/').next()?;
     let file = file.split('?').next().unwrap_or(file);
     let stem = file.strip_suffix(".png")?;
-    Some(stem.to_ascii_uppercase())
+    ScoreRank::from_playlog_stem(stem)
 }
 
 fn parse_fc_from_playlog_icon_src(src: &str) -> Option<String> {

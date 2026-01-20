@@ -50,6 +50,100 @@ impl DifficultyCategory {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum ScoreRank {
+    #[serde(rename = "SSS+")]
+    SssPlus,
+    #[serde(rename = "SSS")]
+    Sss,
+    #[serde(rename = "SS+")]
+    SsPlus,
+    #[serde(rename = "SS")]
+    Ss,
+    #[serde(rename = "S+")]
+    SPlus,
+    #[serde(rename = "S")]
+    S,
+    #[serde(rename = "AAA")]
+    Aaa,
+    #[serde(rename = "AA")]
+    Aa,
+    #[serde(rename = "A")]
+    A,
+    #[serde(rename = "BBB")]
+    Bbb,
+    #[serde(rename = "BB")]
+    Bb,
+    #[serde(rename = "B")]
+    B,
+    #[serde(rename = "C")]
+    C,
+    #[serde(rename = "D")]
+    D,
+}
+
+impl ScoreRank {
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::SssPlus => "SSS+",
+            Self::Sss => "SSS",
+            Self::SsPlus => "SS+",
+            Self::Ss => "SS",
+            Self::SPlus => "S+",
+            Self::S => "S",
+            Self::Aaa => "AAA",
+            Self::Aa => "AA",
+            Self::A => "A",
+            Self::Bbb => "BBB",
+            Self::Bb => "BB",
+            Self::B => "B",
+            Self::C => "C",
+            Self::D => "D",
+        }
+    }
+
+    pub fn from_score_icon_key(key: &str) -> Option<Self> {
+        Some(match key {
+            "sssp" => Self::SssPlus,
+            "sss" => Self::Sss,
+            "ssp" => Self::SsPlus,
+            "ss" => Self::Ss,
+            "sp" => Self::SPlus,
+            "s" => Self::S,
+            "aaa" => Self::Aaa,
+            "aa" => Self::Aa,
+            "a" => Self::A,
+            "bbb" => Self::Bbb,
+            "bb" => Self::Bb,
+            "b" => Self::B,
+            "c" => Self::C,
+            "d" => Self::D,
+            _ => return None,
+        })
+    }
+
+    pub fn from_playlog_stem(stem: &str) -> Option<Self> {
+        let s = stem.trim().to_ascii_lowercase();
+        Some(match s.as_str() {
+            "sssplus" => Self::SssPlus,
+            "sss" => Self::Sss,
+            "ssplus" => Self::SsPlus,
+            "ss" => Self::Ss,
+            "splus" => Self::SPlus,
+            "s" => Self::S,
+            "aaa" => Self::Aaa,
+            "aa" => Self::Aa,
+            "a" => Self::A,
+            "bbb" => Self::Bbb,
+            "bb" => Self::Bb,
+            "b" => Self::B,
+            "c" => Self::C,
+            "d" => Self::D,
+            _ => return None,
+        })
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ParsedScoreEntry {
     pub title: String,
@@ -57,7 +151,7 @@ pub struct ParsedScoreEntry {
     pub diff_category: DifficultyCategory,
     pub level: String,
     pub achievement_percent: Option<f32>,
-    pub rank: Option<String>,
+    pub rank: Option<ScoreRank>,
     pub fc: Option<String>,
     pub sync: Option<String>,
     pub dx_score: Option<i32>,
@@ -77,7 +171,7 @@ pub struct ParsedPlayRecord {
     pub level: Option<String>,
 
     pub achievement_percent: Option<f32>,
-    pub score_rank: Option<String>,
+    pub score_rank: Option<ScoreRank>,
     pub fc: Option<String>,
     pub sync: Option<String>,
     pub dx_score: Option<i32>,
@@ -97,7 +191,7 @@ pub struct ParsedSongDifficultyDetail {
     pub level: String,
     pub chart_type: ChartType,
     pub achievement_percent: Option<f32>,
-    pub rank: Option<String>,
+    pub rank: Option<ScoreRank>,
     pub fc: Option<String>,
     pub sync: Option<String>,
     pub dx_score: Option<i32>,

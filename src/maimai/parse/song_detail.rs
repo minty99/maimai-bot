@@ -1,7 +1,7 @@
 use scraper::{Html, Selector};
 
 use crate::maimai::models::{
-    ChartType, DifficultyCategory, ParsedSongDetail, ParsedSongDifficultyDetail,
+    ChartType, DifficultyCategory, ParsedSongDetail, ParsedSongDifficultyDetail, ScoreRank,
 };
 
 pub fn parse_song_detail_html(html: &str) -> eyre::Result<ParsedSongDetail> {
@@ -62,7 +62,7 @@ pub fn parse_song_detail_html(html: &str) -> eyre::Result<ParsedSongDetail> {
             }
         }
 
-        let mut rank: Option<String> = None;
+        let mut rank: Option<ScoreRank> = None;
         let mut fc: Option<String> = None;
         let mut sync: Option<String> = None;
         let mut chart_type: Option<ChartType> = None;
@@ -148,20 +148,9 @@ fn parse_dx_score_pair(text: &str) -> Option<(i32, i32)> {
     ))
 }
 
-fn parse_rank_from_icon_src(src: &str) -> Option<String> {
+fn parse_rank_from_icon_src(src: &str) -> Option<ScoreRank> {
     let key = icon_key(src)?;
-    Some(
-        match key.as_str() {
-            "s" => "S",
-            "sp" => "S+",
-            "ss" => "SS",
-            "ssp" => "SS+",
-            "sss" => "SSS",
-            "sssp" => "SSS+",
-            _ => return None,
-        }
-        .to_string(),
-    )
+    ScoreRank::from_score_icon_key(&key)
 }
 
 fn parse_fc_from_icon_src(src: &str) -> Option<String> {
