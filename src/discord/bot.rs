@@ -11,7 +11,7 @@ use tracing::{debug, error, info};
 
 use crate::config::AppConfig;
 use crate::db;
-use crate::db::{SqlitePool, format_chart_type, format_diff_category, format_percent_f64};
+use crate::db::{SqlitePool, format_chart_type, format_percent_f64};
 use crate::http::MaimaiClient;
 use crate::maimai::models::{ParsedPlayRecord, ParsedPlayerData};
 use crate::maimai::parse::player_data::parse_player_data_html;
@@ -217,36 +217,81 @@ fn embed_player_update(
     credit_entries: &[ParsedPlayRecord],
 ) -> CreateEmbed {
     let mut e = embed_base("New plays detected")
-        .field("User", &player.user_name, true)
         .field("Rating", format_delta(player.rating, prev_rating), true)
         .field(
-            "Total play count",
+            "Play count",
             format_delta(player.total_play_count, prev_total),
             true,
         );
 
     if !credit_entries.is_empty() {
-        let mut desc = String::new();
-        for record in credit_entries {
-            let track = record
-                .track
-                .map(|t| format!("TRACK {t:02}"))
-                .unwrap_or("?".to_string());
-            let played_at = record.played_at.as_deref().unwrap_or("N/A");
-            let diff = format_diff_category(record.diff_category);
-            let level = record.level.as_deref().unwrap_or("N/A");
-            let achv = format_percent_f64(record.achievement_percent.map(|p| p as f64));
-            let rank = record.score_rank.map(|r| r.as_str()).unwrap_or("N/A");
-            desc.push_str(&format!(
-                "`{track}` **{}** [{}] {diff} {level}\n{achv} • {rank} • {played_at}\n\n",
-                record.title,
-                format_chart_type(record.chart_type),
-            ));
-        }
-        e = e.description(desc);
+        let records = credit_entries
+            .iter()
+            .map(|r| CreditRecordView {
+                track: r.track.map(i64::from),
+                played_at: r.played_at.clone(),
+                title: r.title.clone(),
+                chart_type: format_chart_type(r.chart_type).to_string(),
+                diff_category: r.diff_category.map(|d| d.as_str().to_string()),
+                level: r.level.clone(),
+                achievement_percent: r.achievement_percent.map(|p| p as f64),
+                rank: r.score_rank.map(|rk| rk.as_str().to_string()),
+            })
+            .collect::<Vec<_>>();
+
+        e = e.description(format_credit_description(&records));
     }
 
     e
+}
+
+#[derive(Debug, Clone)]
+struct CreditRecordView {
+    track: Option<i64>,
+    played_at: Option<String>,
+    title: String,
+    chart_type: String,
+    diff_category: Option<String>,
+    level: Option<String>,
+    achievement_percent: Option<f64>,
+    rank: Option<String>,
+}
+
+fn format_track_label(track: Option<i64>) -> String {
+    track
+        .map(|t| format!("TRACK {t:02}"))
+        .unwrap_or_else(|| "TRACK ??".to_string())
+}
+
+fn format_credit_description(records: &[CreditRecordView]) -> String {
+    let played_at = records
+        .iter()
+        .find(|r| r.track == Some(1))
+        .and_then(|r| r.played_at.as_deref())
+        .unwrap_or("N/A");
+
+    let mut desc = String::new();
+    desc.push_str(&format!("`{played_at}`\n\n"));
+
+    for r in records {
+        let track = format_track_label(r.track);
+        let achv = format_percent_f64(r.achievement_percent);
+        let rank = r
+            .rank
+            .as_deref()
+            .map(normalize_playlog_rank)
+            .unwrap_or("N/A");
+        let diff = r.diff_category.as_deref().unwrap_or("Unknown");
+        let level = r.level.as_deref().unwrap_or("N/A");
+
+        desc.push_str(&format!("**{track}**\n"));
+        desc.push_str(&format!(
+            "**{}** [{}] {diff} {level} — {achv} • {rank}\n\n",
+            r.title, r.chart_type
+        ));
+    }
+
+    desc
 }
 
 async fn initial_scores_sync(bot_data: &BotData) -> Result<()> {
@@ -781,29 +826,24 @@ async fn mai_recent(ctx: Context<'_>) -> Result<(), Error> {
     let mut recent = rows.into_iter().take(take).collect::<Vec<_>>();
     recent.reverse();
 
-    let played_at = recent
-        .iter()
-        .find(|row| row.2 == Some(1))
-        .and_then(|row| row.3.as_deref())
-        .unwrap_or("N/A");
-
-    let mut desc = String::new();
-    desc.push_str(&format!("`{played_at}`\n\n"));
-    for (title, chart_type, track, _played_at, diff_category, level, achievement, rank) in recent {
-        let track = track
-            .map(|t| format!("TRACK {t:02}"))
-            .unwrap_or_else(|| "TRACK ??".to_string());
-        let achv = format_percent_f64(achievement);
-        let rank = rank.as_deref().map(normalize_playlog_rank).unwrap_or("N/A");
-        let diff = diff_category.as_deref().unwrap_or("Unknown");
-        let level = level.as_deref().unwrap_or("N/A");
-
-        desc.push_str(&format!("**{track}**\n"));
-        desc.push_str(&format!(
-            "**{}** [{}] {diff} {level} — {achv} • {rank}\n\n",
-            title, chart_type
-        ));
-    }
+    let records = recent
+        .into_iter()
+        .map(
+            |(title, chart_type, track, played_at, diff_category, level, achievement, rank)| {
+                CreditRecordView {
+                    track,
+                    played_at,
+                    title,
+                    chart_type,
+                    diff_category,
+                    level,
+                    achievement_percent: achievement,
+                    rank,
+                }
+            },
+        )
+        .collect::<Vec<_>>();
+    let desc = format_credit_description(&records);
 
     ctx.send(
         CreateReply::default().embed(
