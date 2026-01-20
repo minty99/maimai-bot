@@ -66,6 +66,55 @@ pub async fn upsert_playlogs(
     Ok(())
 }
 
+pub async fn get_app_state(pool: &SqlitePool, key: &str) -> eyre::Result<Option<String>> {
+    sqlx::query_scalar::<_, Option<String>>("SELECT value FROM app_state WHERE key = ?")
+        .bind(key)
+        .fetch_one(pool)
+        .await
+        .wrap_err("get app_state value")
+}
+
+pub async fn set_app_state(
+    pool: &SqlitePool,
+    key: &str,
+    value: &str,
+    updated_at: i64,
+) -> eyre::Result<()> {
+    sqlx::query(
+        r#"
+INSERT INTO app_state (key, value, updated_at)
+VALUES (?1, ?2, ?3)
+ON CONFLICT(key) DO UPDATE SET
+  value = excluded.value,
+  updated_at = excluded.updated_at
+"#,
+    )
+    .bind(key)
+    .bind(value)
+    .bind(updated_at)
+    .execute(pool)
+    .await
+    .wrap_err("set app_state value")?;
+    Ok(())
+}
+
+pub async fn get_app_state_u32(pool: &SqlitePool, key: &str) -> eyre::Result<Option<u32>> {
+    let Some(value) = get_app_state(pool, key).await? else {
+        return Ok(None);
+    };
+    let parsed = value.parse::<u32>().wrap_err("parse app_state as u32")?;
+    Ok(Some(parsed))
+}
+
+pub async fn set_app_state_u32(
+    pool: &SqlitePool,
+    key: &str,
+    value: u32,
+    updated_at: i64,
+) -> eyre::Result<()> {
+    set_app_state(pool, key, &value.to_string(), updated_at).await
+}
+
 async fn upsert_song(
     tx: &mut sqlx::Transaction<'_, Sqlite>,
     song_key: &str,

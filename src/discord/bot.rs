@@ -19,6 +19,9 @@ use crate::maimai::parse::score_list::parse_scores_html;
 type Context<'a> = poise::Context<'a, BotData, Error>;
 type Error = eyre::Report;
 
+const STATE_KEY_CURRENT_VERSION_PLAY_COUNT: &str = "player.current_version_play_count";
+const STATE_KEY_TOTAL_PLAY_COUNT: &str = "player.total_play_count";
+
 #[derive(Debug, Clone)]
 pub struct BotData {
     pub db: SqlitePool,
@@ -108,9 +111,26 @@ pub async fn run_bot(config: AppConfig, db_path: std::path::PathBuf) -> Result<(
             Box::pin(async move {
                 info!("Bot started as {}", ctx.cache.current_user().name);
 
-                initial_scores_sync(&bot_data)
+                let player_data = fetch_player_data(&bot_data)
                     .await
-                    .wrap_err("startup scores sync")?;
+                    .wrap_err("fetch player data")?;
+
+                if should_sync_scores(&bot_data.db, &player_data)
+                    .await
+                    .wrap_err("check whether scores sync is needed")?
+                {
+                    initial_scores_sync(&bot_data)
+                        .await
+                        .wrap_err("startup scores sync")?;
+                    persist_play_counts(&bot_data.db, &player_data)
+                        .await
+                        .wrap_err("persist play counts")?;
+                } else {
+                    info!(
+                        "Skipping startup scores sync (play count unchanged: current_ver={})",
+                        player_data.current_version_play_count
+                    );
+                }
 
                 start_background_tasks(bot_data.clone(), ctx.cache.clone());
 
@@ -118,9 +138,6 @@ pub async fn run_bot(config: AppConfig, db_path: std::path::PathBuf) -> Result<(
                     .await
                     .wrap_err("register commands globally")?;
 
-                let player_data = fetch_player_data(&bot_data)
-                    .await
-                    .wrap_err("fetch player data")?;
                 send_startup_dm(&bot_data, &player_data)
                     .await
                     .wrap_err("send startup DM")?;
@@ -283,6 +300,38 @@ async fn fetch_player_data(bot_data: &BotData) -> Result<ParsedPlayerData> {
         .wrap_err("fetch playerData url")?;
     let html = String::from_utf8(bytes).wrap_err("playerData response is not utf-8")?;
     parse_player_data_html(&html).wrap_err("parse playerData html")
+}
+
+async fn should_sync_scores(pool: &SqlitePool, player_data: &ParsedPlayerData) -> Result<bool> {
+    let stored = db::get_app_state_u32(pool, STATE_KEY_CURRENT_VERSION_PLAY_COUNT)
+        .await
+        .wrap_err("read stored current version play count")?;
+
+    Ok(match stored {
+        Some(v) => v != player_data.current_version_play_count,
+        None => true,
+    })
+}
+
+async fn persist_play_counts(pool: &SqlitePool, player_data: &ParsedPlayerData) -> Result<()> {
+    let now = unix_timestamp();
+    db::set_app_state_u32(
+        pool,
+        STATE_KEY_CURRENT_VERSION_PLAY_COUNT,
+        player_data.current_version_play_count,
+        now,
+    )
+    .await
+    .wrap_err("store current version play count")?;
+    db::set_app_state_u32(
+        pool,
+        STATE_KEY_TOTAL_PLAY_COUNT,
+        player_data.total_play_count,
+        now,
+    )
+    .await
+    .wrap_err("store total play count")?;
+    Ok(())
 }
 
 async fn send_startup_dm(bot_data: &BotData, player_data: &ParsedPlayerData) -> Result<()> {
