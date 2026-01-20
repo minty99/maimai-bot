@@ -1,0 +1,538 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+	<!-- Google Tag Manager -->
+	<script>(function(w,d,s,l,i){w[l]=w[l]||[];w[l].push({'gtm.start':
+	new Date().getTime(),event:'gtm.js'});var f=d.getElementsByTagName(s)[0],
+	j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;j.src=
+	'https://www.googletagmanager.com/gtm.js?id='+i+dl;f.parentNode.insertBefore(j,f);
+	})(window,document,'script','dataLayer','GTM-5PWDSV');</script>
+	<!-- End Google Tag Manager -->
+	<!-- Google tag (gtag.js) -->
+	<script async src="https://www.googletagmanager.com/gtag/js?id=G-HMWCCH9Y0H"></script>
+	<script>
+		window.dataLayer = window.dataLayer || [];
+		function gtag(){dataLayer.push(arguments);}
+		gtag('js', new Date());
+
+		gtag('config', 'G-HMWCCH9Y0H');
+	</script>
+	<!-- End Google tag (gtag.js) -->
+	<meta charset="UTF-8" />
+	<meta name="viewport" content="width=device-width,initial-scale=1.0,user-scalable=yes" />
+	<script>
+		var baseW = 768;
+		var iOSW = 0;
+		var ua = navigator.userAgent.toLowerCase();
+		var isiOS = (ua.indexOf("iphone") > -1) || (ua.indexOf("ipod") > -1) || (ua.indexOf("ipad") > -1);
+		if(isiOS){
+			iOSW = document.documentElement.clientWidth;
+		}
+		window.addEventListener("resize", updateMetaViewport, false);
+		window.addEventListener("orientationchange", updateMetaViewport, false);
+		var ev = document.createEvent("UIEvent");
+		ev.initEvent("resize", true, true)
+		window.dispatchEvent(ev);
+		function updateMetaViewport(){
+			var viewportContent;
+			var w = window.outerWidth;
+			if(isiOS){
+				w = iOSW;
+			}
+			if(w < baseW){
+				viewportContent = "width=480,initial-scale=" + w/480 + ",user-scalable=yes,shrink-to-fit=no";
+			}else{
+				viewportContent = "width=device-width,initial-scale=1.0,user-scalable=yes,shrink-to-fit=no";
+			}
+			document.querySelector("meta[name='viewport']").setAttribute("content", viewportContent);
+		}
+	</script>
+	<meta name="format-detection" content="telephone=no">
+	<meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+	<meta http-equiv="X-UA-Compatible" content="IE=EmulateIE8; IE=EmulateIE9" />
+	<meta http-equiv="Pragma" CONTENT="no-cache">
+	<meta http-equiv="Cache-Control" CONTENT="no-cache">
+	<meta http-equiv="Expires" CONTENT="-1">
+	<meta name="robots" content="INDEX, FOLLOW" />
+	<meta name="author" content="(C) SEGA">
+	<meta name="copyright" content="&copy;SEGA">
+	<meta name="description" content="This is an official website of 'maimai DX', the latest game in maimai series which created by SEGA Interactive Co., Ltd.">
+	<meta name="keywords" content="maimaiDXNET,maimaiDX,maimai deluxe,sega" />
+	<meta name="theme-color" content="#51bcf3">
+	<meta name="mkd" content="REDACTED">
+
+	<title>maimai DX NET－Player's Data－</title>
+        <link rel="stylesheet" href="https://maimaidx-eng.com/maimai-mobile/css/common.css?ver=1.50?20250401" />
+	<link rel="apple-touch-icon-precomposed" href="https://maimaidx-eng.com/maimai-mobile/apple-touch-icon.png">
+	<link rel="icon" type="image/png" href="https://maimaidx-eng.com/maimai-mobile/apple-touch-icon.png">
+</head>
+<body oncontextmenu="return false;">
+	<!-- Google Tag Manager (noscript) -->
+	<noscript><iframe src="https://www.googletagmanager.com/ns.html?id=GTM-5PWDSV"
+	height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
+	<!-- End Google Tag Manager (noscript) -->
+	<div class="wrapper t_c">
+					<div class="spmenu_toggle"></div>
+			<nav class="spmenu_navigation" style="display:none">
+				<img src="https://maimaidx-eng.com/maimai-mobile/img/menu_title.png" class="w_320 m_t_20"/>
+				<div class="container p_10 f_0">
+					<div class="p_5">
+						<div class="d_ib col2"><a href="https://maimaidx-eng.com/maimai-mobile/home/"><img src="https://maimaidx-eng.com/maimai-mobile/img/menu_home.png" class="w_112"/></a></div>
+						<div class="d_ib col2"><a href="https://maimaidx-eng.com/maimai-mobile/playerData/"><img src="https://maimaidx-eng.com/maimai-mobile/img/menu_playerdata.png" class="w_112"/></a></div>
+					</div>
+					<div class="p_5">
+						<div class="d_ib col2"><a href="https://maimaidx-eng.com/maimai-mobile/friend/"><img src="https://maimaidx-eng.com/maimai-mobile/img/menu_friend.png" class="w_112"/></a></div>
+						<div class="d_ib col2"><a href="https://maimaidx-eng.com/maimai-mobile/shop/"><img src="https://maimaidx-eng.com/maimai-mobile/img/menu_shop.png" class="w_112"/></a></div>
+					</div>
+					<div class="p_5">
+						<div class="d_ib col2"><a href="https://maimaidx-eng.com/maimai-mobile/record/"><img src="https://maimaidx-eng.com/maimai-mobile/img/menu_record.png" class="w_112"/></a></div>
+						<div class="d_ib col2"><a href="https://maimaidx-eng.com/maimai-mobile/map/"><img src="https://maimaidx-eng.com/maimai-mobile/img/menu_map.png?ver=1.50" class="w_112"/></a></div>
+					</div>
+					<div class="p_5 p_b_10">
+						<div class="d_ib col2"><a href="https://maimaidx-eng.com/maimai-mobile/collection/"><img src="https://maimaidx-eng.com/maimai-mobile/img/menu_collection.png" class="w_112"/></a></div>
+						<div class="d_ib col2"><a href="https://maimaidx-eng.com/maimai-mobile/ranking/"><img src="https://maimaidx-eng.com/maimai-mobile/img/menu_ranking.png" class="w_112"/></a></div>
+					</div>
+				</div>
+			</nav>
+				<a href="https://maimaidx-eng.com/maimai-mobile/home/"><img src="https://maimaidx-eng.com/maimai-mobile/img/logo.png" class="logo p_5"/></a>
+					<a href="https://maimaidx-eng.com/maimai-mobile/home/userOption/" class="setting"><img src="https://maimaidx-eng.com/maimai-mobile/img/btn_setting.png" /></a>
+			</div>
+	<div class="wrapper main_wrapper t_c">
+		<header class="f_0">
+				<div class="f_0">
+	<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 480 10" preserveAspectRatio="none" style="height:10px">
+		<path d="M0,10 v-5 q5,5 10,0 t10,0 t10,0 t10,0 t10,0 t10,0 t10,0 t10,0 t10,0 t10,0 t10,0 t10,0 t10,0 t10,0 t10,0 t10,0 t10,0 t10,0 t10,0 t10,0 t10,0 t10,0 t10,0 t10,0 t10,0 t10,0 t10,0 t10,0 t10,0 t10,0 t10,0 t10,0 t10,0 t10,0 t10,0 t10,0 t10,0 t10,0 t10,0 t10,0 t10,0 t10,0 t10,0 t10,0 t10,0 t10,0 t10,0 t10,0 v5 Z" fill="#7ed3ff"></path>
+	</svg>
+	<div class="menu">
+		<a href="https://maimaidx-eng.com/maimai-mobile/home/" class="d_ib col4 p_4"><img src="https://maimaidx-eng.com/maimai-mobile/img/menu_home.png?ver=1.50" class="w_112"/></a>
+		<a href="https://maimaidx-eng.com/maimai-mobile/playerData/" class="d_ib col4 p_4"><img src="https://maimaidx-eng.com/maimai-mobile/img/menu_playerdata_on.png?ver=1.50" class="w_112"/></a>
+		<a href="https://maimaidx-eng.com/maimai-mobile/friend/" class="d_ib col4 p_4"><img src="https://maimaidx-eng.com/maimai-mobile/img/menu_friend.png?ver=1.50" class="w_112"/></a>
+		<a href="https://maimaidx-eng.com/maimai-mobile/shop/" class="d_ib col4 p_4"><img src="https://maimaidx-eng.com/maimai-mobile/img/menu_shop.png?ver=1.50" class="w_112"/></a>
+	</div>
+	<div class="menu">
+		<a href="https://maimaidx-eng.com/maimai-mobile/record/" class="d_ib col4 p_4"><img src="https://maimaidx-eng.com/maimai-mobile/img/menu_record.png?ver=1.50" class="w_112"/></a>
+		<a href="https://maimaidx-eng.com/maimai-mobile/map/" class="d_ib col4 p_4"><img src="https://maimaidx-eng.com/maimai-mobile/img/menu_map.png?ver=1.50" class="w_112"/></a>
+		<a href="https://maimaidx-eng.com/maimai-mobile/collection/" class="d_ib col4 p_4"><img src="https://maimaidx-eng.com/maimai-mobile/img/menu_collection.png?ver=1.50" class="w_112"/></a>
+		<a href="https://maimaidx-eng.com/maimai-mobile/ranking/" class="d_ib col4 p_4"><img src="https://maimaidx-eng.com/maimai-mobile/img/menu_ranking.png?ver=1.50" class="w_112"/></a>
+	</div>
+	<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 480 10" preserveAspectRatio="none" style="height:10px">
+		<path d="M0,0 v5 q5,5 10,0 t10,0 t10,0 t10,0 t10,0 t10,0 t10,0 t10,0 t10,0 t10,0 t10,0 t10,0 t10,0 t10,0 t10,0 t10,0 t10,0 t10,0 t10,0 t10,0 t10,0 t10,0 t10,0 t10,0 t10,0 t10,0 t10,0 t10,0 t10,0 t10,0 t10,0 t10,0 t10,0 t10,0 t10,0 t10,0 t10,0 t10,0 t10,0 t10,0 t10,0 t10,0 t10,0 t10,0 t10,0 t10,0 t10,0 t10,0 v-5 Z" fill="#7ed3ff"></path>
+	</svg>
+</div>
+		</header>
+
+			<div class="m_t_5 m_b_10 t_l f_0">
+	<a href="https://maimaidx-eng.com/maimai-mobile/playerData/" class="p_r d_ib">
+		<img src="https://maimaidx-eng.com/maimai-mobile/img/menu_sub_playerdata_playerdata.png?ver=1.50" class="w_96"/>
+		<img src="https://maimaidx-eng.com/maimai-mobile/img/icon_on.png" class="submenu_selected" />	</a>
+	<a href="https://maimaidx-eng.com/maimai-mobile/playerData/stampCard/" class="p_r d_ib">
+		<img src="https://maimaidx-eng.com/maimai-mobile/img/menu_sub_playerdata_stamp.png?ver=1.50" class="w_96"/>
+			</a>
+	<a href="https://maimaidx-eng.com/maimai-mobile/playerData/photo/" class="p_r d_ib">
+		<img src="https://maimaidx-eng.com/maimai-mobile/img/menu_sub_photo_album.png?ver=1.50" class="w_96"/>
+			</a>
+	<img src="https://maimaidx-eng.com/maimai-mobile/img/menu_sub_playerdata.png" class="w_96"/>
+	<img src="https://maimaidx-eng.com/maimai-mobile/img/menu_sub_playerdata.png" class="w_96"/>
+</div>
+
+	<img src="https://maimaidx-eng.com/maimai-mobile/img/title_playerdata.png" class="title m_10"/>
+<div class="see_through_block m_15 m_t_0 m_b_15 p_10 p_r t_l f_0">
+	<div class="basic_block p_10 f_0">
+				<img loading="lazy" src="https://maimaidx-eng.com/maimai-mobile/img/Icon/5e36d628037fba47.png" class="w_112 f_l"/>
+		<div class="p_l_10 f_l">
+			<div class="trophy_block trophy_Normal p_3 t_c f_0">
+				<div class="trophy_inner_block f_13">
+					<span>でびゅー</span>
+				</div>
+			</div>
+			<div class="m_b_5">
+				<div class="name_block f_l f_16">ＭＩＮＴＹ</div>
+				<div class="f_r t_r f_0">
+					<div class="p_r p_3">
+						<img src="https://maimaidx-eng.com/maimai-mobile/img/rating_base_silver.png?ver=1.50" class="h_30 f_r"/>
+						<div class="rating_block">13394</div>
+					</div>
+				</div>
+				<div class="clearfix"></div>
+			</div>
+			<img src="https://maimaidx-eng.com/maimai-mobile/img/line_01.png" class="user_data_block_line" />
+			<div class="clearfix"></div>
+			<img src="https://maimaidx-eng.com/maimai-mobile/img/course/course_rank_00T7GHJvGe.png" class="h_35 f_l"/>
+			<img src="https://maimaidx-eng.com/maimai-mobile/img/class/class_rank_s_10FODgtQo4.png" class="p_l_10 h_35 f_l">
+			<div class="p_l_10 f_l f_14"><img src="https://maimaidx-eng.com/maimai-mobile/img/icon_star.png" class="h_30 m_3 v_m"/>×221</div>
+		</div>
+		<div class="clearfix"></div>
+	</div>
+	<div class="clearfix"></div>
+	<div class="m_5 m_b_5 t_r f_12">play count of current version：602<br>maimaiDX total play count：602</div>
+
+	<div>
+		<form action="https://maimaidx-eng.com/maimai-mobile/playerData/" method="get" accept-charset="utf-8">
+			<div class="m_t_10 m_b_10 f_0">
+				<button type="submit" name="diff" value="99" class="p_r f_0">
+					<img src="https://maimaidx-eng.com/maimai-mobile/img/btn_music_all.png" class="w_71">
+					<img src="https://maimaidx-eng.com/maimai-mobile/img/icon_on.png" class="diffbtn_selected" />				</button>
+				<button type="submit" name="diff" value="0" class="p_r f_0">
+					<img src="https://maimaidx-eng.com/maimai-mobile/img/btn_music_basic.png" class="w_71">
+									</button>
+				<button type="submit" name="diff" value="1" class="p_r f_0">
+					<img src="https://maimaidx-eng.com/maimai-mobile/img/btn_music_advanced.png" class="w_71">
+									</button>
+				<button type="submit" name="diff" value="2" class="p_r f_0">
+					<img src="https://maimaidx-eng.com/maimai-mobile/img/btn_music_expert.png" class="w_71">
+									</button>
+				<button type="submit" name="diff" value="3" class="p_r f_0">
+					<img src="https://maimaidx-eng.com/maimai-mobile/img/btn_music_master.png" class="w_71">
+									</button>
+				<button type="submit" name="diff" value="4" class="p_r f_0">
+					<img src="https://maimaidx-eng.com/maimai-mobile/img/btn_music_remaster.png" class="w_71">
+									</button>
+			</div>
+		</form>
+	</div>
+
+	<div class="musiccount_block t_r f_l f_0">
+		<div class="musiccount_img_block p_5 p_l_0 f_l"><img src="https://maimaidx-eng.com/maimai-mobile/img/music_icon_sssp.png?ver=1.50" /></div>
+		<div class="musiccount_counter_block f_13">48/5,562</div>
+	</div>
+	<div class="musiccount_block t_r f_l f_0">
+		<div class="musiccount_img_block t_c f_l"><img src="https://maimaidx-eng.com/maimai-mobile/img/music_icon_app.png?ver=1.50" /></div>
+		<div class="musiccount_counter_block f_13">0/5,562</div>
+	</div>
+	<div class="clearfix"></div>
+	<div class="musiccount_block t_r f_l f_0">
+		<div class="musiccount_img_block p_5 p_l_0 f_l"><img src="https://maimaidx-eng.com/maimai-mobile/img/music_icon_sss.png?ver=1.50" /></div>
+		<div class="musiccount_counter_block f_13">137/5,562</div>
+	</div>
+	<div class="musiccount_block t_r f_l f_0">
+		<div class="musiccount_img_block t_c f_l"><img src="https://maimaidx-eng.com/maimai-mobile/img/music_icon_ap.png?ver=1.50" /></div>
+		<div class="musiccount_counter_block f_13">1/5,562</div>
+	</div>
+	<div class="clearfix"></div>
+	<div class="musiccount_block t_r f_l f_0">
+		<div class="musiccount_img_block p_5 p_l_0 f_l"><img src="https://maimaidx-eng.com/maimai-mobile/img/music_icon_ssp.png?ver=1.50" /></div>
+		<div class="musiccount_counter_block f_13">213/5,562</div>
+	</div>
+	<div class="musiccount_block t_r f_l f_0">
+		<div class="musiccount_img_block t_c f_l"><img src="https://maimaidx-eng.com/maimai-mobile/img/music_icon_fcp.png?ver=1.50" /></div>
+		<div class="musiccount_counter_block f_13">55/5,562</div>
+	</div>
+	<div class="clearfix"></div>
+	<div class="musiccount_block t_r f_l f_0">
+		<div class="musiccount_img_block p_5 p_l_0 f_l"><img src="https://maimaidx-eng.com/maimai-mobile/img/music_icon_ss.png?ver=1.50" /></div>
+		<div class="musiccount_counter_block f_13">298/5,562</div>
+	</div>
+	<div class="musiccount_block t_r f_l f_0">
+		<div class="musiccount_img_block t_c f_l"><img src="https://maimaidx-eng.com/maimai-mobile/img/music_icon_fc.png?ver=1.50" /></div>
+		<div class="musiccount_counter_block f_13">132/5,562</div>
+	</div>
+	<div class="clearfix"></div>
+	<div class="musiccount_block t_r f_l f_0">
+		<div class="musiccount_img_block p_5 p_l_0 f_l"><img src="https://maimaidx-eng.com/maimai-mobile/img/music_icon_sp.png?ver=1.50" /></div>
+		<div class="musiccount_counter_block f_13">447/5,562</div>
+	</div>
+	<div class="musiccount_block t_r f_l f_0">
+		<div class="musiccount_img_block t_c f_l"><img src="https://maimaidx-eng.com/maimai-mobile/img/music_icon_fdxp.png?ver=1.50" /></div>
+		<div class="musiccount_counter_block f_13">0/5,562</div>
+	</div>
+	<div class="clearfix"></div>
+	<div class="musiccount_block t_r f_l f_0">
+		<div class="musiccount_img_block p_5 p_l_0 f_l"><img src="https://maimaidx-eng.com/maimai-mobile/img/music_icon_s.png?ver=1.50" /></div>
+		<div class="musiccount_counter_block f_13">566/5,562</div>
+	</div>
+	<div class="musiccount_block t_r f_l f_0">
+		<div class="musiccount_img_block t_c f_l"><img src="https://maimaidx-eng.com/maimai-mobile/img/music_icon_fdx.png?ver=1.50" /></div>
+		<div class="musiccount_counter_block f_13">11/5,562</div>
+	</div>
+	<div class="clearfix"></div>
+	<div class="musiccount_block t_r f_l f_0">
+		<div class="musiccount_img_block p_5 f_l"><img src="https://maimaidx-eng.com/maimai-mobile/img/music_icon_clear.png" /></div>
+		<div class="musiccount_counter_block f_13">959/5,562</div>
+	</div>
+	<div class="musiccount_block t_r f_l f_0">
+		<div class="musiccount_img_block t_c f_l"><img src="https://maimaidx-eng.com/maimai-mobile/img/music_icon_fsp.png?ver=1.50" /></div>
+		<div class="musiccount_counter_block f_13">34/5,562</div>
+	</div>
+	<div class="clearfix"></div>
+	<div class="musiccount_block t_r f_l f_0">
+		<div class="musiccount_img_block t_c f_l"><img src="https://maimaidx-eng.com/maimai-mobile/img/music_icon_dxstar_5.png" /></div>
+		<div class="musiccount_counter_block f_13">0/5,562</div>
+	</div>
+	<div class="musiccount_block t_r f_l f_0">
+		<div class="musiccount_img_block t_c f_l"><img src="https://maimaidx-eng.com/maimai-mobile/img/music_icon_fs.png?ver=1.50" /></div>
+		<div class="musiccount_counter_block f_13">34/5,562</div>
+	</div>
+	<div class="clearfix"></div>
+	<div class="musiccount_block t_r f_l f_0">
+		<div class="musiccount_img_block t_c f_l"><img src="https://maimaidx-eng.com/maimai-mobile/img/music_icon_dxstar_4.png" /></div>
+		<div class="musiccount_counter_block f_13">0/5,562</div>
+	</div>
+	<div class="musiccount_block t_r f_l f_0">
+		<div class="musiccount_img_block t_c f_l"><img src="https://maimaidx-eng.com/maimai-mobile/img/music_icon_sync.png?ver=1.50" /></div>
+		<div class="musiccount_counter_block f_13">698/5,562</div>
+	</div>
+	<div class="clearfix"></div>
+	<div class="musiccount_block t_r f_l f_0">
+		<div class="musiccount_img_block t_c f_l"><img src="https://maimaidx-eng.com/maimai-mobile/img/music_icon_dxstar_3.png" /></div>
+		<div class="musiccount_counter_block f_13">0/5,562</div>
+	</div>
+	<div class="clearfix"></div>
+	<div class="musiccount_block t_r f_l f_0">
+		<div class="musiccount_img_block t_c f_l"><img src="https://maimaidx-eng.com/maimai-mobile/img/music_icon_dxstar_2.png" /></div>
+		<div class="musiccount_counter_block f_13">41/5,562</div>
+	</div>
+	<div class="clearfix"></div>
+	<div class="musiccount_block t_r f_l f_0">
+		<div class="musiccount_img_block t_c f_l"><img src="https://maimaidx-eng.com/maimai-mobile/img/music_icon_dxstar_1.png" /></div>
+		<div class="musiccount_counter_block f_13">283/5,562</div>
+	</div>
+	<div class="clearfix"></div>
+	<img src="https://maimaidx-eng.com/maimai-mobile/img/chara_03.png" class="playerdata_back"/>
+</div>
+<img src="https://maimaidx-eng.com/maimai-mobile/img/title_mission.png" class="title m_10"/>
+<div class="see_through_block m_15 m_t_0 m_b_10 f_11">
+	<div class="m_5 p_l_10 t_l f_l f_14">
+        <span class="blue">You own</span><br>
+	</div>
+	<div class="p_r p_3 p_t_5">
+		<img src="https://maimaidx-eng.com/maimai-mobile/img/mile_base_count.png" class="f_r"/>
+			<div class="mile_block p_t_7">12,390 </div>
+	</div>
+	<div class="m_5 p_l_10 t_l f_l f_14">
+        <span>※ If you have more than 99,999 maimile,</span><br>
+        <span>　 they will be discarded.</span>
+	</div>
+	<div class="clearfix"></div>
+</div>
+<div class="mission_block m_10 m_t_0 m_b_5 p_t_10 p_b_10 p_r">
+	<div class="mission_block_text_date p_a">
+		<span>Until Jan 25, 2026（Sun.）</span>
+		<span class="mission_block_text_clear p_a">CLEAR 0/6</span>
+	</div>
+	<div class="mission_block_inner t_c f_11">
+									<div class="mission_login_block">
+					<div class="mission_div">
+						<span class="mission_mile_text p_a">100</span>
+						<div class="mission_text t_l">
+							<div class="m_10">
+								<span>one day login</span>
+															</div>
+						</div>
+					</div>
+					<div class="mission_div">
+						<span class="mission_mile_text p_a">200</span>
+													<img src="https://maimaidx-eng.com/maimai-mobile/img/mission/mission_lock_02.png" class="mission_orverlay_img_2 p_a">
+											</div>
+				</div>
+							<div class="mission_music_block">
+					<div class="mission_div">
+						<span class="mission_mile_text p_a">100</span>
+						<div class="mission_text t_l">
+							<div class="m_10">
+								<span>Play the music of 【POPS＆ANIME】 category</span>
+															</div>
+						</div>
+					</div>
+					<div class="mission_div">
+						<span class="mission_mile_text p_a">200</span>
+													<img src="https://maimaidx-eng.com/maimai-mobile/img/mission/mission_lock_02.png" class="mission_orverlay_img_2 p_a">
+											</div>
+				</div>
+							<div class="mission_buddie_block">
+					<div class="mission_div">
+						<span class="mission_mile_text p_a">400</span>
+						<div class="mission_text t_l">
+							<div class="m_10">
+								<span>2P play</span>
+															</div>
+						</div>
+					</div>
+					<div class="mission_div">
+						<span class="mission_mile_text p_a">800</span>
+													<img src="https://maimaidx-eng.com/maimai-mobile/img/mission/mission_lock_02.png" class="mission_orverlay_img_2 p_a">
+											</div>
+				</div>
+							<div class="h_2"></div>
+	</div>
+</div>
+<img src="https://maimaidx-eng.com/maimai-mobile/img/title_class.png" class="title m_10"/>
+<div class="town_block m_15 m_t_0 p_5 f_0">
+	<div class="p_t_10 p_r_10">
+		<div class="d_ib t_c v_t w_180">
+			<img src="https://maimaidx-eng.com/maimai-mobile/img/class/icon_class_current.png" class="w_120 p_b_10 m_r_10"/>
+			<img src="https://maimaidx-eng.com/maimai-mobile/img/class/class_rank_l_10FODgtQo4.png" class="w_160 p_15 m_r_10"/>
+		</div>
+		<div class="d_ib t_c w_230 p_r">
+							<div class="class_point_box d_ib p_10 p_r w_230">
+										<img src="https://maimaidx-eng.com/maimai-mobile/img/class/icon_class_jewel_off.png" class="h_25"/><img src="https://maimaidx-eng.com/maimai-mobile/img/class/icon_class_jewel_off.png" class="h_25"/><img src="https://maimaidx-eng.com/maimai-mobile/img/class/icon_class_jewel_off.png" class="h_25"/>					<div class="p_t_10">
+						<img class="p_r w_180" src="https://maimaidx-eng.com/maimai-mobile/img/class/icon_class_geuge_base.png"/>
+						<img class="class_geuge_meter p_a w_180" src="https://maimaidx-eng.com/maimai-mobile/img/class/icon_class_geuge_meter.png" style="clip: rect(0, 72px, 62px, 0);"/>
+						<img class="class_geuge_frame p_a w_180" src="https://maimaidx-eng.com/maimai-mobile/img/class/icon_class_geuge_frame.png">
+					</div>
+				</div>
+				<img src="https://maimaidx-eng.com/maimai-mobile/img/class/icon_class_cp_count.png" class="p_r p_t_10 w_215"/>
+				<div class="class_point_txt p_a t_c red f_20 w_230"><span class="f_29 f_b">4</span><span class="f_20"> CP / 30 </span><span class="f_13">CP</span></div>
+					</div>
+	</div>
+	<img src="https://maimaidx-eng.com/maimai-mobile/img/class/note_rankupBoss.png" class="p_10 h_50"/>
+	</div>
+<img src="https://maimaidx-eng.com/maimai-mobile/img/title_ticket.png" class="title m_10"/>
+					<div class="p_r m_15 w_450 f_0">
+			<img src="https://maimaidx-eng.com/maimai-mobile/img/ticket/ticket_free.png" class="w_450">
+			<div class="ticket_title p_a p_5 t_c f_16 f_b blue">AREA BOOST ×1.5 TICKET</div>
+			<img src="https://maimaidx-eng.com/maimai-mobile/img/ticket/b6437a39d9c5491e.png" class="ticket_img p_a">
+			<div class="ticket_txt p_a p_5 t_c f_13">You own 1</div>
+		</div>
+	<img src="https://maimaidx-eng.com/maimai-mobile/img/title_partneritem.png" class="title m_10"/>
+					<div class="p_r m_15 m_b_5 w_450 f_0">
+			<img src="https://maimaidx-eng.com/maimai-mobile/img/intimate/intimateup_base.png" class="w_450">
+			<div class="intimateup_txt p_a p_5 t_c f_13">You own 9</div>
+		</div>
+		<div class="p_r w_450 t_r f_13">※ If you have more than 9,999, they will be discarded.</div>
+	
+		<footer class="f_0">
+			<div class="footer_marquee">
+			<div class="footer w_480">
+				<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 480 50" preserveAspectRatio="none" style="height:50px">
+					<path d="M0,0 v25 q5,5 10,0 t10,0 t10,0 t10,0 t10,0 t10,0 t10,0 t10,0 t10,0 t10,0 t10,0 t10,0 t10,0 t10,0 t10,0 t10,0 t10,0 t10,0 t10,0 t10,0 t10,0 t10,0 t10,0 t10,0 t10,0 t10,0 t10,0 t10,0 t10,0 t10,0 t10,0 t10,0 t10,0 t10,0 t10,0 t10,0 t10,0 t10,0 t10,0 t10,0 t10,0 t10,0 t10,0 t10,0 t10,0 t10,0 t10,0 t10,0 v-25 Z" fill="#7cbc29"></path>
+				</svg>
+				<div class="m_15 m_t_0 f_13">
+<!-- 2019/08/08 change -->
+																		<div class="m_5"><a href="https://maimaidx-eng.com/maimai-mobile/termsOfService/" target="_blank" class="white" rel="noopener">Terms of service</a></div>
+							<div class="m_5"><a href="https://maimaidx-eng.com/maimai-mobile/sitePolicy/" target="_blank" class="white" rel="noopener">Site Policy</a></div>
+																<div class="m_5"><a href="https://www.segafave.co.jp/en/privacy/" target="_blank" class="white" rel="noopener">Privacy Policy</a></div>
+				
+<!-- 2019/08/02 del -->
+				</div>
+				<img src="https://maimaidx-eng.com/maimai-mobile/img/line_02.png" class="w_430 m_b_10" />
+				<a href="https://maimai.sega.com" target="_blank" rel="noopener"><img src="https://maimaidx-eng.com/maimai-mobile/img/banner_maimai.png?ver=1.50" class="footer_banner w_450 m_b_10"/></a>
+				<a href="https://chunithm.sega.com/" target="_blank" rel="noopener"><img src="https://maimaidx-eng.com/maimai-mobile/img/banner_chuni.png?ver=1.50" class="footer_banner w_450"/></a>
+<!-- 2019/08/02 del -->
+				<a href="https://my-aime.net/" target="_blank" class="w_450 m_10 d_ib t_l footer_banner" rel="noopener">
+					<table>
+						<tr>
+							<td><img src="https://maimaidx-eng.com/maimai-mobile/img/banner_aime.png" ></td>
+							<td class="p_10 f_13">
+								Please register your Aime card <br/>
+								within Aime service website.
+							</td>
+						</tr>
+					</table>
+				</a>
+				<img src="https://maimaidx-eng.com/maimai-mobile/img/line_02.png" class="w_430 m_b_10" />
+				<a href="https://sega.jp" target="_blank" rel="noopener"><img src="https://maimaidx-eng.com/maimai-mobile/img/logo_sega.png" /></a>
+				<div class="f_15 p_5">© SEGA</div>
+							</div>
+		</footer>
+	</div>
+	<img id="page-top" src="https://maimaidx-eng.com/maimai-mobile/img/btn_page_top.png" class="pointer">
+	<img id="page-bottom" src="https://maimaidx-eng.com/maimai-mobile/img/btn_page_bottom.png" class="pointer">
+	<script src="https://maimaidx-eng.com/maimai-mobile/js/jquery-3.3.1.min.js"></script>
+	<script>
+		(function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+		(i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+		m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+		})(window,document,'script','https://www.google-analytics.com/analytics.js','ga');
+
+		ga('create', 'UA-136087881-2', 'auto');
+		ga('send', 'pageview');
+
+		var scrollPoint = $('.scroll_point').length;
+		$('#page-top').click(function () {
+			if (scrollPoint > 0) {
+				var fromPos = Math.floor($(window).scrollTop());
+				var toPos   = 0;
+				$(".scroll_point").each(function() {
+					var targetPos = Math.floor($(this).offset().top);
+					if (location.pathname.split('/').pop() == "updateMusic") {
+						targetPos = targetPos - 284;
+					}
+					if (fromPos > targetPos) {
+						toPos = targetPos;
+					} else {
+						return false;
+					}
+				});
+				$('body,html').animate({scrollTop: toPos}, 500);
+			} else {
+				$('body,html').animate({scrollTop: 0}, 500);
+			}
+			return false;
+		});
+		$('#page-bottom').click(function () {
+			if (scrollPoint > 0) {
+				var fromPos = Math.floor($(window).scrollTop()) + 3;
+				var toPos   = Math.floor($(document).height());
+				$(".scroll_point").each(function() {
+					var targetPos = Math.floor($(this).offset().top);
+					if (location.pathname.split('/').pop() == "updateMusic") {
+						targetPos = targetPos - 284;
+					}
+					if (fromPos < targetPos) {
+						toPos = targetPos;
+						return false;
+					}
+				});
+				$('body,html').animate({scrollTop: toPos}, 500);
+			} else {
+				$('body,html').animate({scrollTop: $(document).height()}, 500);
+			}
+			return false;
+		});
+		function fadeOutPageBtn() {
+			$('#page-top').fadeOut(1500).animate({duration: 'slow', easing: 'linear'});
+			$('#page-bottom').fadeOut(1500).animate({duration: 'slow', easing: 'linear'});
+		}
+					var spmenu_toggle = $('.spmenu_toggle');
+			var spmenu_navigation = $('.spmenu_navigation');
+			spmenu_toggle.click(function() {
+				$(this).toggleClass('active');
+				if ($(this).hasClass('active')) {
+					spmenu_navigation.addClass('active');
+				} else {
+					spmenu_navigation.removeClass('active');
+				}
+			});
+			spmenu_navigation.click(function() {
+				spmenu_toggle.removeClass('active');
+				$(this).removeClass('active');
+			});
+				var timeLimit = 3*1000;
+		var timerId = setTimeout(fadeOutPageBtn, timeLimit);
+		$(window).scroll(function() {
+			if (!spmenu_navigation.is(':visible')) spmenu_navigation.css('display', 'block');
+			if (!$('#page-top').is(':visible')) $('#page-top').fadeIn();
+			if (!$('#page-bottom').is(':visible')) $('#page-bottom').fadeIn();
+			clearTimeout(timerId);
+			timerId = setTimeout(fadeOutPageBtn, timeLimit);
+							var visible = spmenu_toggle.is(':visible');
+				if ($(this).scrollTop() > 250) {
+					if (!visible)
+						spmenu_toggle.fadeIn().animate({'right': '5px'}, {duration: 500, queue: false});
+				} else {
+					if (visible) {
+						spmenu_toggle.fadeOut().animate({'right': '-100%'}, {duration: 500, queue: false});
+						if (spmenu_toggle.hasClass('active')) {
+							spmenu_toggle.removeClass('active');
+							spmenu_navigation.removeClass('active');
+						}
+					}
+				}
+					});
+	</script>
+	<script src="https://maimaidx-eng.com/maimai-mobile/js/jquery.marquee.js"></script>
+<script>
+$(function() {
+	// 許容幅
+	var widthMax = 258;
+	$('.trophy_inner_block').each(function() {
+		var span = $(this).children('span');
+		var textWidth = span.innerWidth();
+		if (textWidth > widthMax) {
+			$(span).marquee();
+		}
+	});
+});
+</script>
+</body>
+</html>

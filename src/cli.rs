@@ -134,6 +134,16 @@ pub enum CrawlCommand {
         )]
         out: PathBuf,
     },
+    #[command(about = "Crawl playerData page and write parsed JSON")]
+    PlayerData {
+        #[arg(
+            long,
+            default_value = "data/out/player_data.json",
+            value_name = "FILE",
+            help = "Output JSON file path"
+        )]
+        out: PathBuf,
+    },
 }
 
 #[derive(Debug, Subcommand)]

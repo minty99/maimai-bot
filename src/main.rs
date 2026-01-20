@@ -7,6 +7,7 @@ use maimai_bot::cli::{
 use maimai_bot::config::AppConfig;
 use maimai_bot::db;
 use maimai_bot::http::MaimaiClient;
+use maimai_bot::maimai::parse::player_data::parse_player_data_html;
 use maimai_bot::maimai::parse::recent::parse_recent_html;
 use maimai_bot::maimai::parse::score_list::parse_scores_html;
 use maimai_bot::maimai::parse::song_detail::parse_song_detail_html;
@@ -123,6 +124,30 @@ async fn main() -> eyre::Result<()> {
                 .wrap_err("fetch song detail url")?;
             let html = String::from_utf8(bytes).wrap_err("song detail response is not utf-8")?;
             let parsed = parse_song_detail_html(&html).wrap_err("parse song detail html")?;
+
+            std::fs::create_dir_all(
+                out.parent()
+                    .ok_or_else(|| eyre::eyre!("invalid --out path: {out:?}"))?,
+            )
+            .wrap_err("create output directory")?;
+            let json = serde_json::to_string_pretty(&parsed).wrap_err("serialize json")?;
+            std::fs::write(&out, json).wrap_err("write json")?;
+            println!("saved={}", out.display());
+        }
+        Command::Crawl {
+            command: CrawlCommand::PlayerData { out },
+        } => {
+            client
+                .ensure_logged_in()
+                .await
+                .wrap_err("ensure logged in")?;
+            let url = player_data_url()?;
+            let bytes = client
+                .get_bytes(&url)
+                .await
+                .wrap_err("fetch playerData url")?;
+            let html = String::from_utf8(bytes).wrap_err("playerData response is not utf-8")?;
+            let parsed = parse_player_data_html(&html).wrap_err("parse playerData html")?;
 
             std::fs::create_dir_all(
                 out.parent()
@@ -253,4 +278,9 @@ fn song_detail_url(idx: &str) -> eyre::Result<Url> {
         .wrap_err("parse song detail base url")?;
     url.query_pairs_mut().append_pair("idx", idx);
     Ok(url)
+}
+
+fn player_data_url() -> eyre::Result<Url> {
+    Url::parse("https://maimaidx-eng.com/maimai-mobile/playerData/")
+        .wrap_err("parse playerData url")
 }

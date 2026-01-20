@@ -60,3 +60,11 @@ pub struct ParsedSongDifficultyDetail {
     pub dx_score: Option<i32>,
     pub dx_score_max: Option<i32>,
 }
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ParsedPlayerData {
+    pub user_name: String,
+    pub rating: u32,
+    pub current_version_play_count: u32,
+    pub total_play_count: u32,
+}
