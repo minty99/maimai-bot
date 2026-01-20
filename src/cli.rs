@@ -6,7 +6,6 @@ use reqwest::Url;
 #[derive(Debug, Parser)]
 #[command(name = "maimai-bot")]
 #[command(about = "maimai DX NET crawler (single user)")]
-#[command(arg_required_else_help = true)]
 pub struct RootArgs {
     #[arg(
         long,
@@ -33,7 +32,7 @@ pub struct RootArgs {
     pub db_path: PathBuf,
 
     #[command(subcommand)]
-    pub command: Command,
+    pub command: Option<Command>,
 }
 
 #[derive(Debug, Subcommand)]

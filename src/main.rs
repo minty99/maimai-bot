@@ -24,7 +24,11 @@ async fn main() -> eyre::Result<()> {
 
     let mut client = MaimaiClient::new(&config).wrap_err("initialize http client")?;
 
-    match args.command {
+    let command = args.command.unwrap_or(Command::Bot {
+        command: BotCommand::Run,
+    });
+
+    match command {
         Command::Auth {
             command: AuthCommand::Check,
         } => {
