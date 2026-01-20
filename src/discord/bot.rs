@@ -520,6 +520,7 @@ async fn mai_score(
             sc.rank
         FROM scores sc
         WHERE sc.title = ?
+          AND sc.achievement_x10000 IS NOT NULL
         ORDER BY
             CASE sc.chart_type
                 WHEN 'STD' THEN 0
