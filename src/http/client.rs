@@ -12,10 +12,11 @@ use crate::config::AppConfig;
 const MAIMAI_MOBILE_ROOT: &str = "https://maimaidx-eng.com/maimai-mobile/";
 const RECORD_URL: &str = "https://maimaidx-eng.com/maimai-mobile/record/";
 
+#[derive(Debug, Clone)]
 pub struct MaimaiClient {
     config: AppConfig,
     cookie_store: Arc<CookieStoreMutex>,
-    client: reqwest::Client,
+    client: Arc<reqwest::Client>,
 }
 
 impl MaimaiClient {
@@ -23,12 +24,14 @@ impl MaimaiClient {
         let cookie_store = load_cookie_store(&config.cookie_path).wrap_err("load cookie store")?;
         let cookie_store = Arc::new(CookieStoreMutex::new(cookie_store));
 
-        let client = reqwest::Client::builder()
-            .default_headers(default_headers()?)
-            .redirect(reqwest::redirect::Policy::limited(10))
-            .cookie_provider(cookie_store.clone())
-            .build()
-            .wrap_err("build reqwest client")?;
+        let client = Arc::new(
+            reqwest::Client::builder()
+                .default_headers(default_headers()?)
+                .redirect(reqwest::redirect::Policy::limited(10))
+                .cookie_provider(cookie_store.clone())
+                .build()
+                .wrap_err("build reqwest client")?,
+        );
 
         Ok(Self {
             config: config.clone(),
@@ -40,6 +43,7 @@ impl MaimaiClient {
     pub async fn check_logged_in(&mut self) -> eyre::Result<bool> {
         let resp = self
             .client
+            .as_ref()
             .get(RECORD_URL)
             .send()
             .await
@@ -63,6 +67,7 @@ impl MaimaiClient {
     pub async fn login(&mut self) -> eyre::Result<()> {
         let login_page = self
             .client
+            .as_ref()
             .get(MAIMAI_MOBILE_ROOT)
             .send()
             .await
@@ -89,6 +94,7 @@ impl MaimaiClient {
 
         let resp = self
             .client
+            .as_ref()
             .post(post_url)
             .header(reqwest::header::REFERER, login_page_url.as_str())
             .form(&[
@@ -116,7 +122,13 @@ impl MaimaiClient {
     }
 
     pub async fn get_bytes(&self, url: &Url) -> eyre::Result<Vec<u8>> {
-        let resp = self.client.get(url.clone()).send().await.wrap_err("GET")?;
+        let resp = self
+            .client
+            .as_ref()
+            .get(url.clone())
+            .send()
+            .await
+            .wrap_err("GET")?;
         let status = resp.status();
         let final_url = resp.url().clone();
         let bytes = resp.bytes().await.wrap_err("read response bytes")?;
