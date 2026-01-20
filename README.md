@@ -1,75 +1,66 @@
 # maimai-bot
 
-maimai-bot은 **maimai DX NET**(maimaidx-eng.com)에서 개인 플레이 기록을 주기적으로 수집하고, Discord에서 조회/알림을 받을 수 있게 해주는 단일 사용자용 Rust 애플리케이션입니다.
+`maimai-bot`은 **maimai DX NET (maimaidx-eng.com)** 에 로그인(SEGA ID)해서 기록을 크롤링하고, 로컬 SQLite에 저장한 뒤 Discord에서 조회/알림을 받는 **단일 사용자** Rust 앱입니다.
 
-Discord 봇은 로컬 SQLite DB에 데이터를 저장하며, 10분마다 최근 기록을 확인해 새로운 플레이 기록이 감지되면 지정된 사용자에게 DM으로 요약을 전송합니다.
+## 특징
 
-## Discord 봇 동작
+- 쿠키를 `data/` 아래에 저장/재사용하고, 만료 시 재로그인해서 갱신합니다.
+- DB는 `sqlx::migrate!()`로 런타임에 마이그레이션을 실행합니다.
+- 봇은 시작 시 `playerData`를 크롤링하고, 필요하면 scores(난이도 0..4) + recent를 DB에 초기 적재합니다.
+- 이후 10분마다 `playerData`를 다시 크롤링해서 **total play count 변화가 있을 때만** recent를 크롤링/DM 알림을 보냅니다.
 
-- **주기적 갱신**: 10분마다 최근 플레이 기록을 가져와 DB를 업데이트합니다.
-- **새 기록 감지**: `playlog_idx` 기준으로 DB에 없던 기록만 “새 기록”으로 판단합니다.
-- **DM 알림**: 새 기록이 있으면 `DISCORD_USER_ID`로 지정된 사용자에게만 DM을 보냅니다.
+## 요구사항
 
-## Discord에서 사용하는 방법
+- Rust (stable)
+- Discord Bot Token / 단일 수신자(User ID)
+- SEGA ID 계정 (maimaidx-eng.com)
 
-슬래시 명령어로 사용합니다: `/mai-score`, `/mai-recent`
+## 설정
 
-### 자동 알림 (DM)
+`.env` (커밋 금지):
 
-새 기록이 발견되면 DM으로 아래 형식의 메시지가 전송됩니다.
+- `SEGA_ID`
+- `SEGA_PASSWORD`
+- `DISCORD_BOT_TOKEN`
+- `DISCORD_USER_ID` (DM을 받을 Discord 유저 ID)
 
-```
-🎵 **New Records Detected!**
+기본 런타임 경로:
 
-**곡 제목** [STD|DX] 난이도 - 플레이 일시
-📊 달성률  🏆 등급  🎯 FC  👥 SYNC  💫 DX 점수/최대 점수
-```
+- DB: `data/maimai.sqlite3`
+- 쿠키: `data/cookies.json`
 
-### `/mai-score <query>`: 곡별 기록 조회
+## 실행
 
-곡 제목(부분 일치) 또는 `song_key`로 점수 기록을 조회합니다.
+Discord 봇 실행:
 
-예시:
+- `cargo run -- bot run`
 
-```
-/mai-score GALAXY
-```
+쿠키 로그인/체크:
 
-출력은 대략 아래처럼 나옵니다(표시 형식은 서버/클라이언트에 따라 달라질 수 있음).
+- `cargo run -- auth login`
+- `cargo run -- auth check`
 
-```
-📊 Records for 'GALAXY'
+HTML/raw fetch (로그인 필요):
 
-**GALAXY** [STD] BASIC: 100.50% - SSS+
-**GALAXY** [DX] MASTER: 99.80% - SSS
-```
+- `cargo run -- fetch url --url https://maimaidx-eng.com/maimai-mobile/playerData/ --out data/out/player_data.html`
 
-### `/mai-recent`: 최근 크레딧 기록 조회
+크롤링/파싱(JSON)만 수행 (DB 미사용):
 
-DB에 저장된 최근 플레이 로그를 조회합니다.
-- `limit` 최대값: 10
+- `cargo run -- crawl player-data --out data/out/player_data.json`
+- `cargo run -- crawl recent --out data/out/recent.json`
+- `cargo run -- crawl scores --out data/out/scores.json`
 
-예시:
+## Discord 명령어
 
-```
-/mai-recent
-```
+- `/mai-score <title>`
+  - 1곡만 매칭해서 보여줍니다.
+  - exact match가 없으면 가장 가까운 제목 5개를 버튼으로 제시하고, 선택하면 해당 안내 메시지를 삭제한 뒤 선택한 제목으로 다시 조회합니다.
+  - 기록이 없는(미플레이) 항목은 출력하지 않습니다.
+- `/mai-recent`
+  - recent 페이지 기준 “가장 최근 1 credit”만 보여줍니다.
+  - 맨 앞의 `TRACK 01`을 기준으로 그 credit의 플레이들을 `TRACK 01 -> ...` 순서로 출력합니다.
 
-```
-`/mai-recent`는 가장 최근 1 크레딧(최근 TRACK 01부터)의 플레이만 보여줘요.
-```
+## 데이터 모델/저장 방식 (요약)
 
-출력 예시:
-
-```
-🕐 Recent 1 Credit (4 plays)
-
-**곡 제목** [STD] - Track 1 @ 2026/01/20 22:10
-📊 99.50% - SSS
-```
-
-## Discord 설정/주의사항
-
-- 봇을 서버에 초대하고, 메시지 읽기/전송 권한이 필요합니다.
-- DM 알림을 받으려면 봇이 사용자에게 DM을 보낼 수 있어야 합니다(서버 설정/사용자 설정에 따라 DM이 차단될 수 있음).
-- 이 프로젝트는 **단일 사용자** 전용입니다. DM 알림은 `DISCORD_USER_ID`로 지정된 사용자에게만 전송됩니다.
+- `scores` / `playlogs`에 `achievement_x10000`으로 저장합니다 (`percent * 10000`, 반올림).
+- 난이도/차트/랭크/FC/SYNC는 문자열 아이콘을 enum으로 파싱하지만, DB에는 표시용 문자열(TEXT)로 저장합니다.
