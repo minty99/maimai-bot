@@ -6,6 +6,7 @@ use eyre::WrapErr;
 use reqwest::Url;
 use reqwest::header::{HeaderMap, HeaderValue};
 use reqwest_cookie_store::{CookieStore, CookieStoreMutex};
+use time::OffsetDateTime;
 
 use crate::config::AppConfig;
 
@@ -41,6 +42,7 @@ impl MaimaiClient {
     }
 
     pub async fn check_logged_in(&mut self) -> eyre::Result<bool> {
+        ensure_not_maintenance_now()?;
         let resp = self
             .client
             .as_ref()
@@ -54,6 +56,7 @@ impl MaimaiClient {
     }
 
     pub async fn ensure_logged_in(&mut self) -> eyre::Result<()> {
+        ensure_not_maintenance_now()?;
         if self.check_logged_in().await? {
             return Ok(());
         }
@@ -65,6 +68,7 @@ impl MaimaiClient {
     }
 
     pub async fn login(&mut self) -> eyre::Result<()> {
+        ensure_not_maintenance_now()?;
         let login_page = self
             .client
             .as_ref()
@@ -122,6 +126,7 @@ impl MaimaiClient {
     }
 
     pub async fn get_bytes(&self, url: &Url) -> eyre::Result<Vec<u8>> {
+        ensure_not_maintenance_now()?;
         let resp = self
             .client
             .as_ref()
@@ -142,6 +147,24 @@ impl MaimaiClient {
         }
         Ok(bytes.to_vec())
     }
+}
+
+pub fn is_maintenance_window_now() -> bool {
+    let now = OffsetDateTime::now_local().unwrap_or_else(|_| OffsetDateTime::now_utc());
+    is_maintenance_window_hour(now.hour())
+}
+
+fn is_maintenance_window_hour(hour: u8) -> bool {
+    (4..7).contains(&hour)
+}
+
+fn ensure_not_maintenance_now() -> eyre::Result<()> {
+    if is_maintenance_window_now() {
+        return Err(eyre::eyre!(
+            "maimai DX NET maintenance window (04:00-07:00 local time); skipping request"
+        ));
+    }
+    Ok(())
 }
 
 fn default_headers() -> eyre::Result<HeaderMap> {

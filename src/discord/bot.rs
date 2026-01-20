@@ -13,6 +13,7 @@ use crate::config::AppConfig;
 use crate::db;
 use crate::db::{SqlitePool, format_chart_type, format_percent_f64};
 use crate::http::MaimaiClient;
+use crate::http::is_maintenance_window_now;
 use crate::maimai::models::{ParsedPlayRecord, ParsedPlayerData};
 use crate::maimai::parse::player_data::parse_player_data_html;
 use crate::maimai::parse::recent::parse_recent_html;
@@ -116,6 +117,18 @@ pub async fn run_bot(config: AppConfig, db_path: std::path::PathBuf) -> Result<(
         .setup(move |ctx, _ready, framework| {
             Box::pin(async move {
                 info!("Bot started as {}", ctx.cache.current_user().name);
+
+                if is_maintenance_window_now() {
+                    info!(
+                        "Skipping startup crawl due to maintenance window (04:00-07:00 local time)"
+                    );
+                    start_background_tasks(bot_data.clone(), ctx.cache.clone());
+
+                    poise::builtins::register_globally(ctx, &framework.options().commands)
+                        .await
+                        .wrap_err("register commands globally")?;
+                    return Ok(bot_data);
+                }
 
                 let player_data = fetch_player_data(&bot_data)
                     .await
@@ -369,6 +382,11 @@ fn start_background_tasks(bot_data: BotData, _cache: Arc<serenity::Cache>) {
 }
 
 async fn periodic_player_poll(bot_data: &BotData) -> Result<()> {
+    if is_maintenance_window_now() {
+        info!("Skipping periodic poll due to maintenance window (04:00-07:00 local time)");
+        return Ok(());
+    }
+
     let mut client = MaimaiClient::new(&bot_data.config).wrap_err("create HTTP client")?;
     client
         .ensure_logged_in()
