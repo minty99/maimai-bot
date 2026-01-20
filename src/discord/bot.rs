@@ -13,7 +13,7 @@ use crate::config::AppConfig;
 use crate::db;
 use crate::db::{SqlitePool, format_chart_type, format_diff_category, format_percent_f64};
 use crate::http::MaimaiClient;
-use crate::maimai::models::{DifficultyCategory, ParsedPlayRecord, ParsedPlayerData};
+use crate::maimai::models::{ChartType, DifficultyCategory, ParsedPlayRecord, ParsedPlayerData};
 use crate::maimai::parse::player_data::parse_player_data_html;
 use crate::maimai::parse::recent::parse_recent_html;
 use crate::maimai::parse::score_list::parse_scores_html;
@@ -569,6 +569,16 @@ async fn mai_score(
     };
 
     entries.sort_by(|a, b| {
+        let a_chart =
+            a.0.parse::<ChartType>()
+                .ok()
+                .map(|t| t.as_u8())
+                .unwrap_or(255);
+        let b_chart =
+            b.0.parse::<ChartType>()
+                .ok()
+                .map(|t| t.as_u8())
+                .unwrap_or(255);
         let a_diff =
             a.1.parse::<DifficultyCategory>()
                 .ok()
@@ -580,7 +590,10 @@ async fn mai_score(
                 .map(|d| d.as_u8())
                 .unwrap_or(255);
 
-        a_diff.cmp(&b_diff).then(a.0.cmp(&b.0)).then(a.2.cmp(&b.2))
+        a_chart
+            .cmp(&b_chart)
+            .then(a_diff.cmp(&b_diff))
+            .then(a.2.cmp(&b.2))
     });
 
     desc.push_str(&format!("**{}**\n", title));

@@ -1,11 +1,23 @@
 use serde::{Deserialize, Serialize};
 use strum::{Display, EnumString};
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "UPPERCASE")]
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, EnumString, Display,
+)]
+#[repr(u8)]
 pub enum ChartType {
-    Std,
-    Dx,
+    #[serde(rename = "STD")]
+    #[strum(serialize = "STD")]
+    Std = 0,
+    #[serde(rename = "DX")]
+    #[strum(serialize = "DX")]
+    Dx = 1,
+}
+
+impl ChartType {
+    pub fn as_u8(self) -> u8 {
+        self as u8
+    }
 }
 
 #[derive(
