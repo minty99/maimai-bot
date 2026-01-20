@@ -10,9 +10,7 @@ use tracing::{debug, error, info};
 
 use crate::config::AppConfig;
 use crate::db;
-use crate::db::{
-    SqlitePool, format_chart_type, format_diff_category, format_percent_f64, format_track,
-};
+use crate::db::{SqlitePool, format_chart_type, format_diff_category, format_percent_f64};
 use crate::http::MaimaiClient;
 use crate::maimai::models::{ParsedPlayRecord, ParsedPlayerData};
 use crate::maimai::parse::player_data::parse_player_data_html;
@@ -592,6 +590,8 @@ async fn mai_recent(ctx: Context<'_>) -> Result<(), Error> {
             String,
             Option<i64>,
             Option<String>,
+            Option<String>,
+            Option<String>,
             Option<f64>,
             Option<String>,
         ),
@@ -602,6 +602,8 @@ async fn mai_recent(ctx: Context<'_>) -> Result<(), Error> {
             pl.chart_type,
             pl.track,
             pl.played_at,
+            pl.diff_category,
+            pl.level,
             pl.achievement_x10000 / 10000.0 as achievement_percent,
             pl.score_rank
         FROM playlogs pl
@@ -623,21 +625,36 @@ async fn mai_recent(ctx: Context<'_>) -> Result<(), Error> {
     let take = latest_credit_len(&rows.iter().map(|row| row.2).collect::<Vec<_>>());
     let mut recent = rows.into_iter().take(take).collect::<Vec<_>>();
     recent.reverse();
+
+    let played_at = recent
+        .iter()
+        .find(|row| row.2 == Some(1))
+        .and_then(|row| row.3.as_deref())
+        .unwrap_or("N/A");
+
     let mut desc = String::new();
-    for (title, chart_type, track, played_at, achievement, rank) in recent {
-        let played_at = played_at.unwrap_or_else(|| "N/A".to_string());
+    desc.push_str(&format!("`{played_at}`\n\n"));
+    for (title, chart_type, track, _played_at, diff_category, level, achievement, rank) in recent {
+        let track = track
+            .map(|t| format!("TRACK {t:02}"))
+            .unwrap_or_else(|| "TRACK ??".to_string());
         let achv = format_percent_f64(achievement);
         let rank = rank.as_deref().map(normalize_playlog_rank).unwrap_or("N/A");
+        let diff = diff_category.as_deref().unwrap_or("Unknown");
+        let level = level.as_deref().unwrap_or("N/A");
+
+        desc.push_str(&format!("**{track}**\n"));
         desc.push_str(&format!(
-            "`{}` **{}** [{}]\n{achv} • {rank} • {played_at}\n\n",
-            format_track(track),
-            title,
-            chart_type
+            "**{}** [{}] {diff} {level} — {achv} • {rank}\n\n",
+            title, chart_type
         ));
     }
 
-    ctx.send(CreateReply::default().embed(embed_base("Latest Credit").description(desc)))
-        .await?;
+    ctx.send(
+        CreateReply::default()
+            .embed(embed_base(&format!("{}'s recent credit", ctx.author().name)).description(desc)),
+    )
+    .await?;
 
     Ok(())
 }
