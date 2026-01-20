@@ -2,6 +2,7 @@ use eyre::{Result, WrapErr};
 use poise::serenity_prelude as serenity;
 use poise::{CreateReply, FrameworkOptions};
 use reqwest::Url;
+use serenity::builder::{CreateEmbed, CreateMessage};
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::time::interval;
@@ -23,6 +24,8 @@ type Error = eyre::Report;
 
 const STATE_KEY_TOTAL_PLAY_COUNT: &str = "player.total_play_count";
 const STATE_KEY_RATING: &str = "player.rating";
+
+const EMBED_COLOR: u32 = 0x51BCF3;
 
 #[derive(Debug, Clone)]
 pub struct BotData {
@@ -163,6 +166,81 @@ pub async fn run_bot(config: AppConfig, db_path: std::path::PathBuf) -> Result<(
     client.start().await.wrap_err("client error")?;
 
     Ok(())
+}
+
+fn embed_base(title: &str) -> CreateEmbed {
+    let mut e = CreateEmbed::new();
+    e = e.title(title).color(EMBED_COLOR);
+    e
+}
+
+fn format_delta(current: u32, previous: Option<u32>) -> String {
+    let Some(previous) = previous else {
+        return format!("{current}");
+    };
+    let delta = current as i64 - previous as i64;
+    if delta > 0 {
+        format!("{current} (+{delta})")
+    } else if delta < 0 {
+        format!("{current} ({delta})")
+    } else {
+        format!("{current} (+0)")
+    }
+}
+
+fn embed_startup(player: &ParsedPlayerData) -> CreateEmbed {
+    embed_base("maimai-bot started")
+        .field("User", &player.user_name, true)
+        .field("Rating", player.rating.to_string(), true)
+        .field(
+            "Play count (current ver)",
+            player.current_version_play_count.to_string(),
+            true,
+        )
+        .field(
+            "Play count (total)",
+            player.total_play_count.to_string(),
+            true,
+        )
+}
+
+fn embed_player_update(
+    player: &ParsedPlayerData,
+    prev_total: Option<u32>,
+    prev_rating: Option<u32>,
+    credit_entries: &[ParsedPlayRecord],
+) -> CreateEmbed {
+    let mut e = embed_base("New plays detected")
+        .field("User", &player.user_name, true)
+        .field("Rating", format_delta(player.rating, prev_rating), true)
+        .field(
+            "Total play count",
+            format_delta(player.total_play_count, prev_total),
+            true,
+        );
+
+    if !credit_entries.is_empty() {
+        let mut desc = String::new();
+        for record in credit_entries {
+            let track = record
+                .track
+                .map(|t| format!("T{t:02}"))
+                .unwrap_or("?".to_string());
+            let played_at = record.played_at.as_deref().unwrap_or("N/A");
+            let diff = format_diff_category(record.diff_category);
+            let level = record.level.as_deref().unwrap_or("N/A");
+            let achv = format_percent_f64(record.achievement_percent.map(|p| p as f64));
+            let rank = record.score_rank.as_deref().unwrap_or("N/A");
+            desc.push_str(&format!(
+                "`{track}` **{}** [{}] {diff} {level}\n{achv} • {rank} • {played_at}\n\n",
+                record.title,
+                format_chart_type(record.chart_type),
+            ));
+        }
+        e = e.description(desc);
+    }
+
+    e
 }
 
 async fn initial_scores_sync(bot_data: &BotData) -> Result<()> {
@@ -385,18 +463,10 @@ async fn send_startup_dm(bot_data: &BotData, player_data: &ParsedPlayerData) -> 
         .await
         .wrap_err("create DM channel")?;
 
-    let message = format!(
-        "✅ maimai-bot started\n\
-User: {}\n\
-Rating: {}\n\
-Play count (current ver): {}\n\
-Play count (total): {}",
-        player_data.user_name,
-        player_data.rating,
-        player_data.current_version_play_count,
-        player_data.total_play_count
-    );
-    dm_channel.say(http, message).await.wrap_err("send DM")?;
+    dm_channel
+        .send_message(http, CreateMessage::new().embed(embed_startup(player_data)))
+        .await
+        .wrap_err("send DM")?;
     Ok(())
 }
 
@@ -437,26 +507,32 @@ async fn mai_score(
     .map_err(|e| eyre::eyre!("query failed: {}", e))?;
 
     if rows.is_empty() {
-        ctx.say(format!("No records found for '{}'", search))
-            .await?;
+        ctx.send(
+            CreateReply::default()
+                .embed(embed_base("No records found").description(format!("Query: `{search}`"))),
+        )
+        .await?;
         return Ok(());
     }
 
-    let mut lines = vec![format!("📊 Records for '{}'", search), String::new()];
-
+    let mut desc = String::new();
     for (title, chart_type, diff_category, level, achievement, rank) in rows {
-        lines.push(format!(
-            "**{} [{}] {} {}**: {} - {}",
-            title,
-            chart_type,
-            diff_category,
-            level,
-            format_percent_f64(achievement),
-            rank.unwrap_or_else(|| "N/A".to_string())
+        let achv = format_percent_f64(achievement);
+        let rank = rank.unwrap_or_else(|| "N/A".to_string());
+        desc.push_str(&format!(
+            "**{}** [{}] {diff_category} {level}\n{achv} • {rank}\n\n",
+            title, chart_type
         ));
     }
 
-    ctx.say(lines.join("\n")).await?;
+    ctx.send(
+        CreateReply::default().embed(embed_base("Scores").description(desc).field(
+            "Query",
+            format!("`{search}`"),
+            false,
+        )),
+    )
+    .await?;
 
     Ok(())
 }
@@ -503,33 +579,33 @@ async fn mai_recent(ctx: Context<'_>) -> Result<(), Error> {
     .map_err(|e| eyre::eyre!("query failed: {}", e))?;
 
     if rows.is_empty() {
-        ctx.say("No recent records found".to_string()).await?;
+        ctx.send(CreateReply::default().embed(embed_base("No recent records found")))
+            .await?;
         return Ok(());
     }
 
     let take = latest_credit_count(&rows.iter().map(|row| row.2).collect::<Vec<_>>());
-    let mut lines = vec![
-        format!("🕐 Recent 1 Credit ({} plays)", take),
-        String::new(),
-    ];
-
+    let mut desc = String::new();
     for (title, chart_type, track, played_at, achievement, rank) in rows.into_iter().take(take) {
-        lines.push(format!(
-            "**{}** [{}] - {} @ {}",
-            title,
-            chart_type,
+        let played_at = played_at.unwrap_or_else(|| "N/A".to_string());
+        let achv = format_percent_f64(achievement);
+        let rank = rank.unwrap_or_else(|| "N/A".to_string());
+        desc.push_str(&format!(
+            "`{}` **{}** [{}]\n{achv} • {rank} • {played_at}\n\n",
             format_track(track),
-            played_at.unwrap_or_else(|| "N/A".to_string())
+            title,
+            chart_type
         ));
-        lines.push(format!(
-            "📊 {} - {}",
-            format_percent_f64(achievement),
-            rank.unwrap_or_else(|| "N/A".to_string())
-        ));
-        lines.push(String::new());
     }
 
-    ctx.say(lines.join("\n")).await?;
+    ctx.send(
+        CreateReply::default().embed(embed_base("Recent 1 Credit").description(desc).field(
+            "Plays",
+            take.to_string(),
+            true,
+        )),
+    )
+    .await?;
 
     Ok(())
 }
@@ -560,39 +636,16 @@ async fn send_player_update_dm(
         .await
         .wrap_err("create DM channel")?;
 
-    let total_delta = prev_total.map(|v| current.total_play_count as i64 - v as i64);
-    let rating_delta = prev_rating.map(|v| current.rating as i64 - v as i64);
-
-    let mut lines = vec![
-        "🆕 New plays detected".to_string(),
-        format!("User: {}", current.user_name),
-        match rating_delta {
-            Some(d) if d > 0 => format!("Rating: {} (+{})", current.rating, d),
-            Some(d) if d < 0 => format!("Rating: {} ({})", current.rating, d),
-            Some(_) => format!("Rating: {} (no change)", current.rating),
-            None => format!("Rating: {}", current.rating),
-        },
-        match total_delta {
-            Some(d) if d > 0 => {
-                format!("Total play count: {} (+{})", current.total_play_count, d)
-            }
-            Some(d) if d < 0 => format!("Total play count: {} ({})", current.total_play_count, d),
-            Some(_) => format!("Total play count: {} (no change)", current.total_play_count),
-            None => format!("Total play count: {}", current.total_play_count),
-        },
-        String::new(),
-        "🎮 Recent (1 credit)".to_string(),
-        String::new(),
-    ];
-
-    for record in credit_entries {
-        lines.push(format_playlog_record(record));
-        lines.push(format_playlog_stats(record));
-        lines.push(String::new());
-    }
-
     dm_channel
-        .say(http, lines.join("\n"))
+        .send_message(
+            http,
+            CreateMessage::new().embed(embed_player_update(
+                current,
+                prev_total,
+                prev_rating,
+                credit_entries,
+            )),
+        )
         .await
         .wrap_err("send DM")?;
     Ok(())
@@ -614,30 +667,6 @@ fn scores_url(diff: u8) -> Result<Url> {
         "https://maimaidx-eng.com/maimai-mobile/record/musicGenre/search/?genre=99&diff={diff}"
     ))
     .wrap_err("parse scores url")
-}
-
-fn format_playlog_record(record: &ParsedPlayRecord) -> String {
-    format!(
-        "**{}** [{}] {} - {}",
-        record.title,
-        format_chart_type(record.chart_type),
-        format_diff_category(record.diff_category),
-        record.played_at.as_deref().unwrap_or("N/A")
-    )
-}
-
-fn format_playlog_stats(record: &ParsedPlayRecord) -> String {
-    format!(
-        "📊 {}  🏆 {}  🎯 {}  👥 {}  💫 {}",
-        format_percent_f64(record.achievement_percent.map(|p| p as f64)),
-        record.score_rank.as_deref().unwrap_or("N/A"),
-        record.fc.as_deref().unwrap_or("N/A"),
-        record.sync.as_deref().unwrap_or("N/A"),
-        record
-            .dx_score
-            .and_then(|s| record.dx_score_max.map(|m| format!("{}/{}", s, m)))
-            .unwrap_or_else(|| "N/A".to_string())
-    )
 }
 
 #[cfg(test)]
