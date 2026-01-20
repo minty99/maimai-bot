@@ -12,7 +12,7 @@ use crate::config::AppConfig;
 use crate::db;
 use crate::db::{SqlitePool, format_chart_type, format_diff_category, format_percent_f64};
 use crate::http::MaimaiClient;
-use crate::maimai::models::{ParsedPlayRecord, ParsedPlayerData};
+use crate::maimai::models::{DifficultyCategory, ParsedPlayRecord, ParsedPlayerData};
 use crate::maimai::parse::player_data::parse_player_data_html;
 use crate::maimai::parse::recent::parse_recent_html;
 use crate::maimai::parse::score_list::parse_scores_html;
@@ -533,10 +533,18 @@ async fn mai_score(
             continue;
         };
         entries.sort_by(|a, b| {
-            diff_order_key(&a.1)
-                .cmp(&diff_order_key(&b.1))
-                .then(a.0.cmp(&b.0))
-                .then(a.2.cmp(&b.2))
+            let a_diff =
+                a.1.parse::<DifficultyCategory>()
+                    .ok()
+                    .map(|d| d.as_u8())
+                    .unwrap_or(255);
+            let b_diff =
+                b.1.parse::<DifficultyCategory>()
+                    .ok()
+                    .map(|d| d.as_u8())
+                    .unwrap_or(255);
+
+            a_diff.cmp(&b_diff).then(a.0.cmp(&b.0)).then(a.2.cmp(&b.2))
         });
 
         desc.push_str(&format!("**{}**\n", title));
@@ -558,17 +566,6 @@ async fn mai_score(
     .await?;
 
     Ok(())
-}
-
-fn diff_order_key(diff: &str) -> u8 {
-    match diff {
-        "BASIC" => 0,
-        "ADVANCED" => 1,
-        "EXPERT" => 2,
-        "MASTER" => 3,
-        "Re:MASTER" => 4,
-        _ => 255,
-    }
 }
 
 fn latest_credit_len(tracks: &[Option<i64>]) -> usize {
