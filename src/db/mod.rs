@@ -191,3 +191,39 @@ fn chart_type_str(t: ChartType) -> &'static str {
         ChartType::Dx => "DX",
     }
 }
+
+pub fn format_diff(diff: Option<u8>) -> &'static str {
+    match diff {
+        Some(0) => "BASIC",
+        Some(1) => "ADVANCED",
+        Some(2) => "EXPERT",
+        Some(3) => "MASTER",
+        Some(4) => "Re:MASTER",
+        _ => "Unknown",
+    }
+}
+
+pub fn format_chart_type(chart_type: ChartType) -> &'static str {
+    match chart_type {
+        ChartType::Std => "STD",
+        ChartType::Dx => "DX",
+    }
+}
+
+pub fn format_percent_f32(percent: Option<f32>) -> String {
+    percent
+        .map(|p| format!("{:.2}%", p))
+        .unwrap_or_else(|| "N/A".to_string())
+}
+
+pub fn format_percent_f64(percent: Option<f64>) -> String {
+    percent
+        .map(|p| format!("{:.2}%", p))
+        .unwrap_or_else(|| "N/A".to_string())
+}
+
+pub fn format_track(track: Option<i64>) -> String {
+    track
+        .map(|t| format!("Track {}", t))
+        .unwrap_or_else(|| "Single".to_string())
+}
