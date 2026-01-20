@@ -559,6 +559,7 @@ async fn mai_score(
         if candidates.is_empty() {
             ctx.send(
                 CreateReply::default()
+                    .ephemeral(true)
                     .embed(embed_base("No records found").description("No titles to match.")),
             )
             .await?;
@@ -674,6 +675,7 @@ async fn mai_score(
     if rows.is_empty() {
         ctx.send(
             CreateReply::default()
+                .ephemeral(true)
                 .embed(embed_base("No records found").description("No score rows found.")),
         )
         .await?;
@@ -701,6 +703,7 @@ async fn mai_score(
     let Some((_title, entries)) = grouped.pop_first() else {
         ctx.send(
             CreateReply::default()
+                .ephemeral(true)
                 .embed(embed_base("No records found").description("No score rows found.")),
         )
         .await?;
