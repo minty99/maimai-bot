@@ -1,5 +1,6 @@
 use std::path::PathBuf;
 
+use maimai_bot::maimai::models::DifficultyCategory;
 use maimai_bot::maimai::parse::score_list::parse_scores_html;
 
 fn fixture_path(name: &str) -> PathBuf {
@@ -16,11 +17,11 @@ fn run_fixture_test(diff: u8, filename: &str) {
 
     assert!(!entries.is_empty());
     let expected_category = match diff {
-        0 => maimai_bot::maimai::models::DifficultyCategory::Basic,
-        1 => maimai_bot::maimai::models::DifficultyCategory::Advanced,
-        2 => maimai_bot::maimai::models::DifficultyCategory::Expert,
-        3 => maimai_bot::maimai::models::DifficultyCategory::Master,
-        4 => maimai_bot::maimai::models::DifficultyCategory::ReMaster,
+        0 => DifficultyCategory::Basic,
+        1 => DifficultyCategory::Advanced,
+        2 => DifficultyCategory::Expert,
+        3 => DifficultyCategory::Master,
+        4 => DifficultyCategory::ReMaster,
         _ => unreachable!("diff must be 0..4"),
     };
     assert!(entries.iter().all(|e| e.diff_category == expected_category));

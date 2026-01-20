@@ -1,5 +1,6 @@
 use std::path::PathBuf;
 
+use maimai_bot::maimai::models::DifficultyCategory;
 use maimai_bot::maimai::parse::song_detail::parse_song_detail_html;
 
 fn fixture_path(name: &str) -> PathBuf {
@@ -23,10 +24,7 @@ fn parse_song_detail_example1() {
             .iter()
             .map(|d| d.diff_category)
             .collect::<Vec<_>>(),
-        vec![
-            maimai_bot::maimai::models::DifficultyCategory::Expert,
-            maimai_bot::maimai::models::DifficultyCategory::Master,
-        ]
+        vec![DifficultyCategory::Expert, DifficultyCategory::Master]
     );
     assert!(
         parsed
@@ -77,10 +75,10 @@ fn parse_song_detail_example2() {
             .map(|d| d.diff_category)
             .collect::<Vec<_>>(),
         vec![
-            maimai_bot::maimai::models::DifficultyCategory::Advanced,
-            maimai_bot::maimai::models::DifficultyCategory::Expert,
-            maimai_bot::maimai::models::DifficultyCategory::Master,
-            maimai_bot::maimai::models::DifficultyCategory::ReMaster,
+            DifficultyCategory::Advanced,
+            DifficultyCategory::Expert,
+            DifficultyCategory::Master,
+            DifficultyCategory::ReMaster,
         ]
     );
     assert!(
