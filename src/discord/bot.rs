@@ -20,7 +20,6 @@ type Context<'a> = poise::Context<'a, BotData, Error>;
 type Error = eyre::Report;
 
 const STATE_KEY_TOTAL_PLAY_COUNT: &str = "player.total_play_count";
-const STATE_KEY_CURRENT_VERSION_PLAY_COUNT: &str = "player.current_version_play_count";
 
 #[derive(Debug, Clone)]
 pub struct BotData {
@@ -315,14 +314,6 @@ async fn should_sync_scores(pool: &SqlitePool, player_data: &ParsedPlayerData) -
 
 async fn persist_play_counts(pool: &SqlitePool, player_data: &ParsedPlayerData) -> Result<()> {
     let now = unix_timestamp();
-    db::set_app_state_u32(
-        pool,
-        STATE_KEY_CURRENT_VERSION_PLAY_COUNT,
-        player_data.current_version_play_count,
-        now,
-    )
-    .await
-    .wrap_err("store current version play count")?;
     db::set_app_state_u32(
         pool,
         STATE_KEY_TOTAL_PLAY_COUNT,
