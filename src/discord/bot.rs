@@ -1275,6 +1275,9 @@ fn scores_url(diff: u8) -> Result<Url> {
 }
 
 #[cfg(test)]
+mod preview_tests;
+
+#[cfg(test)]
 mod tests {
     use dotenvy::dotenv;
 
