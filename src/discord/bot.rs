@@ -142,7 +142,7 @@ pub async fn run_bot(config: AppConfig, db_path: std::path::PathBuf) -> Result<(
                     initial_scores_sync(&bot_data)
                         .await
                         .wrap_err("startup scores sync")?;
-                    initial_recent_sync(&bot_data)
+                    initial_recent_sync(&bot_data, player_data.total_play_count)
                         .await
                         .wrap_err("startup recent sync")?;
                     persist_play_counts(&bot_data.db, &player_data)
@@ -336,7 +336,7 @@ async fn initial_scores_sync(bot_data: &BotData) -> Result<()> {
     Ok(())
 }
 
-async fn initial_recent_sync(bot_data: &BotData) -> Result<()> {
+async fn initial_recent_sync(bot_data: &BotData, total_play_count: u32) -> Result<()> {
     info!("Running startup recent sync...");
 
     let mut client = MaimaiClient::new(&bot_data.config).wrap_err("create HTTP client")?;
@@ -348,6 +348,8 @@ async fn initial_recent_sync(bot_data: &BotData) -> Result<()> {
     let entries = fetch_recent_entries_logged_in(&client)
         .await
         .wrap_err("fetch recent entries")?;
+
+    let entries = annotate_recent_entries_with_play_count(entries, total_play_count);
     let scraped_at = unix_timestamp();
     let count_total = entries.len();
     let count_with_idx = entries.iter().filter(|e| e.playlog_idx.is_some()).count();
@@ -425,6 +427,8 @@ async fn periodic_player_poll(bot_data: &BotData) -> Result<()> {
     let entries = fetch_recent_entries_logged_in(&client)
         .await
         .wrap_err("fetch recent")?;
+
+    let entries = annotate_recent_entries_with_play_count(entries, player_data.total_play_count);
     let scraped_at = unix_timestamp();
 
     db::upsert_playlogs(&bot_data.db, scraped_at, &entries)
@@ -903,6 +907,27 @@ fn latest_credit_entries(entries: &[ParsedPlayRecord]) -> Vec<ParsedPlayRecord> 
     let mut out = entries.iter().take(take).cloned().collect::<Vec<_>>();
     out.reverse();
     out
+}
+
+fn annotate_recent_entries_with_play_count(
+    mut entries: Vec<ParsedPlayRecord>,
+    total_play_count: u32,
+) -> Vec<ParsedPlayRecord> {
+    let Some(last_track_01_idx) = entries.iter().rposition(|e| e.track == Some(1)) else {
+        return Vec::new();
+    };
+    entries.truncate(last_track_01_idx + 1);
+
+    let mut credit_idx: u32 = 0;
+    for entry in &mut entries {
+        entry.credit_play_count = Some(total_play_count.saturating_sub(credit_idx));
+
+        if entry.track == Some(1) {
+            credit_idx = credit_idx.saturating_add(1);
+        }
+    }
+
+    entries
 }
 
 async fn send_player_update_dm(
