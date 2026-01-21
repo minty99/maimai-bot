@@ -134,9 +134,9 @@ async fn upsert_score(
 		  title, chart_type, diff_category, level,
 		  achievement_x10000, rank, fc, sync,
 		  dx_score, dx_score_max,
-		  source_idx, scraped_at
+		  jacket_url, source_idx, scraped_at
 		)
-		VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)
+		VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)
 		ON CONFLICT(title, chart_type, diff_category) DO UPDATE SET
 		  level = excluded.level,
 		  achievement_x10000 = excluded.achievement_x10000,
@@ -145,6 +145,7 @@ async fn upsert_score(
 		  sync = excluded.sync,
 		  dx_score = excluded.dx_score,
 		  dx_score_max = excluded.dx_score_max,
+		  jacket_url = excluded.jacket_url,
 		  source_idx = excluded.source_idx,
 		  scraped_at = excluded.scraped_at
 		"#,
@@ -159,6 +160,7 @@ async fn upsert_score(
     .bind(entry.sync.map(|v| v.as_str()))
     .bind(entry.dx_score)
     .bind(entry.dx_score_max)
+    .bind(entry.jacket_url.as_deref())
     .bind(entry.source_idx.as_deref())
     .bind(scraped_at)
     .execute(&mut **tx)
@@ -182,18 +184,19 @@ async fn upsert_playlog(
 	INSERT INTO playlogs (
 	  playlog_idx,
 	  played_at, track, credit_play_count,
-	  title, chart_type, diff_category, level,
+	  title, jacket_url, chart_type, diff_category, level,
 	  achievement_x10000, achievement_new_record, first_play,
 	  score_rank, fc, sync,
 	  dx_score, dx_score_max,
 	  scraped_at
 	)
-	VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17)
+	VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18)
 	ON CONFLICT(playlog_idx) DO UPDATE SET
 	  played_at = excluded.played_at,
 	  track = excluded.track,
 	  credit_play_count = excluded.credit_play_count,
 	  title = excluded.title,
+	  jacket_url = excluded.jacket_url,
 	  chart_type = excluded.chart_type,
 	  diff_category = excluded.diff_category,
 	  level = excluded.level,
@@ -213,6 +216,7 @@ async fn upsert_playlog(
     .bind(entry.track.map(i64::from))
     .bind(entry.credit_play_count.map(i64::from))
     .bind(&entry.title)
+    .bind(entry.jacket_url.as_deref())
     .bind(chart_type_str(entry.chart_type))
     .bind(entry.diff_category.map(|d| d.as_str().to_string()))
     .bind(entry.level.as_deref())

@@ -34,6 +34,7 @@ fn parse_recent_record_fixture() {
     assert!(entries.iter().any(|e| e.chart_type == ChartType::Std));
     assert!(entries.iter().any(|e| e.chart_type == ChartType::Dx));
     assert!(entries.iter().any(|e| e.achievement_new_record));
+    assert!(entries.iter().all(|e| e.jacket_url.is_some()));
 
     println!("recent entries={}", entries.len());
     for e in entries.iter().take(5) {

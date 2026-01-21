@@ -17,6 +17,7 @@ fn parse_song_detail_example1() {
     let parsed = parse_song_detail_html(&html).unwrap();
 
     assert!(!parsed.title.trim().is_empty());
+    assert!(parsed.jacket_url.is_some());
     assert_eq!(format!("{:?}", parsed.chart_type), "Dx");
     assert_eq!(
         parsed
@@ -67,6 +68,7 @@ fn parse_song_detail_example2() {
     let parsed = parse_song_detail_html(&html).unwrap();
 
     assert!(!parsed.title.trim().is_empty());
+    assert!(parsed.jacket_url.is_some());
     assert_eq!(format!("{:?}", parsed.chart_type), "Std");
     assert_eq!(
         parsed

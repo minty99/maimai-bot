@@ -19,6 +19,7 @@ use crate::maimai::models::{ParsedPlayRecord, ParsedPlayerData};
 use crate::maimai::parse::player_data::parse_player_data_html;
 use crate::maimai::parse::recent::parse_recent_html;
 use crate::maimai::parse::score_list::parse_scores_html;
+use crate::maimai::parse::song_detail::parse_song_detail_html;
 
 type Context<'a> = poise::Context<'a, BotData, Error>;
 type Error = eyre::Report;
@@ -224,6 +225,66 @@ fn embed_startup(player: &ParsedPlayerData) -> CreateEmbed {
         .field("Play count", play_count, true)
 }
 
+fn song_detail_url(idx: &str) -> Result<Url> {
+    let mut url = Url::parse("https://maimaidx-eng.com/maimai-mobile/record/musicDetail/")
+        .wrap_err("parse song detail base url")?;
+    url.query_pairs_mut().append_pair("idx", idx);
+    Ok(url)
+}
+
+async fn fetch_jacket_url_for_title(bot_data: &BotData, title: &str) -> Result<Option<String>> {
+    let existing = sqlx::query_scalar::<_, String>(
+        "SELECT jacket_url FROM scores WHERE title = ? AND jacket_url IS NOT NULL LIMIT 1",
+    )
+    .bind(title)
+    .fetch_optional(&bot_data.db)
+    .await
+    .wrap_err("query existing jacket url")?;
+
+    if existing.is_some() {
+        return Ok(existing);
+    }
+
+    let source_idx = sqlx::query_scalar::<_, String>(
+        "SELECT source_idx FROM scores WHERE title = ? AND source_idx IS NOT NULL LIMIT 1",
+    )
+    .bind(title)
+    .fetch_optional(&bot_data.db)
+    .await
+    .wrap_err("query source idx")?;
+
+    let Some(source_idx) = source_idx else {
+        return Ok(None);
+    };
+
+    let mut client = MaimaiClient::new(&bot_data.config).wrap_err("create HTTP client")?;
+    client
+        .ensure_logged_in()
+        .await
+        .wrap_err("ensure logged in")?;
+
+    let url = song_detail_url(&source_idx)?;
+    let bytes = client
+        .get_bytes(&url)
+        .await
+        .wrap_err("fetch song detail url")?;
+    let html = String::from_utf8(bytes).wrap_err("song detail response is not utf-8")?;
+    let parsed = parse_song_detail_html(&html).wrap_err("parse song detail html")?;
+
+    let Some(jacket_url) = parsed.jacket_url else {
+        return Ok(None);
+    };
+
+    sqlx::query("UPDATE scores SET jacket_url = ? WHERE title = ?")
+        .bind(&jacket_url)
+        .bind(title)
+        .execute(&bot_data.db)
+        .await
+        .wrap_err("update jacket url")?;
+
+    Ok(Some(jacket_url))
+}
+
 fn embed_player_update(
     player: &ParsedPlayerData,
     prev_total: Option<u32>,
@@ -269,6 +330,101 @@ struct CreditRecordView {
     level: Option<String>,
     achievement_percent: Option<f64>,
     rank: Option<String>,
+}
+
+#[derive(Debug, Clone)]
+struct RecentRecordView {
+    track: Option<i64>,
+    played_at: Option<String>,
+    title: String,
+    chart_type: String,
+    diff_category: Option<String>,
+    level: Option<String>,
+    achievement_percent: Option<f64>,
+    rank: Option<String>,
+    jacket_url: Option<String>,
+}
+
+#[derive(Debug, Clone)]
+struct ScoreRowView {
+    chart_type: String,
+    diff_category: String,
+    level: String,
+    achievement_percent: Option<f64>,
+    rank: Option<String>,
+}
+
+fn build_mai_score_embed(
+    display_name: &str,
+    title: &str,
+    entries: &[ScoreRowView],
+    jacket_url: Option<&str>,
+) -> CreateEmbed {
+    let mut desc = String::new();
+    desc.push_str(&format!("**{}**\n\n", title));
+
+    for entry in entries {
+        let achv = format_percent_f64(entry.achievement_percent);
+        let rank = entry.rank.as_deref().unwrap_or("N/A");
+        desc.push_str(&format!(
+            "- [{}] {} {} — {} • {}\n",
+            entry.chart_type, entry.diff_category, entry.level, achv, rank
+        ));
+    }
+
+    let mut embed = embed_base(&format!("{}'s scores", display_name)).description(desc);
+    if let Some(url) = jacket_url {
+        embed = embed.thumbnail(url);
+    }
+    embed
+}
+
+fn build_mai_recent_embeds(display_name: &str, records: &[RecentRecordView]) -> Vec<CreateEmbed> {
+    records
+        .iter()
+        .map(|record| {
+            let track = format_track_label(record.track);
+            let achv = format_percent_f64(record.achievement_percent);
+            let rank = record
+                .rank
+                .as_deref()
+                .map(normalize_playlog_rank)
+                .unwrap_or("N/A");
+            let diff = record.diff_category.as_deref().unwrap_or("Unknown");
+            let level = record.level.as_deref().unwrap_or("N/A");
+            let mut embed = embed_base(&track).description(format!(
+                "**{}** [{}] {diff} {level} — {achv} • {rank}",
+                record.title, record.chart_type
+            ));
+            if let Some(played_at) = record.played_at.as_deref() {
+                embed = embed.field("Played at", played_at, false);
+            }
+            if let Some(url) = record.jacket_url.as_deref() {
+                embed = embed.thumbnail(url);
+            }
+            let _ = display_name;
+            embed
+        })
+        .collect::<Vec<_>>()
+}
+
+fn build_mai_today_embed(
+    display_name: &str,
+    start: &str,
+    end: &str,
+    credits: i64,
+    tracks: i64,
+    new_records: i64,
+    first_plays: i64,
+) -> CreateEmbed {
+    let mut e = embed_base(&format!("{}'s today", display_name));
+    e = e
+        .field("Window", format!("{} ~ {}", start, end), false)
+        .field("Credits", credits.to_string(), true)
+        .field("Tracks", tracks.to_string(), true)
+        .field("New records", new_records.to_string(), true)
+        .field("First plays", first_plays.to_string(), true);
+    e
 }
 
 fn format_track_label(track: Option<i64>) -> String {
@@ -745,9 +901,6 @@ async fn mai_score(
         ));
     }
 
-    let mut desc = String::new();
-    desc.push_str(&format!("**{}**\n\n", matched_title));
-
     let Some((_title, entries)) = grouped.pop_first() else {
         ctx.send(
             CreateReply::default()
@@ -758,20 +911,31 @@ async fn mai_score(
         return Ok(());
     };
 
-    // title already shown above
-    for (chart_type, diff_category, level, achievement, rank) in entries {
-        let achv = format_percent_f64(achievement);
-        let rank = rank.unwrap_or_else(|| "N/A".to_string());
-        desc.push_str(&format!(
-            "- [{}] {diff_category} {level} — {achv} • {rank}\n",
-            chart_type
-        ));
-    }
+    let score_entries = entries
+        .into_iter()
+        .map(
+            |(chart_type, diff_category, level, achievement, rank)| ScoreRowView {
+                chart_type,
+                diff_category,
+                level,
+                achievement_percent: achievement,
+                rank,
+            },
+        )
+        .collect::<Vec<_>>();
 
-    ctx.send(CreateReply::default().embed(
-        embed_base(&format!("{}'s scores", display_user_name(&ctx).await)).description(desc),
-    ))
-    .await?;
+    let jacket_url = fetch_jacket_url_for_title(ctx.data(), &matched_title)
+        .await
+        .wrap_err("fetch jacket url")?;
+
+    let embed = build_mai_score_embed(
+        &display_user_name(&ctx).await,
+        &matched_title,
+        &score_entries,
+        jacket_url.as_deref(),
+    );
+
+    ctx.send(CreateReply::default().embed(embed)).await?;
 
     Ok(())
 }
@@ -838,6 +1002,7 @@ async fn mai_recent(ctx: Context<'_>) -> Result<(), Error> {
         _,
         (
             String,
+            Option<String>,
             String,
             Option<i64>,
             Option<String>,
@@ -850,6 +1015,7 @@ async fn mai_recent(ctx: Context<'_>) -> Result<(), Error> {
         r#"
         SELECT
             pl.title,
+            pl.jacket_url,
             pl.chart_type,
             pl.track,
             pl.played_at,
@@ -873,38 +1039,43 @@ async fn mai_recent(ctx: Context<'_>) -> Result<(), Error> {
         return Ok(());
     }
 
-    let take = latest_credit_len(&rows.iter().map(|row| row.2).collect::<Vec<_>>());
+    let take = latest_credit_len(&rows.iter().map(|row| row.3).collect::<Vec<_>>());
     let mut recent = rows.into_iter().take(take).collect::<Vec<_>>();
     recent.reverse();
 
     let records = recent
         .into_iter()
         .map(
-            |(title, chart_type, track, played_at, diff_category, level, achievement, rank)| {
-                CreditRecordView {
-                    track,
-                    played_at,
-                    title,
-                    chart_type,
-                    diff_category,
-                    level,
-                    achievement_percent: achievement,
-                    rank,
-                }
+            |(
+                title,
+                jacket_url,
+                chart_type,
+                track,
+                played_at,
+                diff_category,
+                level,
+                achievement,
+                rank,
+            )| RecentRecordView {
+                track,
+                played_at,
+                title,
+                chart_type,
+                diff_category,
+                level,
+                achievement_percent: achievement,
+                rank,
+                jacket_url,
             },
         )
         .collect::<Vec<_>>();
-    let desc = format_credit_description(&records);
 
-    ctx.send(
-        CreateReply::default().embed(
-            embed_base(&format!(
-                "{}'s recent credit",
-                display_user_name(&ctx).await
-            ))
-            .description(desc),
-        ),
-    )
+    let embeds = build_mai_recent_embeds(&display_user_name(&ctx).await, &records);
+
+    ctx.send(CreateReply {
+        embeds,
+        ..Default::default()
+    })
     .await?;
 
     Ok(())
@@ -962,15 +1133,17 @@ async fn mai_today(ctx: Context<'_>) -> Result<(), Error> {
 
     let new_records_true = (new_record_flags - first_plays).max(0);
 
-    let mut e = embed_base(&format!("{}'s today", display_user_name(&ctx).await));
-    e = e
-        .field("Window", format!("{} ~ {}", start, end), false)
-        .field("Credits", credits.to_string(), true)
-        .field("Tracks", tracks.to_string(), true)
-        .field("New records", new_records_true.to_string(), true)
-        .field("First plays", first_plays.to_string(), true);
+    let embed = build_mai_today_embed(
+        &display_user_name(&ctx).await,
+        &start,
+        &end,
+        credits,
+        tracks,
+        new_records_true,
+        first_plays,
+    );
 
-    ctx.send(CreateReply::default().embed(e)).await?;
+    ctx.send(CreateReply::default().embed(embed)).await?;
     Ok(())
 }
 
@@ -1164,6 +1337,7 @@ mod tests {
                 played_at: Some("2026/01/20 12:34".to_string()),
                 credit_play_count: None,
                 title: "Sample Song A".to_string(),
+                jacket_url: None,
                 chart_type: ChartType::Std,
                 diff_category: Some(DifficultyCategory::Expert),
                 level: Some("12+".to_string()),
@@ -1182,6 +1356,7 @@ mod tests {
                 played_at: Some("2026/01/20 12:38".to_string()),
                 credit_play_count: None,
                 title: "Sample Song B".to_string(),
+                jacket_url: None,
                 chart_type: ChartType::Dx,
                 diff_category: Some(DifficultyCategory::Master),
                 level: Some("14".to_string()),

@@ -271,6 +271,7 @@ pub struct ParsedScoreEntry {
     pub sync: Option<SyncStatus>,
     pub dx_score: Option<i32>,
     pub dx_score_max: Option<i32>,
+    pub jacket_url: Option<String>,
     pub source_idx: Option<String>,
 }
 
@@ -282,6 +283,7 @@ pub struct ParsedPlayRecord {
     pub credit_play_count: Option<u32>,
 
     pub title: String,
+    pub jacket_url: Option<String>,
     pub chart_type: ChartType,
     pub diff_category: Option<DifficultyCategory>,
     pub level: Option<String>,
@@ -299,6 +301,7 @@ pub struct ParsedPlayRecord {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ParsedSongDetail {
     pub title: String,
+    pub jacket_url: Option<String>,
     pub chart_type: ChartType,
     pub difficulties: Vec<ParsedSongDifficultyDetail>,
 }
