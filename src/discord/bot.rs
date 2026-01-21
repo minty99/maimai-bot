@@ -5,6 +5,7 @@ use reqwest::Url;
 use serenity::builder::{CreateEmbed, CreateMessage};
 use std::sync::Arc;
 use std::time::Duration;
+use time::{Duration as TimeDuration, OffsetDateTime, UtcOffset};
 use tokio::sync::RwLock;
 use tokio::time::interval;
 use tracing::{debug, error, info};
@@ -78,7 +79,7 @@ pub async fn run_bot(config: AppConfig, db_path: std::path::PathBuf) -> Result<(
     let framework = poise::Framework::builder()
         .options(FrameworkOptions {
             prefix_options: Default::default(),
-            commands: vec![mai_score(), mai_recent()],
+            commands: vec![mai_score(), mai_recent(), mai_today()],
             on_error: |error| {
                 Box::pin(async move {
                     match error {
@@ -906,6 +907,70 @@ async fn mai_recent(ctx: Context<'_>) -> Result<(), Error> {
     )
     .await?;
 
+    Ok(())
+}
+
+/// Show today's play summary (day boundary: 04:00 JST)
+#[poise::command(slash_command, rename = "mai-today")]
+async fn mai_today(ctx: Context<'_>) -> Result<(), Error> {
+    ctx.defer().await?;
+
+    let offset = UtcOffset::from_hms(9, 0, 0).unwrap_or(UtcOffset::UTC);
+    let now_jst = OffsetDateTime::now_utc().to_offset(offset);
+
+    let day_date = if now_jst.hour() < 4 {
+        (now_jst - TimeDuration::days(1)).date()
+    } else {
+        now_jst.date()
+    };
+    let end_date = day_date + TimeDuration::days(1);
+
+    let day_key = format!(
+        "{:04}/{:02}/{:02}",
+        day_date.year(),
+        u8::from(day_date.month()),
+        day_date.day()
+    );
+    let end_key = format!(
+        "{:04}/{:02}/{:02}",
+        end_date.year(),
+        u8::from(end_date.month()),
+        end_date.day()
+    );
+
+    let start = format!("{} 04:00", day_key);
+    let end = format!("{} 04:00", end_key);
+
+    let (tracks, credits, first_plays, new_record_flags) =
+        sqlx::query_as::<_, (i64, i64, i64, i64)>(
+            r#"
+        SELECT
+            COUNT(*) as tracks,
+            COUNT(DISTINCT credit_play_count) as credits,
+            COALESCE(SUM(first_play), 0) as first_plays,
+            COALESCE(SUM(achievement_new_record), 0) as new_record_flags
+        FROM playlogs
+        WHERE played_at >= ?1
+          AND played_at < ?2
+        "#,
+        )
+        .bind(&start)
+        .bind(&end)
+        .fetch_one(&ctx.data().db)
+        .await
+        .map_err(|e| eyre::eyre!("query failed: {}", e))?;
+
+    let new_records_true = (new_record_flags - first_plays).max(0);
+
+    let mut e = embed_base(&format!("{}'s today", display_user_name(&ctx).await));
+    e = e
+        .field("Window", format!("{} ~ {}", start, end), false)
+        .field("Credits", credits.to_string(), true)
+        .field("Tracks", tracks.to_string(), true)
+        .field("New records", new_records_true.to_string(), true)
+        .field("First plays", first_plays.to_string(), true);
+
+    ctx.send(CreateReply::default().embed(e)).await?;
     Ok(())
 }
 
