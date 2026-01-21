@@ -15,6 +15,8 @@ pub fn parse_recent_html(html: &str) -> eyre::Result<Vec<ParsedPlayRecord>> {
     let song_title_block_selector = Selector::parse("div.basic_block").unwrap();
     let level_selector = Selector::parse(".playlog_level_icon").unwrap();
     let achievement_selector = Selector::parse(".playlog_achievement_txt").unwrap();
+    let achievement_new_record_selector =
+        Selector::parse("img.playlog_achievement_newrecord").unwrap();
     let scorerank_selector = Selector::parse("img.playlog_scorerank").unwrap();
     let dx_score_selector = Selector::parse(".playlog_score_block .white").unwrap();
     let chart_type_selector = Selector::parse("img.playlog_music_kind_icon").unwrap();
@@ -84,6 +86,11 @@ pub fn parse_recent_html(html: &str) -> eyre::Result<Vec<ParsedPlayRecord>> {
             .next()
             .and_then(|e| parse_percent(&collect_text(&e)));
 
+        let achievement_new_record = entry
+            .select(&achievement_new_record_selector)
+            .next()
+            .is_some();
+
         let score_rank = entry
             .select(&scorerank_selector)
             .next()
@@ -125,6 +132,7 @@ pub fn parse_recent_html(html: &str) -> eyre::Result<Vec<ParsedPlayRecord>> {
             diff_category,
             level,
             achievement_percent,
+            achievement_new_record,
             score_rank,
             fc,
             sync,

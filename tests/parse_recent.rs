@@ -33,11 +33,12 @@ fn parse_recent_record_fixture() {
     );
     assert!(entries.iter().any(|e| e.chart_type == ChartType::Std));
     assert!(entries.iter().any(|e| e.chart_type == ChartType::Dx));
+    assert!(entries.iter().any(|e| e.achievement_new_record));
 
     println!("recent entries={}", entries.len());
     for e in entries.iter().take(5) {
         println!(
-            "  track={:?} played_at={:?} chart={:?} diff={:?} lv={:?} title={:?} achv={:?} rank={:?} fc={:?} sync={:?} dx={:?}/{:?} idx={:?}",
+            "  track={:?} played_at={:?} chart={:?} diff={:?} lv={:?} title={:?} achv={:?} newrec={} rank={:?} fc={:?} sync={:?} dx={:?}/{:?} idx={:?}",
             e.track,
             e.played_at,
             e.chart_type,
@@ -45,6 +46,7 @@ fn parse_recent_record_fixture() {
             e.level,
             e.title,
             e.achievement_percent,
+            e.achievement_new_record,
             e.score_rank,
             e.fc,
             e.sync,
