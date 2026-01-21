@@ -119,6 +119,7 @@ async fn upsert_score(
     entry: &ParsedScoreEntry,
 ) -> eyre::Result<()> {
     let achievement_x10000 = percent_to_x10000(entry.achievement_percent);
+
     sqlx::query(
         r#"
 		INSERT INTO scores (
@@ -165,25 +166,32 @@ async fn upsert_playlog(
     entry: &ParsedPlayRecord,
 ) -> eyre::Result<()> {
     let achievement_x10000 = percent_to_x10000(entry.achievement_percent);
+
+    let achievement_new_record = i64::from(u8::from(entry.achievement_new_record));
+    let first_play = i64::from(u8::from(entry.first_play));
     sqlx::query(
         r#"
 	INSERT INTO playlogs (
 	  playlog_idx,
-	  played_at, track,
+	  played_at, track, credit_play_count,
 	  title, chart_type, diff_category, level,
-	  achievement_x10000, score_rank, fc, sync,
+	  achievement_x10000, achievement_new_record, first_play,
+	  score_rank, fc, sync,
 	  dx_score, dx_score_max,
 	  scraped_at
 	)
-	VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)
+	VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17)
 	ON CONFLICT(playlog_idx) DO UPDATE SET
 	  played_at = excluded.played_at,
 	  track = excluded.track,
+	  credit_play_count = excluded.credit_play_count,
 	  title = excluded.title,
 	  chart_type = excluded.chart_type,
 	  diff_category = excluded.diff_category,
 	  level = excluded.level,
 	  achievement_x10000 = excluded.achievement_x10000,
+	  achievement_new_record = excluded.achievement_new_record,
+	  first_play = excluded.first_play,
 	  score_rank = excluded.score_rank,
 	  fc = excluded.fc,
 	  sync = excluded.sync,
@@ -195,11 +203,14 @@ async fn upsert_playlog(
     .bind(playlog_idx)
     .bind(entry.played_at.as_deref())
     .bind(entry.track.map(i64::from))
+    .bind(entry.credit_play_count.map(i64::from))
     .bind(&entry.title)
     .bind(chart_type_str(entry.chart_type))
     .bind(entry.diff_category.map(|d| d.as_str().to_string()))
     .bind(entry.level.as_deref())
     .bind(achievement_x10000)
+    .bind(achievement_new_record)
+    .bind(first_play)
     .bind(entry.score_rank.map(|r| r.as_str()))
     .bind(entry.fc.map(|v| v.as_str()))
     .bind(entry.sync.map(|v| v.as_str()))

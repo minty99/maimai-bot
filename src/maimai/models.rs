@@ -279,6 +279,7 @@ pub struct ParsedPlayRecord {
     pub playlog_idx: Option<String>,
     pub track: Option<u8>,
     pub played_at: Option<String>,
+    pub credit_play_count: Option<u32>,
 
     pub title: String,
     pub chart_type: ChartType,
@@ -287,6 +288,7 @@ pub struct ParsedPlayRecord {
 
     pub achievement_percent: Option<f32>,
     pub achievement_new_record: bool,
+    pub first_play: bool,
     pub score_rank: Option<ScoreRank>,
     pub fc: Option<FcStatus>,
     pub sync: Option<SyncStatus>,
