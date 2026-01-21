@@ -64,6 +64,14 @@ pub async fn upsert_playlogs(
     Ok(())
 }
 
+pub async fn clear_scores(pool: &SqlitePool) -> eyre::Result<()> {
+    sqlx::query("DELETE FROM scores")
+        .execute(pool)
+        .await
+        .wrap_err("clear scores")?;
+    Ok(())
+}
+
 pub async fn get_app_state(pool: &SqlitePool, key: &str) -> eyre::Result<Option<String>> {
     sqlx::query_scalar::<_, Option<String>>("SELECT value FROM app_state WHERE key = ?")
         .bind(key)

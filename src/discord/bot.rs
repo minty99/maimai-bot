@@ -316,6 +316,17 @@ async fn initial_scores_sync(bot_data: &BotData) -> Result<()> {
         .await
         .wrap_err("ensure logged in")?;
 
+    let count = rebuild_scores_with_client(&bot_data.db, &client)
+        .await
+        .wrap_err("rebuild scores")?;
+
+    info!("Startup scores sync completed: entries={count}");
+    Ok(())
+}
+
+async fn rebuild_scores_with_client(pool: &SqlitePool, client: &MaimaiClient) -> Result<usize> {
+    db::clear_scores(pool).await.wrap_err("clear scores")?;
+
     let scraped_at = unix_timestamp();
     let mut all = Vec::new();
 
@@ -328,12 +339,11 @@ async fn initial_scores_sync(bot_data: &BotData) -> Result<()> {
     }
 
     let count = all.len();
-    db::upsert_scores(&bot_data.db, scraped_at, &all)
+    db::upsert_scores(pool, scraped_at, &all)
         .await
         .wrap_err("upsert scores")?;
 
-    info!("Startup scores sync completed: entries={count}");
-    Ok(())
+    Ok(count)
 }
 
 async fn initial_recent_sync(bot_data: &BotData, total_play_count: u32) -> Result<()> {
@@ -428,12 +438,23 @@ async fn periodic_player_poll(bot_data: &BotData) -> Result<()> {
         .await
         .wrap_err("fetch recent")?;
 
-    let entries = annotate_recent_entries_with_play_count(entries, player_data.total_play_count);
+    let mut entries =
+        annotate_recent_entries_with_play_count(entries, player_data.total_play_count);
+
+    if stored_total.is_some() {
+        annotate_first_play_flags(&bot_data.db, &mut entries)
+            .await
+            .wrap_err("classify first plays")?;
+    }
     let scraped_at = unix_timestamp();
 
     db::upsert_playlogs(&bot_data.db, scraped_at, &entries)
         .await
         .wrap_err("upsert playlogs")?;
+
+    rebuild_scores_with_client(&bot_data.db, &client)
+        .await
+        .wrap_err("rebuild scores")?;
     persist_player_snapshot(&bot_data.db, &player_data)
         .await
         .wrap_err("persist player snapshot")?;
@@ -928,6 +949,44 @@ fn annotate_recent_entries_with_play_count(
     }
 
     entries
+}
+
+async fn annotate_first_play_flags(
+    pool: &SqlitePool,
+    entries: &mut [ParsedPlayRecord],
+) -> Result<()> {
+    for entry in entries {
+        if !entry.achievement_new_record {
+            continue;
+        }
+        let Some(diff_category) = entry.diff_category else {
+            continue;
+        };
+
+        let existing = sqlx::query_scalar::<_, i64>(
+            r#"
+            SELECT 1
+            FROM scores
+            WHERE title = ?1
+              AND chart_type = ?2
+              AND diff_category = ?3
+              AND achievement_x10000 IS NOT NULL
+            LIMIT 1
+            "#,
+        )
+        .bind(&entry.title)
+        .bind(format_chart_type(entry.chart_type))
+        .bind(diff_category.as_str())
+        .fetch_optional(pool)
+        .await
+        .wrap_err("check existing score")?;
+
+        if existing.is_none() {
+            entry.first_play = true;
+        }
+    }
+
+    Ok(())
 }
 
 async fn send_player_update_dm(
