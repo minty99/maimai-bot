@@ -43,8 +43,8 @@ struct SongDataSheet {
     #[serde(rename = "type")]
     sheet_type: String,
     difficulty: String,
-    #[serde(rename = "internalLevel")]
-    internal_level: Option<String>,
+    #[serde(rename = "internalLevelValue")]
+    internal_level_value: f32,
 }
 
 impl SongDataIndex {
@@ -111,12 +111,7 @@ impl SongDataIndex {
             }
 
             for sheet in song.sheets {
-                let Some(internal_raw) = sheet.internal_level else {
-                    continue;
-                };
-                let Ok(internal) = internal_raw.parse::<f32>() else {
-                    continue;
-                };
+                let internal = sheet.internal_level_value;
 
                 let Some(chart_type) = map_chart_type(&sheet.sheet_type) else {
                     continue;
