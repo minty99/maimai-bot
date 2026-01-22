@@ -216,7 +216,10 @@ async fn main() -> eyre::Result<()> {
 
                 let scraped_at = unix_timestamp();
                 let count_total = entries.len();
-                let count_with_idx = entries.iter().filter(|e| e.playlog_idx.is_some()).count();
+                let count_with_idx = entries
+                    .iter()
+                    .filter(|e| e.played_at_unixtime.is_some())
+                    .count();
                 db::upsert_playlogs(&pool, scraped_at, &entries)
                     .await
                     .wrap_err("upsert playlogs")?;

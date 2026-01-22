@@ -519,7 +519,10 @@ async fn initial_recent_sync(bot_data: &BotData, total_play_count: u32) -> Resul
     let entries = annotate_recent_entries_with_play_count(entries, total_play_count);
     let scraped_at = unix_timestamp();
     let count_total = entries.len();
-    let count_with_idx = entries.iter().filter(|e| e.playlog_idx.is_some()).count();
+    let count_with_idx = entries
+        .iter()
+        .filter(|e| e.played_at_unixtime.is_some())
+        .count();
 
     db::upsert_playlogs(&bot_data.db, scraped_at, &entries)
         .await
@@ -1024,7 +1027,7 @@ async fn mai_recent(ctx: Context<'_>) -> Result<(), Error> {
             pl.achievement_x10000 / 10000.0 as achievement_percent,
             pl.score_rank
         FROM playlogs pl
-        WHERE pl.playlog_idx IS NOT NULL
+        WHERE pl.played_at_unixtime IS NOT NULL
         ORDER BY pl.played_at DESC
         LIMIT 50
         "#,
@@ -1335,7 +1338,7 @@ mod tests {
 
         let credit_entries = vec![
             ParsedPlayRecord {
-                playlog_idx: None,
+                played_at_unixtime: None,
                 track: Some(1),
                 played_at: Some("2026/01/20 12:34".to_string()),
                 credit_play_count: None,
@@ -1354,7 +1357,7 @@ mod tests {
                 dx_score_max: Some(1500),
             },
             ParsedPlayRecord {
-                playlog_idx: None,
+                played_at_unixtime: None,
                 track: Some(2),
                 played_at: Some("2026/01/20 12:38".to_string()),
                 credit_play_count: None,
