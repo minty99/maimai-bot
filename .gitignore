@@ -2,3 +2,4 @@
 .env
 /data
 data/
+song_data.json
