@@ -1,4 +1,7 @@
-use maimai_bot::{db, maimai::models::ChartType, maimai::models::ParsedPlayRecord};
+use maimai_bot::{
+    db,
+    maimai::models::{ChartType, FcStatus, ParsedPlayRecord, SyncStatus},
+};
 
 #[tokio::test]
 async fn insert_playlogs_does_not_overwrite_existing_row() -> eyre::Result<()> {
@@ -27,8 +30,8 @@ async fn insert_playlogs_does_not_overwrite_existing_row() -> eyre::Result<()> {
         achievement_new_record: true,
         first_play: true,
         score_rank: None,
-        fc: None,
-        sync: None,
+        fc: Some(FcStatus::Fc),
+        sync: Some(SyncStatus::Fs),
         dx_score: None,
         dx_score_max: None,
     }];
@@ -56,18 +59,26 @@ async fn insert_playlogs_does_not_overwrite_existing_row() -> eyre::Result<()> {
     }];
     db::upsert_playlogs(&pool, scraped_at, &entries).await?;
 
-    let (title, credit_play_count, first_play, achievement_new_record): (String, Option<i64>, i64, i64) =
-        sqlx::query_as(
-            "SELECT title, credit_play_count, first_play, achievement_new_record FROM playlogs WHERE played_at_unixtime = ?",
-        )
-        .bind(id)
-        .fetch_one(&pool)
-        .await?;
+    let (title, credit_play_count, first_play, achievement_new_record, fc, sync): (
+        String,
+        Option<i64>,
+        i64,
+        i64,
+        Option<String>,
+        Option<String>,
+    ) = sqlx::query_as(
+        "SELECT title, credit_play_count, first_play, achievement_new_record, fc, sync FROM playlogs WHERE played_at_unixtime = ?",
+    )
+    .bind(id)
+    .fetch_one(&pool)
+    .await?;
 
     assert_eq!(title, "Song A");
     assert_eq!(credit_play_count, Some(100));
     assert_eq!(first_play, 1);
     assert_eq!(achievement_new_record, 1);
+    assert_eq!(fc.as_deref(), Some("FC"));
+    assert_eq!(sync.as_deref(), Some("FS"));
 
     Ok(())
 }

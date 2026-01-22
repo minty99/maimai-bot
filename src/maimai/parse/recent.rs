@@ -266,22 +266,49 @@ fn parse_fc_from_playlog_icon_src(src: &str) -> Option<FcStatus> {
     let file = src.rsplit('/').next()?;
     let file = file.split('?').next().unwrap_or(file);
     let stem = file.strip_suffix(".png")?;
-    let stem = stem.strip_prefix("fc_")?;
-    if stem == "dummy" {
+    if stem == "fc_dummy" {
         return None;
     }
-    FcStatus::from_playlog_key(stem)
+
+    // The playlog page uses both `fc_<key>.png` and legacy `fc.png`/`fcplus.png` style names.
+    let key = if let Some(rest) = stem.strip_prefix("fc_") {
+        rest
+    } else {
+        match stem {
+            "fc" => "fc",
+            "fcplus" => "fcp",
+            "ap" => "ap",
+            "applus" => "app",
+            _ => return None,
+        }
+    };
+
+    FcStatus::from_playlog_key(key)
 }
 
 fn parse_sync_from_playlog_icon_src(src: &str) -> Option<SyncStatus> {
     let file = src.rsplit('/').next()?;
     let file = file.split('?').next().unwrap_or(file);
     let stem = file.strip_suffix(".png")?;
-    let stem = stem.strip_prefix("sync_")?;
-    if stem == "dummy" {
+    if stem == "sync_dummy" {
         return None;
     }
-    SyncStatus::from_playlog_key(stem)
+
+    // The playlog page uses both `sync_<key>.png` and legacy `sync.png` style names.
+    let key = if let Some(rest) = stem.strip_prefix("sync_") {
+        rest
+    } else {
+        match stem {
+            "sync" => "sync",
+            "fs" => "fs",
+            "fsplus" => "fsp",
+            "fdx" => "fdx",
+            "fdxplus" => "fdxp",
+            _ => return None,
+        }
+    };
+
+    SyncStatus::from_playlog_key(key)
 }
 
 fn merge_sync(existing: Option<SyncStatus>, candidate: Option<SyncStatus>) -> Option<SyncStatus> {

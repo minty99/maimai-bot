@@ -1,6 +1,6 @@
 use std::path::PathBuf;
 
-use maimai_bot::maimai::models::ChartType;
+use maimai_bot::maimai::models::{ChartType, FcStatus, SyncStatus};
 use maimai_bot::maimai::parse::recent::parse_recent_html;
 
 fn fixture_path(name: &str) -> PathBuf {
@@ -36,6 +36,10 @@ fn parse_recent_record_fixture() {
     assert!(entries.iter().any(|e| e.achievement_new_record));
     assert!(entries.iter().all(|e| e.jacket_url.is_some()));
 
+    // Latest real record.html should contain at least one non-dummy FC and SYNC icon.
+    assert!(entries.iter().any(|e| e.fc.is_some()));
+    assert!(entries.iter().any(|e| e.sync.is_some()));
+
     println!("recent entries={}", entries.len());
     for e in entries.iter().take(5) {
         println!(
@@ -56,4 +60,12 @@ fn parse_recent_record_fixture() {
             e.played_at_unixtime
         );
     }
+
+    // End-to-end sanity for underscore-style icon names (older fixtures used dummy icons).
+    let html = std::fs::read_to_string(fixture_path("record.html")).unwrap();
+    let html = html.replacen("fc_dummy.png", "fc_fc.png", 1);
+    let html = html.replacen("sync_dummy.png", "sync_fs.png", 1);
+    let entries = parse_recent_html(&html).unwrap();
+    assert!(entries.iter().any(|e| e.fc == Some(FcStatus::Fc)));
+    assert!(entries.iter().any(|e| e.sync == Some(SyncStatus::Fs)));
 }
