@@ -20,7 +20,7 @@ CREATE TABLE IF NOT EXISTS scores (
 CREATE INDEX IF NOT EXISTS idx_scores_scraped_at ON scores(scraped_at);
 
 CREATE TABLE IF NOT EXISTS playlogs (
-  playlog_idx TEXT PRIMARY KEY NOT NULL,
+  played_at_unixtime INTEGER PRIMARY KEY NOT NULL,
   played_at TEXT,
   track INTEGER,
   title TEXT NOT NULL,

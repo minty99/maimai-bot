@@ -39,7 +39,7 @@ fn parse_recent_record_fixture() {
     println!("recent entries={}", entries.len());
     for e in entries.iter().take(5) {
         println!(
-            "  track={:?} played_at={:?} chart={:?} diff={:?} lv={:?} title={:?} achv={:?} newrec={} rank={:?} fc={:?} sync={:?} dx={:?}/{:?} idx={:?}",
+            "  track={:?} played_at={:?} chart={:?} diff={:?} lv={:?} title={:?} achv={:?} newrec={} rank={:?} fc={:?} sync={:?} dx={:?}/{:?} played_at_unixtime={:?}",
             e.track,
             e.played_at,
             e.chart_type,
@@ -53,7 +53,7 @@ fn parse_recent_record_fixture() {
             e.sync,
             e.dx_score,
             e.dx_score_max,
-            e.playlog_idx
+            e.played_at_unixtime
         );
     }
 }

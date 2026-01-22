@@ -76,11 +76,12 @@ pub fn parse_recent_html(html: &str) -> eyre::Result<Vec<ParsedPlayRecord>> {
         let title_raw = collect_text(&song_block);
         let title = strip_level_from_title(&title_raw, level.as_deref().unwrap_or(""));
 
-        let playlog_idx = entry
+        let played_at_unixtime = entry
             .select(&idx_selector)
             .next()
             .and_then(|e| e.value().attr("value"))
-            .map(|s| s.to_string());
+            .and_then(|raw| raw.split(',').next_back())
+            .and_then(|s| s.trim().parse::<i64>().ok());
 
         let achievement_percent = entry
             .select(&achievement_selector)
@@ -131,7 +132,7 @@ pub fn parse_recent_html(html: &str) -> eyre::Result<Vec<ParsedPlayRecord>> {
         }
 
         out.push(ParsedPlayRecord {
-            playlog_idx,
+            played_at_unixtime,
             track,
             played_at,
             credit_play_count: None,

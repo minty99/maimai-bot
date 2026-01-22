@@ -277,7 +277,7 @@ pub struct ParsedScoreEntry {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ParsedPlayRecord {
-    pub playlog_idx: Option<String>,
+    pub played_at_unixtime: Option<i64>,
     pub track: Option<u8>,
     pub played_at: Option<String>,
     pub credit_play_count: Option<u32>,
