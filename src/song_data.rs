@@ -7,9 +7,16 @@ use std::path::{Path, PathBuf};
 
 use crate::config::AppConfig;
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SongBucket {
+    New,
+    Old,
+}
+
 #[derive(Debug, Clone)]
 pub struct SongDataIndex {
     map: HashMap<SongKey, f32>,
+    song_version: HashMap<String, String>,
 }
 
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
@@ -27,6 +34,7 @@ struct SongDataRoot {
 #[derive(Debug, Deserialize)]
 struct SongDataSong {
     title: String,
+    version: Option<String>,
     sheets: Vec<SongDataSheet>,
 }
 
@@ -76,11 +84,32 @@ impl SongDataIndex {
         self.map.get(&key).copied()
     }
 
+    pub fn bucket(&self, title: &str) -> Option<SongBucket> {
+        let title_norm = normalize_title(title);
+        let version = self.song_version.get(&title_norm)?;
+        if is_new_version(version) {
+            Some(SongBucket::New)
+        } else {
+            Some(SongBucket::Old)
+        }
+    }
+
     fn from_root(root: SongDataRoot) -> Self {
         let mut map = HashMap::new();
+        let mut song_version = HashMap::new();
 
         for song in root.songs {
             let title_norm = normalize_title(&song.title);
+
+            if let Some(version) = song.version.as_deref() {
+                let version = version.trim();
+                if !version.is_empty() {
+                    song_version
+                        .entry(title_norm.clone())
+                        .or_insert_with(|| version.to_string());
+                }
+            }
+
             for sheet in song.sheets {
                 let Some(internal_raw) = sheet.internal_level else {
                     continue;
@@ -107,7 +136,7 @@ impl SongDataIndex {
             }
         }
 
-        Self { map }
+        Self { map, song_version }
     }
 }
 
@@ -135,4 +164,8 @@ fn map_diff_category(difficulty: &str) -> Option<&'static str> {
         "remaster" => Some("Re:MASTER"),
         _ => None,
     }
+}
+
+fn is_new_version(version: &str) -> bool {
+    matches!(version, "PRiSM PLUS" | "CiRCLE")
 }
