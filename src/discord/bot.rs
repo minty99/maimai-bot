@@ -20,7 +20,8 @@ use crate::maimai::parse::player_data::parse_player_data_html;
 use crate::maimai::parse::recent::parse_recent_html;
 use crate::maimai::parse::score_list::parse_scores_html;
 use crate::maimai::parse::song_detail::parse_song_detail_html;
-use crate::song_data::SongDataIndex;
+use crate::maimai::rating::{chart_rating_points, is_ap_like};
+use crate::song_data::{SongBucket, SongDataIndex};
 
 type Context<'a> = poise::Context<'a, BotData, Error>;
 type Error = eyre::Report;
@@ -91,7 +92,7 @@ pub async fn run_bot(config: AppConfig, db_path: std::path::PathBuf) -> Result<(
     let framework = poise::Framework::builder()
         .options(FrameworkOptions {
             prefix_options: Default::default(),
-            commands: vec![mai_score(), mai_recent(), mai_today()],
+            commands: vec![mai_score(), mai_recent(), mai_today(), mai_rating()],
             on_error: |error| {
                 Box::pin(async move {
                     match error {
@@ -352,6 +353,7 @@ struct RecentRecordView {
     diff_category: Option<String>,
     level: Option<String>,
     internal_level: Option<f32>,
+    rating_points: Option<u32>,
     achievement_percent: Option<f64>,
     rank: Option<String>,
     jacket_url: Option<String>,
@@ -363,6 +365,7 @@ struct ScoreRowView {
     diff_category: String,
     level: String,
     internal_level: Option<f32>,
+    rating_points: Option<u32>,
     achievement_percent: Option<f64>,
     rank: Option<String>,
 }
@@ -374,6 +377,13 @@ fn format_level_with_internal(level: &str, internal_level: Option<f32>) -> Strin
     match internal_level {
         Some(v) => format!("{level} ({v:.1})"),
         None => level.to_string(),
+    }
+}
+
+fn format_rating_points_suffix(rating_points: Option<u32>) -> String {
+    match rating_points {
+        Some(v) => format!(" • r{v}"),
+        None => String::new(),
     }
 }
 
@@ -390,9 +400,10 @@ fn build_mai_score_embed(
         let achv = format_percent_f64(entry.achievement_percent);
         let rank = entry.rank.as_deref().unwrap_or("N/A");
         let level = format_level_with_internal(&entry.level, entry.internal_level);
+        let rating = format_rating_points_suffix(entry.rating_points);
         desc.push_str(&format!(
-            "- [{}] {} {} — {} • {}\n",
-            entry.chart_type, entry.diff_category, level, achv, rank
+            "- [{}] {} {} — {} • {}{}\n",
+            entry.chart_type, entry.diff_category, level, achv, rank, rating
         ));
     }
 
@@ -417,8 +428,9 @@ fn build_mai_recent_embeds(display_name: &str, records: &[RecentRecordView]) -> 
             let diff = record.diff_category.as_deref().unwrap_or("Unknown");
             let level = record.level.as_deref().unwrap_or("N/A");
             let level = format_level_with_internal(level, record.internal_level);
+            let rating = format_rating_points_suffix(record.rating_points);
             let mut embed = embed_base(&track).description(format!(
-                "**{}** [{}] {diff} {level} — {achv} • {rank}",
+                "**{}** [{}] {diff} {level} — {achv} • {rank}{rating}",
                 record.title, record.chart_type
             ));
             if let Some(played_at) = record.played_at.as_deref() {
@@ -870,7 +882,18 @@ async fn mai_score(
         candidates[idx].clone()
     };
 
-    let rows = sqlx::query_as::<_, (String, String, String, String, Option<f64>, Option<String>)>(
+    let rows = sqlx::query_as::<
+        _,
+        (
+            String,
+            String,
+            String,
+            String,
+            Option<f64>,
+            Option<String>,
+            Option<String>,
+        ),
+    >(
         r#"
         SELECT
             sc.title,
@@ -878,7 +901,8 @@ async fn mai_score(
             sc.diff_category,
             sc.level,
             sc.achievement_x10000 / 10000.0 as achievement_percent,
-            sc.rank
+            sc.rank,
+            sc.fc
         FROM scores sc
         WHERE sc.title = ?
           AND sc.achievement_x10000 IS NOT NULL
@@ -916,16 +940,24 @@ async fn mai_score(
 
     let mut grouped = std::collections::BTreeMap::<
         String,
-        Vec<(String, String, String, Option<f64>, Option<String>)>,
+        Vec<(
+            String,
+            String,
+            String,
+            Option<f64>,
+            Option<String>,
+            Option<String>,
+        )>,
     >::new();
 
-    for (title, chart_type, diff_category, level, achievement, rank) in rows {
+    for (title, chart_type, diff_category, level, achievement, rank, fc) in rows {
         grouped.entry(title).or_default().push((
             chart_type,
             diff_category,
             level,
             achievement,
             rank,
+            fc,
         ));
     }
 
@@ -941,20 +973,27 @@ async fn mai_score(
 
     let score_entries = entries
         .into_iter()
-        .map(|(chart_type, diff_category, level, achievement, rank)| {
-            let internal_level =
-                ctx.data().song_data.as_ref().and_then(|idx| {
+        .map(
+            |(chart_type, diff_category, level, achievement, rank, fc)| {
+                let internal_level = ctx.data().song_data.as_ref().and_then(|idx| {
                     idx.internal_level(&matched_title, &chart_type, &diff_category)
                 });
-            ScoreRowView {
-                chart_type,
-                diff_category,
-                level,
-                internal_level,
-                achievement_percent: achievement,
-                rank,
-            }
-        })
+                let rating_points = internal_level.and_then(|internal| {
+                    let ach = achievement?;
+                    let ap = is_ap_like(fc.as_deref());
+                    Some(chart_rating_points(internal as f64, ach, ap))
+                });
+                ScoreRowView {
+                    chart_type,
+                    diff_category,
+                    level,
+                    internal_level,
+                    rating_points,
+                    achievement_percent: achievement,
+                    rank,
+                }
+            },
+        )
         .collect::<Vec<_>>();
 
     let jacket_url = fetch_jacket_url_for_title(ctx.data(), &matched_title)
@@ -1043,6 +1082,7 @@ async fn mai_recent(ctx: Context<'_>) -> Result<(), Error> {
             Option<String>,
             Option<f64>,
             Option<String>,
+            Option<String>,
         ),
     >(
         r#"
@@ -1055,7 +1095,8 @@ async fn mai_recent(ctx: Context<'_>) -> Result<(), Error> {
             pl.diff_category,
             pl.level,
             pl.achievement_x10000 / 10000.0 as achievement_percent,
-            pl.score_rank
+            pl.score_rank,
+            pl.fc
         FROM playlogs pl
         WHERE pl.played_at_unixtime IS NOT NULL
         ORDER BY pl.played_at DESC
@@ -1091,11 +1132,17 @@ async fn mai_recent(ctx: Context<'_>) -> Result<(), Error> {
                 level,
                 achievement,
                 rank,
+                fc,
             )| {
                 let internal_level = diff_category.as_deref().and_then(|diff| {
                     song_data
                         .as_ref()
                         .and_then(|idx| idx.internal_level(&title, &chart_type, diff))
+                });
+                let rating_points = internal_level.and_then(|internal| {
+                    let ach = achievement?;
+                    let ap = is_ap_like(fc.as_deref());
+                    Some(chart_rating_points(internal as f64, ach, ap))
                 });
                 RecentRecordView {
                     track,
@@ -1105,6 +1152,7 @@ async fn mai_recent(ctx: Context<'_>) -> Result<(), Error> {
                     diff_category,
                     level,
                     internal_level,
+                    rating_points,
                     achievement_percent: achievement,
                     rank,
                     jacket_url,
@@ -1117,6 +1165,164 @@ async fn mai_recent(ctx: Context<'_>) -> Result<(), Error> {
 
     ctx.send(CreateReply {
         embeds,
+        ..Default::default()
+    })
+    .await?;
+
+    Ok(())
+}
+
+/// Show rating breakdown (CiRCLE baseline)
+#[poise::command(slash_command, rename = "mai-rating")]
+async fn mai_rating(ctx: Context<'_>) -> Result<(), Error> {
+    ctx.defer().await?;
+
+    let Some(song_data) = ctx.data().song_data.as_ref() else {
+        ctx.send(
+            CreateReply::default().embed(
+                embed_base("song_data.json not loaded")
+                    .description("Cannot compute rating without song metadata."),
+            ),
+        )
+        .await?;
+        return Ok(());
+    };
+
+    let rows = sqlx::query_as::<
+        _,
+        (
+            String,
+            String,
+            String,
+            String,
+            Option<f64>,
+            Option<String>,
+            Option<String>,
+        ),
+    >(
+        r#"
+        SELECT
+            sc.title,
+            sc.chart_type,
+            sc.diff_category,
+            sc.level,
+            sc.achievement_x10000 / 10000.0 as achievement_percent,
+            sc.rank,
+            sc.fc
+        FROM scores sc
+        WHERE sc.achievement_x10000 IS NOT NULL
+        "#,
+    )
+    .fetch_all(&ctx.data().db)
+    .await
+    .map_err(|e| eyre::eyre!("query failed: {}", e))?;
+
+    #[derive(Debug, Clone)]
+    struct RatedRow {
+        bucket: SongBucket,
+        title: String,
+        chart_type: String,
+        diff_category: String,
+        level: String,
+        internal_level: f32,
+        achievement_percent: f64,
+        rank: Option<String>,
+        rating_points: u32,
+    }
+
+    let mut missing_internal = 0usize;
+    let mut missing_bucket = 0usize;
+    let mut out_rows = Vec::new();
+
+    for (title, chart_type, diff_category, level, achievement, rank, fc) in rows {
+        let Some(achievement) = achievement else {
+            continue;
+        };
+        let Some(bucket) = song_data.bucket(&title) else {
+            missing_bucket += 1;
+            continue;
+        };
+        let Some(internal_level) = song_data.internal_level(&title, &chart_type, &diff_category)
+        else {
+            missing_internal += 1;
+            continue;
+        };
+
+        let ap = is_ap_like(fc.as_deref());
+        let rating_points = chart_rating_points(internal_level as f64, achievement, ap);
+
+        out_rows.push(RatedRow {
+            bucket,
+            title,
+            chart_type,
+            diff_category,
+            level,
+            internal_level,
+            achievement_percent: achievement,
+            rank,
+            rating_points,
+        });
+    }
+
+    let mut new_rows = out_rows
+        .iter()
+        .filter(|r| r.bucket == SongBucket::New)
+        .cloned()
+        .collect::<Vec<_>>();
+    let mut old_rows = out_rows
+        .iter()
+        .filter(|r| r.bucket == SongBucket::Old)
+        .cloned()
+        .collect::<Vec<_>>();
+
+    new_rows.sort_by_key(|r| std::cmp::Reverse(r.rating_points));
+    old_rows.sort_by_key(|r| std::cmp::Reverse(r.rating_points));
+
+    let new_rows = new_rows.into_iter().take(15).collect::<Vec<_>>();
+    let old_rows = old_rows.into_iter().take(35).collect::<Vec<_>>();
+
+    let new_sum = new_rows.iter().map(|r| r.rating_points).sum::<u32>();
+    let old_sum = old_rows.iter().map(|r| r.rating_points).sum::<u32>();
+    let total = new_sum.saturating_add(old_sum);
+
+    fn list_desc(rows: &[RatedRow]) -> String {
+        let mut out = String::new();
+        for r in rows {
+            let rank = r.rank.as_deref().unwrap_or("N/A");
+            let level = format_level_with_internal(&r.level, Some(r.internal_level));
+            out.push_str(&format!(
+                "- `{:>3}` {} [{}] {} {} — {:.4}% • {}\n",
+                r.rating_points,
+                r.title,
+                r.chart_type,
+                r.diff_category,
+                level,
+                r.achievement_percent,
+                rank
+            ));
+        }
+        out
+    }
+
+    let mut summary = embed_base(&format!("{}'s rating", display_user_name(&ctx).await))
+        .field("Computed", total.to_string(), true)
+        .field("NEW 15", new_sum.to_string(), true)
+        .field("OLD 35", old_sum.to_string(), true);
+    if missing_internal > 0 || missing_bucket > 0 {
+        summary = summary.field(
+            "Notes",
+            format!(
+                "missing internal level: {missing_internal}\nmissing song version: {missing_bucket}"
+            ),
+            false,
+        );
+    }
+
+    let new_embed = embed_base("NEW 15").description(list_desc(&new_rows));
+    let old_embed = embed_base("OLD 35").description(list_desc(&old_rows));
+
+    ctx.send(CreateReply {
+        embeds: vec![summary, new_embed, old_embed],
         ..Default::default()
     })
     .await?;
