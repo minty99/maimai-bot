@@ -149,6 +149,10 @@ pub enum CrawlCommand {
 pub enum DbCommand {
     #[command(about = "Create DB file and run migrations")]
     Init,
+    #[command(
+        about = "Rebuild DB from scratch (clear tables, sync scores + recent, store player snapshot)"
+    )]
+    Build,
     #[command(about = "Fetch scores from maimai DX NET and upsert into DB")]
     SyncScores {
         #[arg(

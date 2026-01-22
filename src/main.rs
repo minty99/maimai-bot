@@ -10,6 +10,9 @@ use maimai_bot::http::MaimaiClient;
 use maimai_bot::maimai::parse::player_data::parse_player_data_html;
 use maimai_bot::maimai::parse::recent::parse_recent_html;
 use maimai_bot::maimai::parse::score_list::parse_scores_html;
+
+const STATE_KEY_TOTAL_PLAY_COUNT: &str = "player.total_play_count";
+const STATE_KEY_RATING: &str = "player.rating";
 use maimai_bot::maimai::parse::song_detail::parse_song_detail_html;
 use reqwest::Url;
 
@@ -168,6 +171,78 @@ async fn main() -> eyre::Result<()> {
                 let pool = db::connect(&args.db_path).await.wrap_err("connect db")?;
                 db::migrate(&pool).await.wrap_err("migrate db")?;
                 println!("db_init=ok path={}", args.db_path.display());
+            }
+            DbCommand::Build => {
+                client
+                    .ensure_logged_in()
+                    .await
+                    .wrap_err("ensure logged in")?;
+                ensure_parent_dir(&args.db_path).wrap_err("create db parent directory")?;
+                let pool = db::connect(&args.db_path).await.wrap_err("connect db")?;
+                db::migrate(&pool).await.wrap_err("migrate db")?;
+
+                db::clear_scores(&pool).await.wrap_err("clear scores")?;
+                db::clear_playlogs(&pool).await.wrap_err("clear playlogs")?;
+                db::clear_app_state(&pool)
+                    .await
+                    .wrap_err("clear app_state")?;
+
+                let player_data = {
+                    let url = player_data_url()?;
+                    let bytes = client
+                        .get_bytes(&url)
+                        .await
+                        .wrap_err("fetch playerData url")?;
+                    let html =
+                        String::from_utf8(bytes).wrap_err("playerData response is not utf-8")?;
+                    parse_player_data_html(&html).wrap_err("parse playerData html")?
+                };
+
+                // Sync scores (all diffs).
+                let scraped_at = unix_timestamp();
+                let mut all_scores = Vec::new();
+                for diff in [0u8, 1, 2, 3, 4] {
+                    let url = scores_url(diff)?;
+                    let bytes = client.get_bytes(&url).await.wrap_err("fetch scores url")?;
+                    let html = String::from_utf8(bytes).wrap_err("scores response is not utf-8")?;
+                    let mut entries =
+                        parse_scores_html(&html, diff).wrap_err("parse scores html")?;
+                    all_scores.append(&mut entries);
+                }
+                let scores_count = all_scores.len();
+                db::upsert_scores(&pool, scraped_at, &all_scores)
+                    .await
+                    .wrap_err("upsert scores")?;
+
+                // Sync recent (latest ~50).
+                let url = record_url()?;
+                let bytes = client.get_bytes(&url).await.wrap_err("fetch record url")?;
+                let html = String::from_utf8(bytes).wrap_err("record response is not utf-8")?;
+                let playlogs = parse_recent_html(&html).wrap_err("parse recent html")?;
+                let playlogs_total = playlogs.len();
+                let playlogs_with_key = playlogs
+                    .iter()
+                    .filter(|e| e.played_at_unixtime.is_some())
+                    .count();
+                db::upsert_playlogs(&pool, scraped_at, &playlogs)
+                    .await
+                    .wrap_err("insert playlogs")?;
+
+                db::set_app_state_u32(
+                    &pool,
+                    STATE_KEY_TOTAL_PLAY_COUNT,
+                    player_data.total_play_count,
+                    scraped_at,
+                )
+                .await
+                .wrap_err("store total play count")?;
+                db::set_app_state_u32(&pool, STATE_KEY_RATING, player_data.rating, scraped_at)
+                    .await
+                    .wrap_err("store rating")?;
+
+                println!(
+                    "db_build=ok scores={scores_count} playlogs_total={playlogs_total} playlogs_with_key={playlogs_with_key}"
+                );
             }
             DbCommand::SyncScores { diff } => {
                 client
