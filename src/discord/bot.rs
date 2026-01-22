@@ -382,7 +382,7 @@ fn format_level_with_internal(level: &str, internal_level: Option<f32>) -> Strin
 
 fn format_rating_points_suffix(rating_points: Option<u32>) -> String {
     match rating_points {
-        Some(v) => format!(" • r{v}"),
+        Some(v) => format!(" • {v}pt"),
         None => String::new(),
     }
 }
@@ -1291,7 +1291,7 @@ async fn mai_rating(ctx: Context<'_>) -> Result<(), Error> {
             let rank = r.rank.as_deref().unwrap_or("N/A");
             let level = format_level_with_internal(&r.level, Some(r.internal_level));
             out.push_str(&format!(
-                "- `{:>3}` {} [{}] {} {} — {:.4}% • {}\n",
+                "- `{:>3}pt` {} [{}] {} {} — {:.4}% • {}\n",
                 r.rating_points,
                 r.title,
                 r.chart_type,
