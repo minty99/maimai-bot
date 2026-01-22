@@ -54,10 +54,10 @@ pub async fn upsert_playlogs(
     let mut tx = pool.begin().await.wrap_err("begin transaction")?;
 
     for entry in entries {
-        let Some(playlog_idx) = entry.playlog_idx.as_deref() else {
+        let Some(played_at_unixtime) = entry.played_at_unixtime else {
             continue;
         };
-        upsert_playlog(&mut tx, scraped_at, playlog_idx, entry).await?;
+        insert_playlog(&mut tx, scraped_at, played_at_unixtime, entry).await?;
     }
 
     tx.commit().await.wrap_err("commit transaction")?;
@@ -169,10 +169,10 @@ async fn upsert_score(
     Ok(())
 }
 
-async fn upsert_playlog(
+async fn insert_playlog(
     tx: &mut sqlx::Transaction<'_, Sqlite>,
     scraped_at: i64,
-    playlog_idx: &str,
+    played_at_unixtime: i64,
     entry: &ParsedPlayRecord,
 ) -> eyre::Result<()> {
     let achievement_x10000 = percent_to_x10000(entry.achievement_percent);
@@ -182,7 +182,7 @@ async fn upsert_playlog(
     sqlx::query(
         r#"
 	INSERT INTO playlogs (
-	  playlog_idx,
+	  played_at_unixtime,
 	  played_at, track, credit_play_count,
 	  title, jacket_url, chart_type, diff_category, level,
 	  achievement_x10000, achievement_new_record, first_play,
@@ -191,27 +191,10 @@ async fn upsert_playlog(
 	  scraped_at
 	)
 	VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18)
-	ON CONFLICT(playlog_idx) DO UPDATE SET
-	  played_at = excluded.played_at,
-	  track = excluded.track,
-	  credit_play_count = excluded.credit_play_count,
-	  title = excluded.title,
-	  jacket_url = excluded.jacket_url,
-	  chart_type = excluded.chart_type,
-	  diff_category = excluded.diff_category,
-	  level = excluded.level,
-	  achievement_x10000 = excluded.achievement_x10000,
-	  achievement_new_record = excluded.achievement_new_record,
-	  first_play = excluded.first_play,
-	  score_rank = excluded.score_rank,
-	  fc = excluded.fc,
-	  sync = excluded.sync,
-	  dx_score = excluded.dx_score,
-	  dx_score_max = excluded.dx_score_max,
-	  scraped_at = excluded.scraped_at
+	ON CONFLICT(played_at_unixtime) DO NOTHING
 	"#,
     )
-    .bind(playlog_idx)
+    .bind(played_at_unixtime)
     .bind(entry.played_at.as_deref())
     .bind(entry.track.map(i64::from))
     .bind(entry.credit_play_count.map(i64::from))
@@ -231,7 +214,7 @@ async fn upsert_playlog(
     .bind(scraped_at)
     .execute(&mut **tx)
     .await
-    .wrap_err("upsert playlogs")?;
+    .wrap_err("insert playlogs")?;
     Ok(())
 }
 
