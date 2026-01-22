@@ -1,0 +1,138 @@
+use eyre::WrapErr;
+use serde::Deserialize;
+use std::collections::HashMap;
+use std::fs::File;
+use std::io::BufReader;
+use std::path::{Path, PathBuf};
+
+use crate::config::AppConfig;
+
+#[derive(Debug, Clone)]
+pub struct SongDataIndex {
+    map: HashMap<SongKey, f32>,
+}
+
+#[derive(Debug, Clone, Hash, PartialEq, Eq)]
+struct SongKey {
+    title_norm: String,
+    chart_type: String,
+    diff_category: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct SongDataRoot {
+    songs: Vec<SongDataSong>,
+}
+
+#[derive(Debug, Deserialize)]
+struct SongDataSong {
+    title: String,
+    sheets: Vec<SongDataSheet>,
+}
+
+#[derive(Debug, Deserialize)]
+struct SongDataSheet {
+    #[serde(rename = "type")]
+    sheet_type: String,
+    difficulty: String,
+    #[serde(rename = "internalLevel")]
+    internal_level: Option<String>,
+}
+
+impl SongDataIndex {
+    pub fn load_from_default_locations(config: &AppConfig) -> eyre::Result<Option<Self>> {
+        let cwd_path = PathBuf::from("song_data.json");
+        if let Some(idx) = Self::load_from_path(&cwd_path)? {
+            return Ok(Some(idx));
+        }
+
+        let data_dir_path = config.data_dir.join("song_data.json");
+        Self::load_from_path(&data_dir_path)
+    }
+
+    pub fn load_from_path(path: &Path) -> eyre::Result<Option<Self>> {
+        if !path.exists() {
+            return Ok(None);
+        }
+
+        let file = File::open(path).wrap_err("open song_data.json")?;
+        let reader = BufReader::new(file);
+        let root: SongDataRoot =
+            serde_json::from_reader(reader).wrap_err("parse song_data.json")?;
+        Ok(Some(Self::from_root(root)))
+    }
+
+    pub fn internal_level(
+        &self,
+        title: &str,
+        chart_type: &str,
+        diff_category: &str,
+    ) -> Option<f32> {
+        let key = SongKey {
+            title_norm: normalize_title(title),
+            chart_type: chart_type.to_string(),
+            diff_category: diff_category.to_string(),
+        };
+        self.map.get(&key).copied()
+    }
+
+    fn from_root(root: SongDataRoot) -> Self {
+        let mut map = HashMap::new();
+
+        for song in root.songs {
+            let title_norm = normalize_title(&song.title);
+            for sheet in song.sheets {
+                let Some(internal_raw) = sheet.internal_level else {
+                    continue;
+                };
+                let Ok(internal) = internal_raw.parse::<f32>() else {
+                    continue;
+                };
+
+                let Some(chart_type) = map_chart_type(&sheet.sheet_type) else {
+                    continue;
+                };
+                let Some(diff_category) = map_diff_category(&sheet.difficulty) else {
+                    continue;
+                };
+
+                map.insert(
+                    SongKey {
+                        title_norm: title_norm.clone(),
+                        chart_type: chart_type.to_string(),
+                        diff_category: diff_category.to_string(),
+                    },
+                    internal,
+                );
+            }
+        }
+
+        Self { map }
+    }
+}
+
+fn normalize_title(s: &str) -> String {
+    s.to_ascii_lowercase()
+        .chars()
+        .filter(|c| !c.is_whitespace())
+        .collect::<String>()
+}
+
+fn map_chart_type(sheet_type: &str) -> Option<&'static str> {
+    match sheet_type.trim().to_ascii_lowercase().as_str() {
+        "std" => Some("STD"),
+        "dx" => Some("DX"),
+        _ => None,
+    }
+}
+
+fn map_diff_category(difficulty: &str) -> Option<&'static str> {
+    match difficulty.trim().to_ascii_lowercase().as_str() {
+        "basic" => Some("BASIC"),
+        "advanced" => Some("ADVANCED"),
+        "expert" => Some("EXPERT"),
+        "master" => Some("MASTER"),
+        "remaster" => Some("Re:MASTER"),
+        _ => None,
+    }
+}
