@@ -8,7 +8,7 @@ use std::time::Duration;
 use time::{Duration as TimeDuration, OffsetDateTime, UtcOffset};
 use tokio::sync::RwLock;
 use tokio::time::interval;
-use tracing::{debug, error, info};
+use tracing::{debug, error, info, warn};
 
 use crate::config::AppConfig;
 use crate::db;
@@ -20,6 +20,7 @@ use crate::maimai::parse::player_data::parse_player_data_html;
 use crate::maimai::parse::recent::parse_recent_html;
 use crate::maimai::parse::score_list::parse_scores_html;
 use crate::maimai::parse::song_detail::parse_song_detail_html;
+use crate::song_data::SongDataIndex;
 
 type Context<'a> = poise::Context<'a, BotData, Error>;
 type Error = eyre::Report;
@@ -37,6 +38,7 @@ pub struct BotData {
     pub discord_user_id: serenity::UserId,
     pub discord_http: Arc<serenity::Http>,
     pub maimai_user_name: Arc<RwLock<String>>,
+    pub song_data: Option<Arc<SongDataIndex>>,
 }
 
 pub async fn run_bot(config: AppConfig, db_path: std::path::PathBuf) -> Result<()> {
@@ -68,6 +70,14 @@ pub async fn run_bot(config: AppConfig, db_path: std::path::PathBuf) -> Result<(
             .wrap_err("parse DISCORD_USER_ID")?,
     );
 
+    let song_data = match SongDataIndex::load_from_default_locations(&config) {
+        Ok(v) => v.map(Arc::new),
+        Err(e) => {
+            warn!("failed to load song_data.json (non-fatal): {e:?}");
+            None
+        }
+    };
+
     let bot_data = BotData {
         db: pool,
         maimai_client,
@@ -75,6 +85,7 @@ pub async fn run_bot(config: AppConfig, db_path: std::path::PathBuf) -> Result<(
         discord_user_id,
         discord_http,
         maimai_user_name: Arc::new(RwLock::new(String::new())),
+        song_data,
     };
 
     let framework = poise::Framework::builder()
@@ -340,6 +351,7 @@ struct RecentRecordView {
     chart_type: String,
     diff_category: Option<String>,
     level: Option<String>,
+    internal_level: Option<f32>,
     achievement_percent: Option<f64>,
     rank: Option<String>,
     jacket_url: Option<String>,
@@ -350,8 +362,19 @@ struct ScoreRowView {
     chart_type: String,
     diff_category: String,
     level: String,
+    internal_level: Option<f32>,
     achievement_percent: Option<f64>,
     rank: Option<String>,
+}
+
+fn format_level_with_internal(level: &str, internal_level: Option<f32>) -> String {
+    if level == "N/A" {
+        return level.to_string();
+    }
+    match internal_level {
+        Some(v) => format!("{level} ({v:.1})"),
+        None => level.to_string(),
+    }
 }
 
 fn build_mai_score_embed(
@@ -366,9 +389,10 @@ fn build_mai_score_embed(
     for entry in entries {
         let achv = format_percent_f64(entry.achievement_percent);
         let rank = entry.rank.as_deref().unwrap_or("N/A");
+        let level = format_level_with_internal(&entry.level, entry.internal_level);
         desc.push_str(&format!(
             "- [{}] {} {} — {} • {}\n",
-            entry.chart_type, entry.diff_category, entry.level, achv, rank
+            entry.chart_type, entry.diff_category, level, achv, rank
         ));
     }
 
@@ -392,6 +416,7 @@ fn build_mai_recent_embeds(display_name: &str, records: &[RecentRecordView]) -> 
                 .unwrap_or("N/A");
             let diff = record.diff_category.as_deref().unwrap_or("Unknown");
             let level = record.level.as_deref().unwrap_or("N/A");
+            let level = format_level_with_internal(level, record.internal_level);
             let mut embed = embed_base(&track).description(format!(
                 "**{}** [{}] {diff} {level} — {achv} • {rank}",
                 record.title, record.chart_type
@@ -916,15 +941,20 @@ async fn mai_score(
 
     let score_entries = entries
         .into_iter()
-        .map(
-            |(chart_type, diff_category, level, achievement, rank)| ScoreRowView {
+        .map(|(chart_type, diff_category, level, achievement, rank)| {
+            let internal_level =
+                ctx.data().song_data.as_ref().and_then(|idx| {
+                    idx.internal_level(&matched_title, &chart_type, &diff_category)
+                });
+            ScoreRowView {
                 chart_type,
                 diff_category,
                 level,
+                internal_level,
                 achievement_percent: achievement,
                 rank,
-            },
-        )
+            }
+        })
         .collect::<Vec<_>>();
 
     let jacket_url = fetch_jacket_url_for_title(ctx.data(), &matched_title)
@@ -1046,6 +1076,8 @@ async fn mai_recent(ctx: Context<'_>) -> Result<(), Error> {
     let mut recent = rows.into_iter().take(take).collect::<Vec<_>>();
     recent.reverse();
 
+    let song_data = ctx.data().song_data.clone();
+
     let records = recent
         .into_iter()
         .map(
@@ -1059,16 +1091,24 @@ async fn mai_recent(ctx: Context<'_>) -> Result<(), Error> {
                 level,
                 achievement,
                 rank,
-            )| RecentRecordView {
-                track,
-                played_at,
-                title,
-                chart_type,
-                diff_category,
-                level,
-                achievement_percent: achievement,
-                rank,
-                jacket_url,
+            )| {
+                let internal_level = diff_category.as_deref().and_then(|diff| {
+                    song_data
+                        .as_ref()
+                        .and_then(|idx| idx.internal_level(&title, &chart_type, diff))
+                });
+                RecentRecordView {
+                    track,
+                    played_at,
+                    title,
+                    chart_type,
+                    diff_category,
+                    level,
+                    internal_level,
+                    achievement_percent: achievement,
+                    rank,
+                    jacket_url,
+                }
             },
         )
         .collect::<Vec<_>>();

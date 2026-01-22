@@ -24,6 +24,7 @@ async fn preview_embed_mai_score_dm() -> eyre::Result<()> {
             chart_type: "STD".to_string(),
             diff_category: "EXPERT".to_string(),
             level: "12+".to_string(),
+            internal_level: Some(12.8),
             achievement_percent: Some(99.1234),
             rank: Some("SSS".to_string()),
         },
@@ -31,6 +32,7 @@ async fn preview_embed_mai_score_dm() -> eyre::Result<()> {
             chart_type: "DX".to_string(),
             diff_category: "MASTER".to_string(),
             level: "13".to_string(),
+            internal_level: None,
             achievement_percent: Some(100.0000),
             rank: Some("SSS+".to_string()),
         },
@@ -80,6 +82,7 @@ async fn preview_embed_mai_recent_dm() -> eyre::Result<()> {
             chart_type: "STD".to_string(),
             diff_category: Some("EXPERT".to_string()),
             level: Some("12+".to_string()),
+            internal_level: Some(12.8),
             achievement_percent: Some(98.7654),
             rank: Some("SS".to_string()),
             jacket_url: Some(
@@ -93,6 +96,7 @@ async fn preview_embed_mai_recent_dm() -> eyre::Result<()> {
             chart_type: "DX".to_string(),
             diff_category: Some("MASTER".to_string()),
             level: Some("14".to_string()),
+            internal_level: None,
             achievement_percent: Some(100.0000),
             rank: Some("SSS+".to_string()),
             jacket_url: Some(
