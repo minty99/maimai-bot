@@ -240,6 +240,7 @@ fn embed_player_update(
     player: &ParsedPlayerData,
     prev_total: Option<u32>,
     prev_rating: Option<u32>,
+    song_data: Option<&SongDataIndex>,
     credit_entries: &[ParsedPlayRecord],
 ) -> CreateEmbed {
     let mut e = embed_base("New plays detected")
@@ -262,6 +263,7 @@ fn embed_player_update(
                 level: r.level.clone(),
                 achievement_percent: r.achievement_percent.map(|p| p as f64),
                 rank: r.score_rank.map(|rk| rk.as_str().to_string()),
+                rating_points: rating_points_for_credit_entry(song_data, r),
             })
             .collect::<Vec<_>>();
 
@@ -281,6 +283,7 @@ struct CreditRecordView {
     level: Option<String>,
     achievement_percent: Option<f64>,
     rank: Option<String>,
+    rating_points: Option<u32>,
 }
 
 #[derive(Debug, Clone)]
@@ -423,15 +426,32 @@ fn format_credit_description(records: &[CreditRecordView]) -> String {
             .unwrap_or("N/A");
         let diff = r.diff_category.as_deref().unwrap_or("Unknown");
         let level = r.level.as_deref().unwrap_or("N/A");
+        let rating = format_rating_points_suffix(r.rating_points);
 
         desc.push_str(&format!("**{track}**\n"));
         desc.push_str(&format!(
-            "**{}** [{}] {diff} {level} — {achv} • {rank}\n\n",
+            "**{}** [{}] {diff} {level} — {achv} • {rank}{rating}\n\n",
             r.title, r.chart_type
         ));
     }
 
     desc
+}
+
+fn rating_points_for_credit_entry(
+    song_data: Option<&SongDataIndex>,
+    entry: &ParsedPlayRecord,
+) -> Option<u32> {
+    let song_data = song_data?;
+    let diff_category = entry.diff_category?;
+    let achievement = entry.achievement_percent? as f64;
+
+    let chart_type = format_chart_type(entry.chart_type);
+    let internal_level =
+        song_data.internal_level(&entry.title, chart_type, diff_category.as_str())?;
+
+    let ap = is_ap_like(entry.fc.map(|v| v.as_str()));
+    Some(chart_rating_points(internal_level as f64, achievement, ap))
 }
 
 async fn initial_scores_sync(bot_data: &BotData) -> Result<()> {
@@ -1080,6 +1100,7 @@ async fn send_player_update_dm(
                 current,
                 prev_total,
                 prev_rating,
+                bot_data.song_data.as_deref(),
                 credit_entries,
             )),
         )
@@ -1216,6 +1237,7 @@ mod tests {
                     &player,
                     Some(889),
                     Some(12340),
+                    None,
                     &credit_entries,
                 )),
             )
