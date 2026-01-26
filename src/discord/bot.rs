@@ -19,7 +19,6 @@ use crate::maimai::models::{ParsedPlayRecord, ParsedPlayerData};
 use crate::maimai::parse::player_data::parse_player_data_html;
 use crate::maimai::parse::recent::parse_recent_html;
 use crate::maimai::parse::score_list::parse_scores_html;
-use crate::maimai::parse::song_detail::parse_song_detail_html;
 use crate::maimai::rating::{chart_rating_points, is_ap_like};
 use crate::song_data::{SongBucket, SongDataIndex};
 
@@ -237,66 +236,6 @@ fn embed_startup(player: &ParsedPlayerData) -> CreateEmbed {
         .field("Play count", play_count, true)
 }
 
-fn song_detail_url(idx: &str) -> Result<Url> {
-    let mut url = Url::parse("https://maimaidx-eng.com/maimai-mobile/record/musicDetail/")
-        .wrap_err("parse song detail base url")?;
-    url.query_pairs_mut().append_pair("idx", idx);
-    Ok(url)
-}
-
-async fn fetch_jacket_url_for_title(bot_data: &BotData, title: &str) -> Result<Option<String>> {
-    let existing = sqlx::query_scalar::<_, String>(
-        "SELECT jacket_url FROM scores WHERE title = ? AND jacket_url IS NOT NULL LIMIT 1",
-    )
-    .bind(title)
-    .fetch_optional(&bot_data.db)
-    .await
-    .wrap_err("query existing jacket url")?;
-
-    if existing.is_some() {
-        return Ok(existing);
-    }
-
-    let source_idx = sqlx::query_scalar::<_, String>(
-        "SELECT source_idx FROM scores WHERE title = ? AND source_idx IS NOT NULL LIMIT 1",
-    )
-    .bind(title)
-    .fetch_optional(&bot_data.db)
-    .await
-    .wrap_err("query source idx")?;
-
-    let Some(source_idx) = source_idx else {
-        return Ok(None);
-    };
-
-    let mut client = MaimaiClient::new(&bot_data.config).wrap_err("create HTTP client")?;
-    client
-        .ensure_logged_in()
-        .await
-        .wrap_err("ensure logged in")?;
-
-    let url = song_detail_url(&source_idx)?;
-    let bytes = client
-        .get_bytes(&url)
-        .await
-        .wrap_err("fetch song detail url")?;
-    let html = String::from_utf8(bytes).wrap_err("song detail response is not utf-8")?;
-    let parsed = parse_song_detail_html(&html).wrap_err("parse song detail html")?;
-
-    let Some(jacket_url) = parsed.jacket_url else {
-        return Ok(None);
-    };
-
-    sqlx::query("UPDATE scores SET jacket_url = ? WHERE title = ?")
-        .bind(&jacket_url)
-        .bind(title)
-        .execute(&bot_data.db)
-        .await
-        .wrap_err("update jacket url")?;
-
-    Ok(Some(jacket_url))
-}
-
 fn embed_player_update(
     player: &ParsedPlayerData,
     prev_total: Option<u32>,
@@ -356,7 +295,6 @@ struct RecentRecordView {
     rating_points: Option<u32>,
     achievement_percent: Option<f64>,
     rank: Option<String>,
-    jacket_url: Option<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -391,7 +329,6 @@ fn build_mai_score_embed(
     display_name: &str,
     title: &str,
     entries: &[ScoreRowView],
-    jacket_url: Option<&str>,
 ) -> CreateEmbed {
     let mut desc = String::new();
     desc.push_str(&format!("**{}**\n\n", title));
@@ -407,11 +344,7 @@ fn build_mai_score_embed(
         ));
     }
 
-    let mut embed = embed_base(&format!("{}'s scores", display_name)).description(desc);
-    if let Some(url) = jacket_url {
-        embed = embed.thumbnail(url);
-    }
-    embed
+    embed_base(&format!("{}'s scores", display_name)).description(desc)
 }
 
 fn build_mai_recent_embeds(display_name: &str, records: &[RecentRecordView]) -> Vec<CreateEmbed> {
@@ -435,9 +368,6 @@ fn build_mai_recent_embeds(display_name: &str, records: &[RecentRecordView]) -> 
             ));
             if let Some(played_at) = record.played_at.as_deref() {
                 embed = embed.field("Played at", played_at, false);
-            }
-            if let Some(url) = record.jacket_url.as_deref() {
-                embed = embed.thumbnail(url);
             }
             let _ = display_name;
             embed
@@ -996,15 +926,10 @@ async fn mai_score(
         )
         .collect::<Vec<_>>();
 
-    let jacket_url = fetch_jacket_url_for_title(ctx.data(), &matched_title)
-        .await
-        .wrap_err("fetch jacket url")?;
-
     let embed = build_mai_score_embed(
         &display_user_name(&ctx).await,
         &matched_title,
         &score_entries,
-        jacket_url.as_deref(),
     );
 
     ctx.send(CreateReply::default().embed(embed)).await?;
@@ -1074,7 +999,6 @@ async fn mai_recent(ctx: Context<'_>) -> Result<(), Error> {
         _,
         (
             String,
-            Option<String>,
             String,
             Option<i64>,
             Option<String>,
@@ -1088,7 +1012,6 @@ async fn mai_recent(ctx: Context<'_>) -> Result<(), Error> {
         r#"
         SELECT
             pl.title,
-            pl.jacket_url,
             pl.chart_type,
             pl.track,
             pl.played_at,
@@ -1113,7 +1036,7 @@ async fn mai_recent(ctx: Context<'_>) -> Result<(), Error> {
         return Ok(());
     }
 
-    let take = latest_credit_len(&rows.iter().map(|row| row.3).collect::<Vec<_>>());
+    let take = latest_credit_len(&rows.iter().map(|row| row.2).collect::<Vec<_>>());
     let mut recent = rows.into_iter().take(take).collect::<Vec<_>>();
     recent.reverse();
 
@@ -1124,7 +1047,6 @@ async fn mai_recent(ctx: Context<'_>) -> Result<(), Error> {
         .map(
             |(
                 title,
-                jacket_url,
                 chart_type,
                 track,
                 played_at,
@@ -1155,7 +1077,6 @@ async fn mai_recent(ctx: Context<'_>) -> Result<(), Error> {
                     rating_points,
                     achievement_percent: achievement,
                     rank,
-                    jacket_url,
                 }
             },
         )
@@ -1589,7 +1510,6 @@ mod tests {
                 played_at: Some("2026/01/20 12:34".to_string()),
                 credit_play_count: None,
                 title: "Sample Song A".to_string(),
-                jacket_url: None,
                 chart_type: ChartType::Std,
                 diff_category: Some(DifficultyCategory::Expert),
                 level: Some("12+".to_string()),
@@ -1608,7 +1528,6 @@ mod tests {
                 played_at: Some("2026/01/20 12:38".to_string()),
                 credit_play_count: None,
                 title: "Sample Song B".to_string(),
-                jacket_url: None,
                 chart_type: ChartType::Dx,
                 diff_category: Some(DifficultyCategory::Master),
                 level: Some("14".to_string()),

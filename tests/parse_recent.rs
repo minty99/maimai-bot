@@ -34,7 +34,6 @@ fn parse_recent_record_fixture() {
     assert!(entries.iter().any(|e| e.chart_type == ChartType::Std));
     assert!(entries.iter().any(|e| e.chart_type == ChartType::Dx));
     assert!(entries.iter().any(|e| e.achievement_new_record));
-    assert!(entries.iter().all(|e| e.jacket_url.is_some()));
 
     // Latest real record.html should contain at least one non-dummy FC and SYNC icon.
     assert!(entries.iter().any(|e| e.fc.is_some()));

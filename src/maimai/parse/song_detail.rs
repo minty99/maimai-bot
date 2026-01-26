@@ -30,12 +30,6 @@ pub fn parse_song_detail_html(html: &str) -> eyre::Result<ParsedSongDetail> {
         .find_map(parse_chart_type_from_icon_src)
         .unwrap_or(ChartType::Std);
 
-    let jacket_url = document
-        .select(&icon_selector)
-        .filter_map(|img| img.value().attr("src"))
-        .find(|src| src.contains("/img/Music/"))
-        .map(|src| src.to_string());
-
     let mut difficulties = Vec::new();
     for section in document.select(&detail_selector) {
         let Some(diff_category) = section.value().attr("id").and_then(diff_category_from_id) else {
@@ -106,7 +100,6 @@ pub fn parse_song_detail_html(html: &str) -> eyre::Result<ParsedSongDetail> {
 
     Ok(ParsedSongDetail {
         title,
-        jacket_url,
         chart_type: page_chart_type,
         difficulties,
     })

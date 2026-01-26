@@ -40,12 +40,7 @@ async fn preview_embed_mai_score_dm() -> eyre::Result<()> {
         },
     ];
 
-    let embed = build_mai_score_embed(
-        "maimai-user",
-        "Sample Song",
-        &entries,
-        Some("https://maimaidx-eng.com/maimai-mobile/img/Music/a98a61705b5d5c24.png"),
-    );
+    let embed = build_mai_score_embed("maimai-user", "Sample Song", &entries);
 
     let dm = user_id
         .create_dm_channel(&http)
@@ -88,9 +83,6 @@ async fn preview_embed_mai_recent_dm() -> eyre::Result<()> {
             rating_points: Some(303),
             achievement_percent: Some(98.7654),
             rank: Some("SS".to_string()),
-            jacket_url: Some(
-                "https://maimaidx-eng.com/maimai-mobile/img/Music/eda5cd3954117b53.png".to_string(),
-            ),
         },
         RecentRecordView {
             track: Some(2),
@@ -103,9 +95,6 @@ async fn preview_embed_mai_recent_dm() -> eyre::Result<()> {
             rating_points: None,
             achievement_percent: Some(100.0000),
             rank: Some("SSS+".to_string()),
-            jacket_url: Some(
-                "https://maimaidx-eng.com/maimai-mobile/img/Music/f94a0405d632630e.png".to_string(),
-            ),
         },
     ];
 

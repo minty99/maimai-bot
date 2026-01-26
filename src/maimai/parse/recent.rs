@@ -22,7 +22,6 @@ pub fn parse_recent_html(html: &str) -> eyre::Result<Vec<ParsedPlayRecord>> {
     let chart_type_selector = Selector::parse("img.playlog_music_kind_icon").unwrap();
     let idx_selector = Selector::parse(r#"input[name="idx"]"#).unwrap();
     let img_selector = Selector::parse("img").unwrap();
-    let jacket_selector = Selector::parse("img.music_img").unwrap();
 
     let mut out = Vec::new();
     for top in document.select(&top_selector) {
@@ -113,12 +112,6 @@ pub fn parse_recent_html(html: &str) -> eyre::Result<Vec<ParsedPlayRecord>> {
             .and_then(parse_chart_type_from_icon_src)
             .unwrap_or(ChartType::Std);
 
-        let jacket_url = entry
-            .select(&jacket_selector)
-            .next()
-            .and_then(|img| img.value().attr("src"))
-            .map(|src| src.to_string());
-
         let mut fc: Option<FcStatus> = None;
         let mut sync: Option<SyncStatus> = None;
         for img in entry.select(&img_selector) {
@@ -137,7 +130,6 @@ pub fn parse_recent_html(html: &str) -> eyre::Result<Vec<ParsedPlayRecord>> {
             played_at,
             credit_play_count: None,
             title,
-            jacket_url,
             chart_type,
             diff_category,
             level,
