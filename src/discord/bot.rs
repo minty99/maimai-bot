@@ -897,7 +897,7 @@ async fn mai_recent(ctx: Context<'_>) -> Result<(), Error> {
         .ok()
         .flatten();
 
-    // Fetch playerData to compute deltas for the recent UI.
+    // Fetch playerData + recent page to ensure latest results.
     let mut client = MaimaiClient::new(&ctx.data().config).wrap_err("create HTTP client")?;
     client
         .ensure_logged_in()
@@ -911,13 +911,58 @@ async fn mai_recent(ctx: Context<'_>) -> Result<(), Error> {
         play_count: Some(format_delta(player_data.total_play_count, prev_total)),
     };
 
-    let embeds = mai_commands::build_mai_recent_embeds_for_latest_credit(
-        &ctx.data().db,
-        ctx.data().song_data.as_deref(),
-        &display_name,
-        Some(&optional_fields),
-    )
-    .await?;
+    let recent_entries = fetch_recent_entries_logged_in(&client)
+        .await
+        .wrap_err("fetch recent")?;
+    let mut recent_entries =
+        annotate_recent_entries_with_play_count(recent_entries, player_data.total_play_count);
+    if prev_total.is_some() {
+        annotate_first_play_flags(&ctx.data().db, &mut recent_entries)
+            .await
+            .wrap_err("classify first plays")?;
+    }
+    if !recent_entries.is_empty() {
+        let scraped_at = unix_timestamp();
+        db::upsert_playlogs(&ctx.data().db, scraped_at, &recent_entries)
+            .await
+            .wrap_err("upsert playlogs")?;
+        persist_player_snapshot(&ctx.data().db, &player_data)
+            .await
+            .wrap_err("persist player snapshot")?;
+    }
+
+    let embeds = if recent_entries.is_empty() {
+        // Fallback to DB view if parsing did not yield a usable credit.
+        mai_commands::build_mai_recent_embeds_for_latest_credit(
+            &ctx.data().db,
+            ctx.data().song_data.as_deref(),
+            &display_name,
+            Some(&optional_fields),
+        )
+        .await?
+    } else {
+        let credit_entries = latest_credit_entries(&recent_entries);
+        let records = credit_entries
+            .iter()
+            .map(|r| RecentRecordView {
+                track: r.track.map(i64::from),
+                played_at: r.played_at.clone(),
+                title: r.title.clone(),
+                chart_type: format_chart_type(r.chart_type).to_string(),
+                diff_category: r.diff_category.map(|d| d.as_str().to_string()),
+                level: r.level.clone(),
+                internal_level: r.diff_category.and_then(|d| {
+                    ctx.data().song_data.as_deref().and_then(|idx| {
+                        idx.internal_level(&r.title, format_chart_type(r.chart_type), d.as_str())
+                    })
+                }),
+                rating_points: rating_points_for_credit_entry(ctx.data().song_data.as_deref(), r),
+                achievement_percent: r.achievement_percent.map(|p| p as f64),
+                rank: r.score_rank.map(|rk| rk.as_str().to_string()),
+            })
+            .collect::<Vec<_>>();
+        build_mai_recent_embeds(&display_name, &records, Some(&optional_fields))
+    };
 
     ctx.send(CreateReply {
         embeds,
