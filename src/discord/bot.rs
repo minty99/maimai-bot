@@ -236,54 +236,10 @@ fn embed_startup(player: &ParsedPlayerData) -> CreateEmbed {
         .field("Play count", play_count, true)
 }
 
-fn embed_player_update(
-    player: &ParsedPlayerData,
-    prev_total: Option<u32>,
-    prev_rating: Option<u32>,
-    song_data: Option<&SongDataIndex>,
-    credit_entries: &[ParsedPlayRecord],
-) -> CreateEmbed {
-    let mut e = embed_base("New plays detected")
-        .field("Rating", format_delta(player.rating, prev_rating), true)
-        .field(
-            "Play count",
-            format_delta(player.total_play_count, prev_total),
-            true,
-        );
-
-    if !credit_entries.is_empty() {
-        let records = credit_entries
-            .iter()
-            .map(|r| CreditRecordView {
-                track: r.track.map(i64::from),
-                played_at: r.played_at.clone(),
-                title: r.title.clone(),
-                chart_type: format_chart_type(r.chart_type).to_string(),
-                diff_category: r.diff_category.map(|d| d.as_str().to_string()),
-                level: r.level.clone(),
-                achievement_percent: r.achievement_percent.map(|p| p as f64),
-                rank: r.score_rank.map(|rk| rk.as_str().to_string()),
-                rating_points: rating_points_for_credit_entry(song_data, r),
-            })
-            .collect::<Vec<_>>();
-
-        e = e.description(format_credit_description(&records));
-    }
-
-    e
-}
-
 #[derive(Debug, Clone)]
-struct CreditRecordView {
-    track: Option<i64>,
-    played_at: Option<String>,
-    title: String,
-    chart_type: String,
-    diff_category: Option<String>,
-    level: Option<String>,
-    achievement_percent: Option<f64>,
-    rank: Option<String>,
-    rating_points: Option<u32>,
+pub(crate) struct RecentOptionalFields {
+    pub(crate) rating: Option<String>,
+    pub(crate) play_count: Option<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -353,6 +309,7 @@ pub(crate) fn build_mai_score_embed(
 pub(crate) fn build_mai_recent_embeds(
     display_name: &str,
     records: &[RecentRecordView],
+    optional_fields: Option<&RecentOptionalFields>,
 ) -> Vec<CreateEmbed> {
     records
         .iter()
@@ -372,6 +329,18 @@ pub(crate) fn build_mai_recent_embeds(
                 "**{}** [{}] {diff} {level} — {achv} • {rank}{rating}",
                 record.title, record.chart_type
             ));
+
+            if record.track == Some(1)
+                && let Some(fields) = optional_fields
+            {
+                if let Some(v) = fields.rating.as_deref() {
+                    embed = embed.field("Rating", v, true);
+                }
+                if let Some(v) = fields.play_count.as_deref() {
+                    embed = embed.field("Play count", v, true);
+                }
+            }
+
             if let Some(played_at) = record.played_at.as_deref() {
                 embed = embed.field("Played at", played_at, false);
             }
@@ -404,38 +373,6 @@ fn format_track_label(track: Option<i64>) -> String {
     track
         .map(|t| format!("TRACK {t:02}"))
         .unwrap_or_else(|| "TRACK ??".to_string())
-}
-
-fn format_credit_description(records: &[CreditRecordView]) -> String {
-    let played_at = records
-        .iter()
-        .find(|r| r.track == Some(1))
-        .and_then(|r| r.played_at.as_deref())
-        .unwrap_or("N/A");
-
-    let mut desc = String::new();
-    desc.push_str(&format!("`{played_at}`\n\n"));
-
-    for r in records {
-        let track = format_track_label(r.track);
-        let achv = format_percent_f64(r.achievement_percent);
-        let rank = r
-            .rank
-            .as_deref()
-            .map(normalize_playlog_rank)
-            .unwrap_or("N/A");
-        let diff = r.diff_category.as_deref().unwrap_or("Unknown");
-        let level = r.level.as_deref().unwrap_or("N/A");
-        let rating = format_rating_points_suffix(r.rating_points);
-
-        desc.push_str(&format!("**{track}**\n"));
-        desc.push_str(&format!(
-            "**{}** [{}] {diff} {level} — {achv} • {rank}{rating}\n\n",
-            r.title, r.chart_type
-        ));
-    }
-
-    desc
 }
 
 fn rating_points_for_credit_entry(
@@ -950,10 +887,35 @@ async fn mai_recent(ctx: Context<'_>) -> Result<(), Error> {
     ctx.defer().await?;
 
     let display_name = display_user_name(&ctx).await;
+
+    let prev_total = db::get_app_state_u32(&ctx.data().db, STATE_KEY_TOTAL_PLAY_COUNT)
+        .await
+        .ok()
+        .flatten();
+    let prev_rating = db::get_app_state_u32(&ctx.data().db, STATE_KEY_RATING)
+        .await
+        .ok()
+        .flatten();
+
+    // Fetch playerData to compute deltas for the recent UI.
+    let mut client = MaimaiClient::new(&ctx.data().config).wrap_err("create HTTP client")?;
+    client
+        .ensure_logged_in()
+        .await
+        .wrap_err("ensure logged in")?;
+    let player_data = fetch_player_data_logged_in(&client)
+        .await
+        .wrap_err("fetch player data")?;
+    let optional_fields = RecentOptionalFields {
+        rating: Some(format_delta(player_data.rating, prev_rating)),
+        play_count: Some(format_delta(player_data.total_play_count, prev_total)),
+    };
+
     let embeds = mai_commands::build_mai_recent_embeds_for_latest_credit(
         &ctx.data().db,
         ctx.data().song_data.as_deref(),
         &display_name,
+        Some(&optional_fields),
     )
     .await?;
 
@@ -1093,16 +1055,37 @@ async fn send_player_update_dm(
         .await
         .wrap_err("create DM channel")?;
 
+    let optional_fields = RecentOptionalFields {
+        rating: Some(format_delta(current.rating, prev_rating)),
+        play_count: Some(format_delta(current.total_play_count, prev_total)),
+    };
+    let records = credit_entries
+        .iter()
+        .map(|r| RecentRecordView {
+            track: r.track.map(i64::from),
+            played_at: r.played_at.clone(),
+            title: r.title.clone(),
+            chart_type: format_chart_type(r.chart_type).to_string(),
+            diff_category: r.diff_category.map(|d| d.as_str().to_string()),
+            level: r.level.clone(),
+            internal_level: r.diff_category.and_then(|d| {
+                bot_data
+                    .song_data
+                    .as_deref()
+                    .and_then(|idx| idx.internal_level(&r.title, format_chart_type(r.chart_type), d.as_str()))
+            }),
+            rating_points: rating_points_for_credit_entry(bot_data.song_data.as_deref(), r),
+            achievement_percent: r.achievement_percent.map(|p| p as f64),
+            rank: r.score_rank.map(|rk| rk.as_str().to_string()),
+        })
+        .collect::<Vec<_>>();
+
+    let embeds = build_mai_recent_embeds(&current.user_name, &records, Some(&optional_fields));
+
     dm_channel
         .send_message(
             http,
-            CreateMessage::new().embed(embed_player_update(
-                current,
-                prev_total,
-                prev_rating,
-                bot_data.song_data.as_deref(),
-                credit_entries,
-            )),
+            CreateMessage::new().embeds(embeds),
         )
         .await
         .wrap_err("send DM")?;
@@ -1159,7 +1142,7 @@ mod tests {
     #[tokio::test]
     #[ignore = "Sends a real DM to preview embed UI; requires DISCORD_BOT_TOKEN and DISCORD_USER_ID"]
     async fn preview_embed_player_update_dm() -> eyre::Result<()> {
-        use super::embed_player_update;
+        use super::{RecentOptionalFields, build_mai_recent_embeds, format_delta, rating_points_for_credit_entry};
         use crate::maimai::models::{
             ChartType, DifficultyCategory, ParsedPlayRecord, ParsedPlayerData, ScoreRank,
         };
@@ -1230,16 +1213,33 @@ mod tests {
             .await
             .wrap_err("create DM channel")?;
 
+        let optional_fields = RecentOptionalFields {
+            rating: Some(format_delta(player.rating, Some(12340))),
+            play_count: Some(format_delta(player.total_play_count, Some(889))),
+        };
+
+        let records = credit_entries
+            .iter()
+            .map(|r| super::RecentRecordView {
+                track: r.track.map(i64::from),
+                played_at: r.played_at.clone(),
+                title: r.title.clone(),
+                chart_type: crate::db::format_chart_type(r.chart_type).to_string(),
+                diff_category: r.diff_category.map(|d| d.as_str().to_string()),
+                level: r.level.clone(),
+                internal_level: None,
+                rating_points: rating_points_for_credit_entry(None, r),
+                achievement_percent: r.achievement_percent.map(|p| p as f64),
+                rank: r.score_rank.map(|rk| rk.as_str().to_string()),
+            })
+            .collect::<Vec<_>>();
+
+        let embeds = build_mai_recent_embeds(&player.user_name, &records, Some(&optional_fields));
+
         let result = dm
             .send_message(
                 &http,
-                CreateMessage::new().embed(embed_player_update(
-                    &player,
-                    Some(889),
-                    Some(12340),
-                    None,
-                    &credit_entries,
-                )),
+                CreateMessage::new().embeds(embeds),
             )
             .await
             .wrap_err("send DM")?;

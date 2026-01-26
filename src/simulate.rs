@@ -166,6 +166,7 @@ async fn execute_simulate_command(
                 pool,
                 song_data,
                 &display_name,
+                None,
             )
             .await
             {

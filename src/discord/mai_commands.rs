@@ -4,7 +4,7 @@ use serenity::builder::CreateEmbed;
 
 use crate::db::SqlitePool;
 use crate::discord::bot::{
-    RecentRecordView, ScoreRowView, build_mai_recent_embeds, build_mai_score_embed,
+    RecentOptionalFields, RecentRecordView, ScoreRowView, build_mai_recent_embeds, build_mai_score_embed,
     build_mai_today_embed, embed_base, format_level_with_internal, latest_credit_len,
 };
 use crate::maimai::rating::{chart_rating_points, is_ap_like};
@@ -110,6 +110,7 @@ pub(crate) async fn build_mai_recent_embeds_for_latest_credit(
     pool: &SqlitePool,
     song_data: Option<&SongDataIndex>,
     display_name: &str,
+    optional_fields: Option<&RecentOptionalFields>,
 ) -> Result<Vec<CreateEmbed>> {
     let rows = sqlx::query_as::<
         _,
@@ -182,7 +183,11 @@ pub(crate) async fn build_mai_recent_embeds_for_latest_credit(
         )
         .collect::<Vec<_>>();
 
-    Ok(build_mai_recent_embeds(display_name, &records))
+    Ok(build_mai_recent_embeds(
+        display_name,
+        &records,
+        optional_fields,
+    ))
 }
 
 pub(crate) async fn build_mai_today_embed_for_now(
