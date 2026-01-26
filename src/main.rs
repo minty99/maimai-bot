@@ -319,7 +319,6 @@ async fn main() -> eyre::Result<()> {
             command,
         } => {
             run_simulate(
-                config,
                 args.db_path.clone(),
                 &mut client,
                 SimulateArgs {

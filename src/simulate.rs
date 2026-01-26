@@ -6,7 +6,6 @@ use serde::Serialize;
 use serenity::builder::CreateEmbed;
 
 use crate::cli::SimulateFormat;
-use crate::config::AppConfig;
 use crate::db::{self, SqlitePool};
 use crate::discord::bot::{
     embed_base, normalize_for_match, sync_from_network_without_discord, top_title_matches,
@@ -38,7 +37,6 @@ pub struct SimulateArgs {
 }
 
 pub async fn run_simulate(
-    config: AppConfig,
     db_path: PathBuf,
     client: &mut MaimaiClient,
     args: SimulateArgs,
@@ -46,7 +44,7 @@ pub async fn run_simulate(
     let pool = db::connect(&db_path).await.wrap_err("connect db")?;
     db::migrate(&pool).await.wrap_err("migrate db")?;
 
-    let song_data = match SongDataIndex::load_from_default_locations(&config) {
+    let song_data = match SongDataIndex::load_from_default_locations() {
         Ok(v) => v,
         Err(e) => {
             eprintln!("warn: failed to load song data (non-fatal): {e:?}");

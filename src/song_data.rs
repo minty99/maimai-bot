@@ -6,8 +6,6 @@ use std::io::BufReader;
 use std::path::{Path, PathBuf};
 use tracing::warn;
 
-use crate::config::AppConfig;
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SongBucket {
     New,
@@ -49,30 +47,17 @@ struct SongDataSheet {
 }
 
 impl SongDataIndex {
-    pub fn load_from_default_locations(config: &AppConfig) -> eyre::Result<Option<Self>> {
-        let candidates = [
-            PathBuf::from("fetched_data/data.json"),
-            config.data_dir.join("fetched_data/data.json"),
-            // Legacy paths (pre-fetched_data)
-            PathBuf::from("song_data.json"),
-            config.data_dir.join("song_data.json"),
-        ];
+    pub fn load_from_default_locations() -> eyre::Result<Option<Self>> {
+        let path = PathBuf::from("fetched_data/song_data.json");
 
-        for path in &candidates {
-            if let Some(idx) = Self::load_from_path(path)? {
-                return Ok(Some(idx));
-            }
+        if let Some(idx) = Self::load_from_path(&path)? {
+            return Ok(Some(idx));
         }
 
         warn!(
-            "song data not found (non-fatal); tried: {paths}",
-            paths = candidates
-                .iter()
-                .map(|p| p.display().to_string())
-                .collect::<Vec<_>>()
-                .join(", ")
+            "song data not found at {} (non-fatal); skipping song data",
+            path.display()
         );
-
         Ok(None)
     }
 

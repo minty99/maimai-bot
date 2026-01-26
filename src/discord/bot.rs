@@ -70,7 +70,7 @@ pub async fn run_bot(config: AppConfig, db_path: std::path::PathBuf) -> Result<(
             .wrap_err("parse DISCORD_USER_ID")?,
     );
 
-    let song_data = match SongDataIndex::load_from_default_locations(&config) {
+    let song_data = match SongDataIndex::load_from_default_locations() {
         Ok(v) => v.map(Arc::new),
         Err(e) => {
             warn!("failed to load song data (non-fatal): {e:?}");
