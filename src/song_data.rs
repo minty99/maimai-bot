@@ -16,6 +16,7 @@ pub enum SongBucket {
 pub struct SongDataIndex {
     map: HashMap<SongKey, f32>,
     song_version: HashMap<String, String>,
+    song_image_name: HashMap<String, String>,
 }
 
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
@@ -34,6 +35,8 @@ struct SongDataRoot {
 struct SongDataSong {
     title: String,
     version: Option<String>,
+    #[serde(rename = "imageName")]
+    image_name: Option<String>,
     sheets: Vec<SongDataSheet>,
 }
 
@@ -48,7 +51,7 @@ struct SongDataSheet {
 
 impl SongDataIndex {
     pub fn load_from_default_locations() -> eyre::Result<Option<Self>> {
-        let path = PathBuf::from("fetched_data/song_data.json");
+        let path = PathBuf::from("fetched_data/data.json");
 
         if let Some(idx) = Self::load_from_path(&path)? {
             return Ok(Some(idx));
@@ -98,9 +101,15 @@ impl SongDataIndex {
         }
     }
 
+    pub fn image_name(&self, title: &str) -> Option<&str> {
+        let title_norm = normalize_title(title);
+        self.song_image_name.get(&title_norm).map(|s| s.as_str())
+    }
+
     fn from_root(root: SongDataRoot) -> Self {
         let mut map = HashMap::new();
         let mut song_version = HashMap::new();
+        let mut song_image_name = HashMap::new();
 
         for song in root.songs {
             let title_norm = normalize_title(&song.title);
@@ -111,6 +120,15 @@ impl SongDataIndex {
                     song_version
                         .entry(title_norm.clone())
                         .or_insert_with(|| version.to_string());
+                }
+            }
+
+            if let Some(image_name) = song.image_name.as_deref() {
+                let image_name = image_name.trim();
+                if !image_name.is_empty() {
+                    song_image_name
+                        .entry(title_norm.clone())
+                        .or_insert_with(|| image_name.to_string());
                 }
             }
 
@@ -135,7 +153,11 @@ impl SongDataIndex {
             }
         }
 
-        Self { map, song_version }
+        Self {
+            map,
+            song_version,
+            song_image_name,
+        }
     }
 }
 

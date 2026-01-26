@@ -98,7 +98,7 @@ async fn preview_embed_mai_recent_dm() -> eyre::Result<()> {
         },
     ];
 
-    let embeds = build_mai_recent_embeds("maimai-user", &records, None);
+    let embeds = build_mai_recent_embeds("maimai-user", &records, None, None);
 
     let dm = user_id
         .create_dm_channel(&http)

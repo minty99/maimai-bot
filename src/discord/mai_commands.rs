@@ -187,6 +187,7 @@ pub(crate) async fn build_mai_recent_embeds_for_latest_credit(
         display_name,
         &records,
         optional_fields,
+        song_data,
     ))
 }
 

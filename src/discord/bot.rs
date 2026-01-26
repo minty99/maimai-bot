@@ -310,6 +310,7 @@ pub(crate) fn build_mai_recent_embeds(
     display_name: &str,
     records: &[RecentRecordView],
     optional_fields: Option<&RecentOptionalFields>,
+    song_data: Option<&SongDataIndex>,
 ) -> Vec<CreateEmbed> {
     records
         .iter()
@@ -329,6 +330,12 @@ pub(crate) fn build_mai_recent_embeds(
                 "**{}** [{}] {diff} {level} — {achv} • {rank}{rating}",
                 record.title, record.chart_type
             ));
+
+            if let Some(idx) = song_data
+                && let Some(image_name) = idx.image_name(&record.title)
+            {
+                embed = embed.thumbnail(format!("attachment://{image_name}"));
+            }
 
             if record.track == Some(1)
                 && let Some(fields) = optional_fields
@@ -814,7 +821,7 @@ async fn mai_score(
     };
 
     let display_name = display_user_name(&ctx).await;
-    let (embed, has_rows) = mai_commands::build_mai_score_embed_for_title(
+    let (mut embed, has_rows) = mai_commands::build_mai_score_embed_for_title(
         &ctx.data().db,
         ctx.data().song_data.as_deref(),
         &display_name,
@@ -822,8 +829,25 @@ async fn mai_score(
     )
     .await?;
 
-    let reply = CreateReply::default().embed(embed).ephemeral(!has_rows);
-    ctx.send(reply).await?;
+    let mut attachments = Vec::new();
+    if let Some(idx) = ctx.data().song_data.as_deref() {
+        if let Some(image_name) = idx.image_name(&matched_title) {
+            embed = embed.thumbnail(format!("attachment://{image_name}"));
+            let path = format!("fetched_data/img/cover-m/{image_name}");
+            match serenity::CreateAttachment::path(&path).await {
+                Ok(att) => attachments.push(att),
+                Err(e) => warn!("failed to attach cover image {path}: {e:?}"),
+            }
+        }
+    }
+
+    ctx.send(CreateReply {
+        embeds: vec![embed],
+        attachments,
+        ephemeral: Some(!has_rows),
+        ..Default::default()
+    })
+    .await?;
 
     Ok(())
 }
@@ -931,15 +955,16 @@ async fn mai_recent(ctx: Context<'_>) -> Result<(), Error> {
             .wrap_err("persist player snapshot")?;
     }
 
-    let embeds = if recent_entries.is_empty() {
+    let (embeds, attachments) = if recent_entries.is_empty() {
         // Fallback to DB view if parsing did not yield a usable credit.
-        mai_commands::build_mai_recent_embeds_for_latest_credit(
+        let embeds = mai_commands::build_mai_recent_embeds_for_latest_credit(
             &ctx.data().db,
             ctx.data().song_data.as_deref(),
             &display_name,
             Some(&optional_fields),
         )
-        .await?
+        .await?;
+        (embeds, Vec::new())
     } else {
         let credit_entries = latest_credit_entries(&recent_entries);
         let records = credit_entries
@@ -961,11 +986,38 @@ async fn mai_recent(ctx: Context<'_>) -> Result<(), Error> {
                 rank: r.score_rank.map(|rk| rk.as_str().to_string()),
             })
             .collect::<Vec<_>>();
-        build_mai_recent_embeds(&display_name, &records, Some(&optional_fields))
+
+        let embeds = build_mai_recent_embeds(
+            &display_name,
+            &records,
+            Some(&optional_fields),
+            ctx.data().song_data.as_deref(),
+        );
+
+        let mut attachments = Vec::new();
+        if let Some(idx) = ctx.data().song_data.as_deref() {
+            let mut seen = std::collections::HashSet::<String>::new();
+            for r in &records {
+                let Some(image_name) = idx.image_name(&r.title) else {
+                    continue;
+                };
+                if !seen.insert(image_name.to_string()) {
+                    continue;
+                }
+                let path = format!("fetched_data/img/cover-m/{image_name}");
+                match serenity::CreateAttachment::path(&path).await {
+                    Ok(att) => attachments.push(att),
+                    Err(e) => warn!("failed to attach cover image {path}: {e:?}"),
+                }
+            }
+        }
+
+        (embeds, attachments)
     };
 
     ctx.send(CreateReply {
         embeds,
+        attachments,
         ..Default::default()
     })
     .await?;
@@ -1125,12 +1177,35 @@ async fn send_player_update_dm(
         })
         .collect::<Vec<_>>();
 
-    let embeds = build_mai_recent_embeds(&current.user_name, &records, Some(&optional_fields));
+    let embeds = build_mai_recent_embeds(
+        &current.user_name,
+        &records,
+        Some(&optional_fields),
+        bot_data.song_data.as_deref(),
+    );
+
+    let mut attachments = Vec::new();
+    if let Some(idx) = bot_data.song_data.as_deref() {
+        let mut seen = std::collections::HashSet::<String>::new();
+        for r in &records {
+            let Some(image_name) = idx.image_name(&r.title) else {
+                continue;
+            };
+            if !seen.insert(image_name.to_string()) {
+                continue;
+            }
+            let path = format!("fetched_data/img/cover-m/{image_name}");
+            match serenity::CreateAttachment::path(&path).await {
+                Ok(att) => attachments.push(att),
+                Err(e) => warn!("failed to attach cover image {path}: {e:?}"),
+            }
+        }
+    }
 
     dm_channel
         .send_message(
             http,
-            CreateMessage::new().embeds(embeds),
+            CreateMessage::new().add_files(attachments).embeds(embeds),
         )
         .await
         .wrap_err("send DM")?;
@@ -1279,7 +1354,7 @@ mod tests {
             })
             .collect::<Vec<_>>();
 
-        let embeds = build_mai_recent_embeds(&player.user_name, &records, Some(&optional_fields));
+        let embeds = build_mai_recent_embeds(&player.user_name, &records, Some(&optional_fields), None);
 
         let result = dm
             .send_message(
