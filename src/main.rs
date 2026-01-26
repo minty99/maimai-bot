@@ -10,6 +10,7 @@ use maimai_bot::http::MaimaiClient;
 use maimai_bot::maimai::parse::player_data::parse_player_data_html;
 use maimai_bot::maimai::parse::recent::parse_recent_html;
 use maimai_bot::maimai::parse::score_list::parse_scores_html;
+use maimai_bot::simulate::{SimulateArgs, run_simulate};
 
 const STATE_KEY_TOTAL_PLAY_COUNT: &str = "player.total_play_count";
 const STATE_KEY_RATING: &str = "player.rating";
@@ -311,6 +312,25 @@ async fn main() -> eyre::Result<()> {
                     .wrap_err("run discord bot")?;
             }
         },
+
+        Command::Simulate {
+            format,
+            display_name,
+            command,
+        } => {
+            run_simulate(
+                config,
+                args.db_path.clone(),
+                &mut client,
+                SimulateArgs {
+                    format,
+                    display_name,
+                    command,
+                },
+            )
+            .await
+            .wrap_err("run simulate")?;
+        }
     }
 
     Ok(())

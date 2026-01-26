@@ -205,7 +205,7 @@ async fn display_user_name(ctx: &poise::Context<'_, BotData, Error>) -> String {
     }
 }
 
-fn embed_base(title: &str) -> CreateEmbed {
+pub(crate) fn embed_base(title: &str) -> CreateEmbed {
     let mut e = CreateEmbed::new();
     e = e.title(title).color(EMBED_COLOR);
     e
@@ -284,31 +284,31 @@ struct CreditRecordView {
 }
 
 #[derive(Debug, Clone)]
-struct RecentRecordView {
-    track: Option<i64>,
-    played_at: Option<String>,
-    title: String,
-    chart_type: String,
-    diff_category: Option<String>,
-    level: Option<String>,
-    internal_level: Option<f32>,
-    rating_points: Option<u32>,
-    achievement_percent: Option<f64>,
-    rank: Option<String>,
+pub(crate) struct RecentRecordView {
+    pub(crate) track: Option<i64>,
+    pub(crate) played_at: Option<String>,
+    pub(crate) title: String,
+    pub(crate) chart_type: String,
+    pub(crate) diff_category: Option<String>,
+    pub(crate) level: Option<String>,
+    pub(crate) internal_level: Option<f32>,
+    pub(crate) rating_points: Option<u32>,
+    pub(crate) achievement_percent: Option<f64>,
+    pub(crate) rank: Option<String>,
 }
 
 #[derive(Debug, Clone)]
-struct ScoreRowView {
-    chart_type: String,
-    diff_category: String,
-    level: String,
-    internal_level: Option<f32>,
-    rating_points: Option<u32>,
-    achievement_percent: Option<f64>,
-    rank: Option<String>,
+pub(crate) struct ScoreRowView {
+    pub(crate) chart_type: String,
+    pub(crate) diff_category: String,
+    pub(crate) level: String,
+    pub(crate) internal_level: Option<f32>,
+    pub(crate) rating_points: Option<u32>,
+    pub(crate) achievement_percent: Option<f64>,
+    pub(crate) rank: Option<String>,
 }
 
-fn format_level_with_internal(level: &str, internal_level: Option<f32>) -> String {
+pub(crate) fn format_level_with_internal(level: &str, internal_level: Option<f32>) -> String {
     if level == "N/A" {
         return level.to_string();
     }
@@ -325,7 +325,11 @@ fn format_rating_points_suffix(rating_points: Option<u32>) -> String {
     }
 }
 
-fn build_mai_score_embed(display_name: &str, title: &str, entries: &[ScoreRowView]) -> CreateEmbed {
+pub(crate) fn build_mai_score_embed(
+    display_name: &str,
+    title: &str,
+    entries: &[ScoreRowView],
+) -> CreateEmbed {
     let mut desc = String::new();
     desc.push_str(&format!("**{}**\n\n", title));
 
@@ -343,7 +347,10 @@ fn build_mai_score_embed(display_name: &str, title: &str, entries: &[ScoreRowVie
     embed_base(&format!("{}'s scores", display_name)).description(desc)
 }
 
-fn build_mai_recent_embeds(display_name: &str, records: &[RecentRecordView]) -> Vec<CreateEmbed> {
+pub(crate) fn build_mai_recent_embeds(
+    display_name: &str,
+    records: &[RecentRecordView],
+) -> Vec<CreateEmbed> {
     records
         .iter()
         .map(|record| {
@@ -371,7 +378,7 @@ fn build_mai_recent_embeds(display_name: &str, records: &[RecentRecordView]) -> 
         .collect::<Vec<_>>()
 }
 
-fn build_mai_today_embed(
+pub(crate) fn build_mai_today_embed(
     display_name: &str,
     start: &str,
     end: &str,
@@ -601,6 +608,55 @@ async fn periodic_player_poll(bot_data: &BotData) -> Result<()> {
     Ok(())
 }
 
+pub(crate) async fn sync_from_network_without_discord(
+    pool: &SqlitePool,
+    client: &mut MaimaiClient,
+) -> Result<ParsedPlayerData> {
+    client
+        .ensure_logged_in()
+        .await
+        .wrap_err("ensure logged in")?;
+
+    let player_data = fetch_player_data_logged_in(client)
+        .await
+        .wrap_err("fetch player data")?;
+
+    let stored_total = db::get_app_state_u32(pool, STATE_KEY_TOTAL_PLAY_COUNT)
+        .await
+        .ok()
+        .flatten();
+
+    if stored_total.is_some() && stored_total == Some(player_data.total_play_count) {
+        return Ok(player_data);
+    }
+
+    let entries = fetch_recent_entries_logged_in(client)
+        .await
+        .wrap_err("fetch recent")?;
+    let mut entries =
+        annotate_recent_entries_with_play_count(entries, player_data.total_play_count);
+
+    if stored_total.is_some() {
+        annotate_first_play_flags(pool, &mut entries)
+            .await
+            .wrap_err("classify first plays")?;
+    }
+
+    let scraped_at = unix_timestamp();
+    db::upsert_playlogs(pool, scraped_at, &entries)
+        .await
+        .wrap_err("upsert playlogs")?;
+
+    rebuild_scores_with_client(pool, client)
+        .await
+        .wrap_err("rebuild scores")?;
+    persist_player_snapshot(pool, &player_data)
+        .await
+        .wrap_err("persist player snapshot")?;
+
+    Ok(player_data)
+}
+
 async fn fetch_player_data(bot_data: &BotData) -> Result<ParsedPlayerData> {
     let mut client = MaimaiClient::new(&bot_data.config).wrap_err("create HTTP client")?;
     client
@@ -815,14 +871,14 @@ async fn mai_score(
     Ok(())
 }
 
-fn normalize_for_match(s: &str) -> String {
+pub(crate) fn normalize_for_match(s: &str) -> String {
     s.to_ascii_lowercase()
         .chars()
         .filter(|c| !c.is_whitespace())
         .collect::<String>()
 }
 
-fn top_title_matches(search: &str, titles: &[String], limit: usize) -> Vec<String> {
+pub(crate) fn top_title_matches(search: &str, titles: &[String], limit: usize) -> Vec<String> {
     let search_norm = normalize_for_match(search.trim());
     let mut scored = titles
         .iter()
@@ -861,7 +917,7 @@ fn levenshtein(a: &str, b: &str) -> usize {
     prev[b.len()]
 }
 
-fn latest_credit_len(tracks: &[Option<i64>]) -> usize {
+pub(crate) fn latest_credit_len(tracks: &[Option<i64>]) -> usize {
     match tracks.iter().position(|t| *t == Some(1)) {
         Some(idx) => idx + 1,
         None => tracks.len().min(4),

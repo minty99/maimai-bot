@@ -1,6 +1,6 @@
 use std::path::PathBuf;
 
-use clap::{Parser, Subcommand};
+use clap::{Parser, Subcommand, ValueEnum};
 use reqwest::Url;
 
 #[derive(Debug, Parser)]
@@ -62,6 +62,40 @@ pub enum Command {
         #[command(subcommand)]
         command: BotCommand,
     },
+
+    #[command(
+        about = "Run a single local command to simulate Discord slash commands (no Discord usage)"
+    )]
+    Simulate {
+        #[arg(
+            long,
+            default_value = "pretty",
+            value_enum,
+            help = "Output format for the generated CreateReply payload"
+        )]
+        format: SimulateFormat,
+
+        #[arg(
+            long,
+            default_value = "maimai-user",
+            value_name = "NAME",
+            help = "Display name used for embed titles"
+        )]
+        display_name: String,
+
+        #[arg(
+            value_name = "CMD",
+            trailing_var_arg = true,
+            help = "Run a single simulate command and exit (e.g., mai-score \"Song Title\")"
+        )]
+        command: Vec<String>,
+    },
+}
+
+#[derive(Debug, Clone, Copy, ValueEnum)]
+pub enum SimulateFormat {
+    Pretty,
+    Json,
 }
 
 #[derive(Debug, Subcommand)]

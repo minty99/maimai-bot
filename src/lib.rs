@@ -4,4 +4,5 @@ pub mod db;
 pub mod discord;
 pub mod http;
 pub mod maimai;
+pub mod simulate;
 pub mod song_data;
