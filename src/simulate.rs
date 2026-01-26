@@ -49,7 +49,7 @@ pub async fn run_simulate(
     let song_data = match SongDataIndex::load_from_default_locations(&config) {
         Ok(v) => v,
         Err(e) => {
-            eprintln!("warn: failed to load song_data.json (non-fatal): {e:?}");
+            eprintln!("warn: failed to load song data (non-fatal): {e:?}");
             None
         }
     };

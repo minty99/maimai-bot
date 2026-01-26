@@ -73,7 +73,7 @@ pub async fn run_bot(config: AppConfig, db_path: std::path::PathBuf) -> Result<(
     let song_data = match SongDataIndex::load_from_default_locations(&config) {
         Ok(v) => v.map(Arc::new),
         Err(e) => {
-            warn!("failed to load song_data.json (non-fatal): {e:?}");
+            warn!("failed to load song data (non-fatal): {e:?}");
             None
         }
     };

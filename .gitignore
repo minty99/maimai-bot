@@ -2,7 +2,9 @@
 .env
 /data
 data/
-song_data.json
 
 # OpenCode
 .sisyphus/
+
+# Fetched Data
+fetched_data/

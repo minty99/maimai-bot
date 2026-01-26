@@ -4,6 +4,7 @@ use std::collections::HashMap;
 use std::fs::File;
 use std::io::BufReader;
 use std::path::{Path, PathBuf};
+use tracing::warn;
 
 use crate::config::AppConfig;
 
@@ -49,13 +50,30 @@ struct SongDataSheet {
 
 impl SongDataIndex {
     pub fn load_from_default_locations(config: &AppConfig) -> eyre::Result<Option<Self>> {
-        let cwd_path = PathBuf::from("song_data.json");
-        if let Some(idx) = Self::load_from_path(&cwd_path)? {
-            return Ok(Some(idx));
+        let candidates = [
+            PathBuf::from("fetched_data/data.json"),
+            config.data_dir.join("fetched_data/data.json"),
+            // Legacy paths (pre-fetched_data)
+            PathBuf::from("song_data.json"),
+            config.data_dir.join("song_data.json"),
+        ];
+
+        for path in &candidates {
+            if let Some(idx) = Self::load_from_path(path)? {
+                return Ok(Some(idx));
+            }
         }
 
-        let data_dir_path = config.data_dir.join("song_data.json");
-        Self::load_from_path(&data_dir_path)
+        warn!(
+            "song data not found (non-fatal); tried: {paths}",
+            paths = candidates
+                .iter()
+                .map(|p| p.display().to_string())
+                .collect::<Vec<_>>()
+                .join(", ")
+        );
+
+        Ok(None)
     }
 
     pub fn load_from_path(path: &Path) -> eyre::Result<Option<Self>> {
@@ -63,10 +81,11 @@ impl SongDataIndex {
             return Ok(None);
         }
 
-        let file = File::open(path).wrap_err("open song_data.json")?;
+        let file =
+            File::open(path).wrap_err_with(|| format!("open song data: {}", path.display()))?;
         let reader = BufReader::new(file);
-        let root: SongDataRoot =
-            serde_json::from_reader(reader).wrap_err("parse song_data.json")?;
+        let root: SongDataRoot = serde_json::from_reader(reader)
+            .wrap_err_with(|| format!("parse song data: {}", path.display()))?;
         Ok(Some(Self::from_root(root)))
     }
 
