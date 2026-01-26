@@ -3,3 +3,6 @@
 /data
 data/
 song_data.json
+
+# OpenCode
+.sisyphus/
