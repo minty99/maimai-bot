@@ -8,6 +8,7 @@ clap = { version = "4.5.54", features = ["derive"] }
 cookie_store = { version = "0.22.0", features = ["serde_json"] }
 dotenvy = "0.15.7"
 eyre = "0.6.12"
+ordered-float = "5.1.0"
 poise = "0.6.1"
 reqwest = { version = "0.12.28", features = ["rustls-tls", "cookies", "gzip", "brotli", "deflate", "json"] }
 reqwest_cookie_store = { version = "0.9.0", features = ["serde"] }

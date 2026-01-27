@@ -1,4 +1,5 @@
 use eyre::{Result, WrapErr};
+use ordered_float::OrderedFloat;
 use poise::serenity_prelude as serenity;
 use serenity::builder::CreateEmbed;
 
@@ -355,8 +356,10 @@ pub(crate) async fn build_mai_rating_embeds(
         .cloned()
         .collect::<Vec<_>>();
 
-    new_rows.sort_by_key(|r| std::cmp::Reverse(r.rating_points));
-    old_rows.sort_by_key(|r| std::cmp::Reverse(r.rating_points));
+    new_rows
+        .sort_by_key(|r| std::cmp::Reverse((r.rating_points, OrderedFloat(r.achievement_percent))));
+    old_rows
+        .sort_by_key(|r| std::cmp::Reverse((r.rating_points, OrderedFloat(r.achievement_percent))));
 
     let new_rows = new_rows.into_iter().take(15).collect::<Vec<_>>();
     let old_rows = old_rows.into_iter().take(35).collect::<Vec<_>>();
@@ -367,11 +370,12 @@ pub(crate) async fn build_mai_rating_embeds(
 
     fn list_desc(rows: &[RatedRow]) -> String {
         let mut out = String::new();
-        for r in rows {
+        for (idx, r) in rows.iter().enumerate() {
             let rank = r.rank.as_deref().unwrap_or("N/A");
             let level = format_level_with_internal(&r.level, Some(r.internal_level));
             out.push_str(&format!(
-                "- `{:>3}pt` {} [{}] {} {} — {:.4}% • {}\n",
+                "- [{}] `{:>3}pt` {} [{}] {} {} — {:.4}% • {}\n",
+                idx + 1,
                 r.rating_points,
                 r.title,
                 r.chart_type,
