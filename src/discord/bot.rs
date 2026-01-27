@@ -830,14 +830,14 @@ async fn mai_score(
     .await?;
 
     let mut attachments = Vec::new();
-    if let Some(idx) = ctx.data().song_data.as_deref() {
-        if let Some(image_name) = idx.image_name(&matched_title) {
-            embed = embed.thumbnail(format!("attachment://{image_name}"));
-            let path = format!("fetched_data/img/cover-m/{image_name}");
-            match serenity::CreateAttachment::path(&path).await {
-                Ok(att) => attachments.push(att),
-                Err(e) => warn!("failed to attach cover image {path}: {e:?}"),
-            }
+    if let Some(idx) = ctx.data().song_data.as_deref()
+        && let Some(image_name) = idx.image_name(&matched_title)
+    {
+        embed = embed.thumbnail(format!("attachment://{image_name}"));
+        let path = format!("fetched_data/img/cover-m/{image_name}");
+        match serenity::CreateAttachment::path(&path).await {
+            Ok(att) => attachments.push(att),
+            Err(e) => warn!("failed to attach cover image {path}: {e:?}"),
         }
     }
 
@@ -1166,10 +1166,9 @@ async fn send_player_update_dm(
             diff_category: r.diff_category.map(|d| d.as_str().to_string()),
             level: r.level.clone(),
             internal_level: r.diff_category.and_then(|d| {
-                bot_data
-                    .song_data
-                    .as_deref()
-                    .and_then(|idx| idx.internal_level(&r.title, format_chart_type(r.chart_type), d.as_str()))
+                bot_data.song_data.as_deref().and_then(|idx| {
+                    idx.internal_level(&r.title, format_chart_type(r.chart_type), d.as_str())
+                })
             }),
             rating_points: rating_points_for_credit_entry(bot_data.song_data.as_deref(), r),
             achievement_percent: r.achievement_percent.map(|p| p as f64),
@@ -1262,7 +1261,10 @@ mod tests {
     #[tokio::test]
     #[ignore = "Sends a real DM to preview embed UI; requires DISCORD_BOT_TOKEN and DISCORD_USER_ID"]
     async fn preview_embed_player_update_dm() -> eyre::Result<()> {
-        use super::{RecentOptionalFields, build_mai_recent_embeds, format_delta, rating_points_for_credit_entry};
+        use super::{
+            RecentOptionalFields, build_mai_recent_embeds, format_delta,
+            rating_points_for_credit_entry,
+        };
         use crate::maimai::models::{
             ChartType, DifficultyCategory, ParsedPlayRecord, ParsedPlayerData, ScoreRank,
         };
@@ -1289,7 +1291,7 @@ mod tests {
             total_play_count: 890,
         };
 
-        let credit_entries = vec![
+        let credit_entries = [
             ParsedPlayRecord {
                 played_at_unixtime: None,
                 track: Some(1),
@@ -1354,13 +1356,11 @@ mod tests {
             })
             .collect::<Vec<_>>();
 
-        let embeds = build_mai_recent_embeds(&player.user_name, &records, Some(&optional_fields), None);
+        let embeds =
+            build_mai_recent_embeds(&player.user_name, &records, Some(&optional_fields), None);
 
         let result = dm
-            .send_message(
-                &http,
-                CreateMessage::new().embeds(embeds),
-            )
+            .send_message(&http, CreateMessage::new().embeds(embeds))
             .await
             .wrap_err("send DM")?;
 
