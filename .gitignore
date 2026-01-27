@@ -8,3 +8,6 @@ data/
 
 # Fetched Data
 fetched_data/
+
+# macOS
+.DS_Store
