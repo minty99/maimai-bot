@@ -1,3 +1,5 @@
+use crate::discord::bot::RecentOptionalFields;
+
 use super::{RecentRecordView, ScoreRowView};
 use super::{build_mai_recent_embeds, build_mai_score_embed, build_mai_today_embed};
 use dotenvy::dotenv;
@@ -82,6 +84,8 @@ async fn preview_embed_mai_recent_dm() -> eyre::Result<()> {
             internal_level: Some(12.8),
             rating_points: Some(303),
             achievement_percent: Some(98.7654),
+            achievement_new_record: false,
+            first_play: false,
             rank: Some("SS".to_string()),
         },
         RecentRecordView {
@@ -94,11 +98,17 @@ async fn preview_embed_mai_recent_dm() -> eyre::Result<()> {
             internal_level: None,
             rating_points: None,
             achievement_percent: Some(100.0000),
+            achievement_new_record: true,
+            first_play: false,
             rank: Some("SSS+".to_string()),
         },
     ];
 
-    let embeds = build_mai_recent_embeds("maimai-user", &records, None, None);
+    let optional_fields = RecentOptionalFields {
+        rating: Some("1500".to_string()),
+        play_count: Some("100".to_string()),
+    };
+    let embeds = build_mai_recent_embeds("maimai-user", &records, Some(&optional_fields), None);
 
     let dm = user_id
         .create_dm_channel(&http)

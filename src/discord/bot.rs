@@ -253,6 +253,8 @@ pub(crate) struct RecentRecordView {
     pub(crate) internal_level: Option<f32>,
     pub(crate) rating_points: Option<u32>,
     pub(crate) achievement_percent: Option<f64>,
+    pub(crate) achievement_new_record: bool,
+    pub(crate) first_play: bool,
     pub(crate) rank: Option<String>,
 }
 
@@ -312,49 +314,62 @@ pub(crate) fn build_mai_recent_embeds(
     optional_fields: Option<&RecentOptionalFields>,
     song_data: Option<&SongDataIndex>,
 ) -> Vec<CreateEmbed> {
-    records
-        .iter()
-        .map(|record| {
-            let track = format_track_label(record.track);
-            let achv = format_percent_f64(record.achievement_percent);
-            let rank = record
-                .rank
-                .as_deref()
-                .map(normalize_playlog_rank)
-                .unwrap_or("N/A");
-            let diff = record.diff_category.as_deref().unwrap_or("Unknown");
-            let level = record.level.as_deref().unwrap_or("N/A");
-            let level = format_level_with_internal(level, record.internal_level);
-            let rating = format_rating_points_suffix(record.rating_points);
-            let mut embed = embed_base(&track).description(format!(
-                "**{}** [{}] {diff} {level} — {achv} • {rank}{rating}",
-                record.title, record.chart_type
-            ));
+    let mut embeds = Vec::new();
 
-            if let Some(idx) = song_data
-                && let Some(image_name) = idx.image_name(&record.title)
-            {
-                embed = embed.thumbnail(format!("attachment://{image_name}"));
-            }
+    if let Some(fields) = optional_fields {
+        let started_at = records
+            .iter()
+            .find(|r| r.track == Some(1))
+            .and_then(|r| r.played_at.as_deref())
+            .or_else(|| records.iter().find_map(|r| r.played_at.as_deref()));
 
-            if record.track == Some(1)
-                && let Some(fields) = optional_fields
-            {
-                if let Some(v) = fields.rating.as_deref() {
-                    embed = embed.field("Rating", v, true);
-                }
-                if let Some(v) = fields.play_count.as_deref() {
-                    embed = embed.field("Play count", v, true);
-                }
-            }
+        let mut summary = embed_base(&format!("{display_name}'s latest credit"));
+        if let Some(v) = fields.rating.as_deref() {
+            summary = summary.field("Rating", v, true);
+        }
+        if let Some(v) = fields.play_count.as_deref() {
+            summary = summary.field("Play count", v, true);
+        }
+        if let Some(v) = started_at {
+            summary = summary.field("Credit started at", v, false);
+        }
 
-            if let Some(played_at) = record.played_at.as_deref() {
-                embed = embed.field("Played at", played_at, false);
-            }
-            let _ = display_name;
-            embed
-        })
-        .collect::<Vec<_>>()
+        embeds.push(summary);
+    }
+
+    embeds.extend(records.iter().map(|record| {
+        let track = format_track_label(record.track);
+        let achv = format_percent_f64(record.achievement_percent);
+        let rank = record
+            .rank
+            .as_deref()
+            .map(normalize_playlog_rank)
+            .unwrap_or("N/A");
+        let diff = record.diff_category.as_deref().unwrap_or("Unknown");
+        let level = record.level.as_deref().unwrap_or("N/A");
+        let level = format_level_with_internal(level, record.internal_level);
+        let rating = format_rating_points_suffix(record.rating_points);
+        let mut desc = format!(
+            "**{}**\n[{}] {diff} {level} — {achv} • {rank}{rating}",
+            record.title, record.chart_type
+        );
+        if record.first_play {
+            desc.push_str("\n[FIRST PLAY]");
+        } else if record.achievement_new_record {
+            desc.push_str("\n[NEW RECORD]");
+        }
+        let mut embed = embed_base(&track).description(desc);
+
+        if let Some(idx) = song_data
+            && let Some(image_name) = idx.image_name(&record.title)
+        {
+            embed = embed.thumbnail(format!("attachment://{image_name}"));
+        }
+
+        embed
+    }));
+
+    embeds
 }
 
 pub(crate) fn build_mai_today_embed(
@@ -983,6 +998,8 @@ async fn mai_recent(ctx: Context<'_>) -> Result<(), Error> {
                 }),
                 rating_points: rating_points_for_credit_entry(ctx.data().song_data.as_deref(), r),
                 achievement_percent: r.achievement_percent.map(|p| p as f64),
+                achievement_new_record: r.achievement_new_record,
+                first_play: r.first_play,
                 rank: r.score_rank.map(|rk| rk.as_str().to_string()),
             })
             .collect::<Vec<_>>();
@@ -1172,6 +1189,8 @@ async fn send_player_update_dm(
             }),
             rating_points: rating_points_for_credit_entry(bot_data.song_data.as_deref(), r),
             achievement_percent: r.achievement_percent.map(|p| p as f64),
+            achievement_new_record: r.achievement_new_record,
+            first_play: r.first_play,
             rank: r.score_rank.map(|rk| rk.as_str().to_string()),
         })
         .collect::<Vec<_>>();
@@ -1352,6 +1371,8 @@ mod tests {
                 internal_level: None,
                 rating_points: rating_points_for_credit_entry(None, r),
                 achievement_percent: r.achievement_percent.map(|p| p as f64),
+                achievement_new_record: r.achievement_new_record,
+                first_play: r.first_play,
                 rank: r.score_rank.map(|rk| rk.as_str().to_string()),
             })
             .collect::<Vec<_>>();

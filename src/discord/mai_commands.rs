@@ -124,6 +124,8 @@ pub(crate) async fn build_mai_recent_embeds_for_latest_credit(
             Option<String>,
             Option<String>,
             Option<f64>,
+            i64,
+            i64,
             Option<String>,
             Option<String>,
         ),
@@ -137,6 +139,8 @@ pub(crate) async fn build_mai_recent_embeds_for_latest_credit(
             pl.diff_category,
             pl.level,
             pl.achievement_x10000 / 10000.0 as achievement_percent,
+            pl.achievement_new_record,
+            pl.first_play,
             pl.score_rank,
             pl.fc
         FROM playlogs pl
@@ -160,7 +164,19 @@ pub(crate) async fn build_mai_recent_embeds_for_latest_credit(
     let records = recent
         .into_iter()
         .map(
-            |(title, chart_type, track, played_at, diff_category, level, achievement, rank, fc)| {
+            |(
+                title,
+                chart_type,
+                track,
+                played_at,
+                diff_category,
+                level,
+                achievement,
+                achievement_new_record,
+                first_play,
+                rank,
+                fc,
+            )| {
                 let internal_level = diff_category.as_deref().and_then(|diff| {
                     song_data.and_then(|idx| idx.internal_level(&title, &chart_type, diff))
                 });
@@ -179,6 +195,8 @@ pub(crate) async fn build_mai_recent_embeds_for_latest_credit(
                     internal_level,
                     rating_points,
                     achievement_percent: achievement,
+                    achievement_new_record: achievement_new_record != 0,
+                    first_play: first_play != 0,
                     rank,
                 }
             },
