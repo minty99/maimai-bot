@@ -495,17 +495,32 @@ fn start_background_tasks(bot_data: BotData, _cache: Arc<serenity::Cache>) {
 
             info!("Running periodic playerData poll...");
 
-            if let Err(e) = periodic_player_poll(&bot_data).await {
-                error!("Periodic poll failed: {}", e);
+            match refresh_from_network_if_needed(&bot_data).await {
+                Ok(Some(update)) => {
+                    if let Err(e) = send_player_update_dm(&bot_data, update).await {
+                        error!("Periodic poll failed: {e:#}");
+                    }
+                }
+                Ok(None) => {}
+                Err(e) => error!("Periodic poll failed: {e:#}"),
             }
         }
     });
 }
 
-async fn periodic_player_poll(bot_data: &BotData) -> Result<()> {
+struct NetworkRefreshUpdate {
+    prev_total: Option<u32>,
+    prev_rating: Option<u32>,
+    current: ParsedPlayerData,
+    credit_entries: Vec<ParsedPlayRecord>,
+}
+
+async fn refresh_from_network_if_needed(
+    bot_data: &BotData,
+) -> Result<Option<NetworkRefreshUpdate>> {
     if is_maintenance_window_now() {
         info!("Skipping periodic poll due to maintenance window (04:00-07:00 local time)");
-        return Ok(());
+        return Ok(None);
     }
 
     let mut client = MaimaiClient::new(&bot_data.config).wrap_err("create HTTP client")?;
@@ -540,7 +555,7 @@ async fn periodic_player_poll(bot_data: &BotData) -> Result<()> {
     if let Some(stored_total) = stored_total
         && stored_total == player_data.total_play_count
     {
-        return Ok(());
+        return Ok(None);
     }
 
     let entries = fetch_recent_entries_logged_in(&client)
@@ -571,20 +586,16 @@ async fn periodic_player_poll(bot_data: &BotData) -> Result<()> {
     let credit_entries = latest_credit_entries(&entries);
 
     if stored_total.is_some() {
-        send_player_update_dm(
-            bot_data,
-            stored_total,
-            stored_rating,
-            &player_data,
-            &credit_entries,
-        )
-        .await
-        .wrap_err("send player update DM")?;
+        Ok(Some(NetworkRefreshUpdate {
+            prev_total: stored_total,
+            prev_rating: stored_rating,
+            current: player_data,
+            credit_entries,
+        }))
     } else {
         debug!("No stored total play count; seeded DB without sending DM");
+        Ok(None)
     }
-
-    Ok(())
 }
 
 pub(crate) async fn sync_from_network_without_discord(
@@ -730,6 +741,10 @@ async fn mai_score(
     #[description = "Song title to search for"] search: String,
 ) -> Result<(), Error> {
     ctx.defer().await?;
+
+    if let Err(e) = refresh_from_network_if_needed(ctx.data()).await {
+        warn!("mai-score: refresh failed; continuing with DB: {e:#}");
+    }
 
     let titles = mai_commands::fetch_score_titles(&ctx.data().db).await?;
 
@@ -925,116 +940,22 @@ pub(crate) fn latest_credit_len(tracks: &[Option<i64>]) -> usize {
 async fn mai_recent(ctx: Context<'_>) -> Result<(), Error> {
     ctx.defer().await?;
 
+    if let Err(e) = refresh_from_network_if_needed(ctx.data()).await {
+        warn!("mai-recent: refresh failed; continuing with DB: {e:#}");
+    }
+
     let display_name = display_user_name(&ctx).await;
 
-    let prev_total = db::get_app_state_u32(&ctx.data().db, STATE_KEY_TOTAL_PLAY_COUNT)
-        .await
-        .ok()
-        .flatten();
-    let prev_rating = db::get_app_state_u32(&ctx.data().db, STATE_KEY_RATING)
-        .await
-        .ok()
-        .flatten();
-
-    // Fetch playerData + recent page to ensure latest results.
-    let mut client = MaimaiClient::new(&ctx.data().config).wrap_err("create HTTP client")?;
-    client
-        .ensure_logged_in()
-        .await
-        .wrap_err("ensure logged in")?;
-    let player_data = fetch_player_data_logged_in(&client)
-        .await
-        .wrap_err("fetch player data")?;
-    let optional_fields = RecentOptionalFields {
-        rating: Some(format_delta(player_data.rating, prev_rating)),
-        play_count: Some(format_delta(player_data.total_play_count, prev_total)),
-    };
-
-    let recent_entries = fetch_recent_entries_logged_in(&client)
-        .await
-        .wrap_err("fetch recent")?;
-    let mut recent_entries =
-        annotate_recent_entries_with_play_count(recent_entries, player_data.total_play_count);
-    if prev_total.is_some() {
-        annotate_first_play_flags(&ctx.data().db, &mut recent_entries)
-            .await
-            .wrap_err("classify first plays")?;
-    }
-    if !recent_entries.is_empty() {
-        let scraped_at = unix_timestamp();
-        db::upsert_playlogs(&ctx.data().db, scraped_at, &recent_entries)
-            .await
-            .wrap_err("upsert playlogs")?;
-        persist_player_snapshot(&ctx.data().db, &player_data)
-            .await
-            .wrap_err("persist player snapshot")?;
-    }
-
-    let (embeds, attachments) = if recent_entries.is_empty() {
-        // Fallback to DB view if parsing did not yield a usable credit.
-        let embeds = mai_commands::build_mai_recent_embeds_for_latest_credit(
-            &ctx.data().db,
-            ctx.data().song_data.as_deref(),
-            &display_name,
-            Some(&optional_fields),
-        )
-        .await?;
-        (embeds, Vec::new())
-    } else {
-        let credit_entries = latest_credit_entries(&recent_entries);
-        let records = credit_entries
-            .iter()
-            .map(|r| RecentRecordView {
-                track: r.track.map(i64::from),
-                played_at: r.played_at.clone(),
-                title: r.title.clone(),
-                chart_type: format_chart_type(r.chart_type).to_string(),
-                diff_category: r.diff_category.map(|d| d.as_str().to_string()),
-                level: r.level.clone(),
-                internal_level: r.diff_category.and_then(|d| {
-                    ctx.data().song_data.as_deref().and_then(|idx| {
-                        idx.internal_level(&r.title, format_chart_type(r.chart_type), d.as_str())
-                    })
-                }),
-                rating_points: rating_points_for_credit_entry(ctx.data().song_data.as_deref(), r),
-                achievement_percent: r.achievement_percent.map(|p| p as f64),
-                achievement_new_record: r.achievement_new_record,
-                first_play: r.first_play,
-                rank: r.score_rank.map(|rk| rk.as_str().to_string()),
-            })
-            .collect::<Vec<_>>();
-
-        let embeds = build_mai_recent_embeds(
-            &display_name,
-            &records,
-            Some(&optional_fields),
-            ctx.data().song_data.as_deref(),
-        );
-
-        let mut attachments = Vec::new();
-        if let Some(idx) = ctx.data().song_data.as_deref() {
-            let mut seen = std::collections::HashSet::<String>::new();
-            for r in &records {
-                let Some(image_name) = idx.image_name(&r.title) else {
-                    continue;
-                };
-                if !seen.insert(image_name.to_string()) {
-                    continue;
-                }
-                let path = format!("fetched_data/img/cover-m/{image_name}");
-                match serenity::CreateAttachment::path(&path).await {
-                    Ok(att) => attachments.push(att),
-                    Err(e) => warn!("failed to attach cover image {path}: {e:?}"),
-                }
-            }
-        }
-
-        (embeds, attachments)
-    };
+    let embeds = mai_commands::build_mai_recent_embeds_for_latest_credit(
+        &ctx.data().db,
+        ctx.data().song_data.as_deref(),
+        &display_name,
+        None,
+    )
+    .await?;
 
     ctx.send(CreateReply {
         embeds,
-        attachments,
         ..Default::default()
     })
     .await?;
@@ -1155,13 +1076,14 @@ async fn annotate_first_play_flags(
     Ok(())
 }
 
-async fn send_player_update_dm(
-    bot_data: &BotData,
-    prev_total: Option<u32>,
-    prev_rating: Option<u32>,
-    current: &ParsedPlayerData,
-    credit_entries: &[ParsedPlayRecord],
-) -> Result<()> {
+async fn send_player_update_dm(bot_data: &BotData, update: NetworkRefreshUpdate) -> Result<()> {
+    let NetworkRefreshUpdate {
+        prev_total,
+        prev_rating,
+        current,
+        credit_entries,
+    } = update;
+
     let http = &bot_data.discord_http;
     let dm_channel = bot_data
         .discord_user_id
