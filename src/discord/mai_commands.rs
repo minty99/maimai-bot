@@ -12,6 +12,139 @@ use crate::discord::bot::{
 use crate::maimai::rating::{chart_rating_points, is_ap_like};
 use crate::song_data::{SongBucket, SongDataIndex};
 
+#[derive(Debug, Clone)]
+pub(crate) struct TodayDetailRowView {
+    pub(crate) title: String,
+    pub(crate) chart_type: String,
+    pub(crate) achievement_percent: Option<f64>,
+    pub(crate) rating_points: Option<u32>,
+    pub(crate) achievement_new_record: bool,
+    pub(crate) first_play: bool,
+}
+
+pub(crate) fn build_mai_today_detail_embed(
+    display_name: &str,
+    day_key: &str,
+    start: &str,
+    end: &str,
+    rows: &[TodayDetailRowView],
+) -> CreateEmbed {
+    let mut desc = String::new();
+    let total = rows.len();
+
+    for (idx, row) in rows.iter().enumerate() {
+        let achv = crate::db::format_percent_f64(row.achievement_percent);
+        let mut line = format!("- **{}** [{}] — {}", row.title, row.chart_type, achv);
+        if let Some(pt) = row.rating_points {
+            line.push_str(&format!(" • {pt}pt"));
+        }
+        if row.first_play {
+            line.push_str(" [FIRST PLAY]");
+        } else if row.achievement_new_record {
+            line.push_str(" [NEW RECORD]");
+        }
+        line.push('\n');
+
+        // Discord embed description max is 4096 chars; keep some room for a truncation line.
+        if desc.len().saturating_add(line.len()) > 3900 {
+            desc.push_str(&format!("... (truncated; showing {}/{total})\n", idx));
+            break;
+        }
+        desc.push_str(&line);
+    }
+
+    if desc.trim().is_empty() {
+        desc = "No playlogs found for this day.".to_string();
+    }
+
+    embed_base(&format!("{display_name}'s plays on {day_key}"))
+        .field("Window", format!("{start} ~ {end}"), false)
+        .description(desc)
+}
+
+pub(crate) async fn build_mai_today_detail_embed_for_day(
+    pool: &SqlitePool,
+    song_data: Option<&SongDataIndex>,
+    display_name: &str,
+    day_key: &str,
+    start: &str,
+    end: &str,
+) -> Result<CreateEmbed> {
+    let rows = sqlx::query_as::<
+        _,
+        (
+            String,
+            String,
+            Option<f64>,
+            Option<String>,
+            Option<String>,
+            i64,
+            i64,
+        ),
+    >(
+        r#"
+        SELECT
+            pl.title,
+            pl.chart_type,
+            pl.achievement_x10000 / 10000.0 as achievement_percent,
+            pl.diff_category,
+            pl.fc,
+            pl.achievement_new_record,
+            pl.first_play
+        FROM playlogs pl
+        WHERE pl.played_at >= ?1
+          AND pl.played_at < ?2
+        "#,
+    )
+    .bind(start)
+    .bind(end)
+    .fetch_all(pool)
+    .await
+    .wrap_err("query playlogs for day")?;
+
+    let mut out = rows
+        .into_iter()
+        .map(
+            |(
+                title,
+                chart_type,
+                achievement,
+                diff_category,
+                fc,
+                achievement_new_record,
+                first_play,
+            )| {
+                let internal_level = diff_category.as_deref().and_then(|diff| {
+                    song_data.and_then(|idx| idx.internal_level(&title, &chart_type, diff))
+                });
+                let rating_points = internal_level.and_then(|internal| {
+                    let ach = achievement?;
+                    let ap = is_ap_like(fc.as_deref());
+                    Some(chart_rating_points(internal as f64, ach, ap))
+                });
+                TodayDetailRowView {
+                    title,
+                    chart_type,
+                    achievement_percent: achievement,
+                    rating_points,
+                    achievement_new_record: achievement_new_record != 0,
+                    first_play: first_play != 0,
+                }
+            },
+        )
+        .collect::<Vec<_>>();
+
+    out.sort_by_key(|r| std::cmp::Reverse(r.rating_points.unwrap_or(0)));
+
+    Ok(build_mai_today_detail_embed(
+        display_name,
+        day_key,
+        start,
+        end,
+        &out,
+    ))
+}
+
 pub(crate) async fn fetch_score_titles(pool: &SqlitePool) -> Result<Vec<String>> {
     sqlx::query_scalar::<_, String>("SELECT DISTINCT title FROM scores")
         .fetch_all(pool)

@@ -28,7 +28,7 @@ pub(crate) use embeds::{
 pub(crate) use refresh::sync_from_network_without_discord;
 pub(crate) use util::{latest_credit_len, normalize_for_match, top_title_matches};
 
-use commands::{mai_rating, mai_recent, mai_score, mai_today};
+use commands::{mai_rating, mai_recent, mai_score, mai_today, mai_today_detail};
 use dm::send_startup_dm;
 use refresh::{
     fetch_player_data, initial_recent_sync, initial_scores_sync, persist_play_counts,
@@ -85,7 +85,13 @@ pub async fn run_bot(config: AppConfig, db_path: std::path::PathBuf) -> Result<(
     let framework = poise::Framework::builder()
         .options(FrameworkOptions {
             prefix_options: Default::default(),
-            commands: vec![mai_score(), mai_recent(), mai_today(), mai_rating()],
+            commands: vec![
+                mai_score(),
+                mai_recent(),
+                mai_today(),
+                mai_today_detail(),
+                mai_rating(),
+            ],
             on_error: |error| {
                 Box::pin(async move {
                     match error {
@@ -222,8 +228,8 @@ mod tests {
     #[tokio::test]
     #[ignore = "Sends a real DM to preview embed UI; requires DISCORD_BOT_TOKEN and DISCORD_USER_ID"]
     async fn preview_embed_player_update_dm() -> eyre::Result<()> {
-        use super::{RecentOptionalFields, build_mai_recent_embeds};
         use super::embeds::{format_delta, rating_points_for_credit_entry};
+        use super::{RecentOptionalFields, build_mai_recent_embeds};
         use crate::maimai::models::{
             ChartType, DifficultyCategory, ParsedPlayRecord, ParsedPlayerData, ScoreRank,
         };

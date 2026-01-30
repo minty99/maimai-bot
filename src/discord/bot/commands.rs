@@ -1,4 +1,4 @@
-use eyre::Result;
+use eyre::{Result, WrapErr};
 use poise::CreateReply;
 use poise::serenity_prelude as serenity;
 use std::time::Duration;
@@ -6,6 +6,7 @@ use tracing::warn;
 
 use crate::discord::mai_commands;
 
+use super::dm::send_embed_dm;
 use super::embeds::embed_base;
 use super::refresh::refresh_from_network_if_needed;
 use super::types::{BotData, Context, Error};
@@ -226,5 +227,80 @@ pub(crate) async fn mai_today(ctx: Context<'_>) -> Result<(), Error> {
     let display_name = display_user_name(&ctx).await;
     let embed = mai_commands::build_mai_today_embed_for_now(&ctx.data().db, &display_name).await?;
     ctx.send(CreateReply::default().embed(embed)).await?;
+    Ok(())
+}
+
+/// Show today's (or a specified day's) play detail as a DM (day boundary: 04:00 JST)
+#[poise::command(slash_command, rename = "mai-today-detail")]
+pub(crate) async fn mai_today_detail(
+    ctx: Context<'_>,
+    #[description = "Date in YYYY/MM/DD (default: today JST, day boundary 04:00)"] date: Option<
+        String,
+    >,
+) -> Result<(), Error> {
+    use time::{Duration as TimeDuration, Month, OffsetDateTime, UtcOffset};
+
+    ctx.defer().await?;
+
+    if let Err(e) = refresh_from_network_if_needed(ctx.data()).await {
+        warn!("mai-today-detail: refresh failed; continuing with DB: {e:#}");
+    }
+
+    let offset = UtcOffset::from_hms(9, 0, 0).unwrap_or(UtcOffset::UTC);
+    let day_date = if let Some(date) = date.as_deref() {
+        let key = date.trim().replace('-', "/");
+        let parts = key.split('/').collect::<Vec<_>>();
+        if parts.len() != 3 {
+            return Err(eyre::eyre!("date must be YYYY/MM/DD"));
+        }
+        let year = parts[0].parse::<i32>().wrap_err("parse year")?;
+        let month = parts[1].parse::<u8>().wrap_err("parse month")?;
+        let day = parts[2].parse::<u8>().wrap_err("parse day")?;
+        let month = Month::try_from(month).wrap_err("parse month")?;
+        time::Date::from_calendar_date(year, month, day).wrap_err("parse date")?
+    } else {
+        let now_jst = OffsetDateTime::now_utc().to_offset(offset);
+        if now_jst.hour() < 4 {
+            (now_jst - TimeDuration::days(1)).date()
+        } else {
+            now_jst.date()
+        }
+    };
+    let end_date = day_date + TimeDuration::days(1);
+
+    let day_key = format!(
+        "{:04}/{:02}/{:02}",
+        day_date.year(),
+        u8::from(day_date.month()),
+        day_date.day()
+    );
+    let end_key = format!(
+        "{:04}/{:02}/{:02}",
+        end_date.year(),
+        u8::from(end_date.month()),
+        end_date.day()
+    );
+
+    let start = format!("{day_key} 04:00");
+    let end = format!("{end_key} 04:00");
+
+    let display_name = display_user_name(&ctx).await;
+    let embed = mai_commands::build_mai_today_detail_embed_for_day(
+        &ctx.data().db,
+        ctx.data().song_data.as_deref(),
+        &display_name,
+        &day_key,
+        &start,
+        &end,
+    )
+    .await?;
+
+    send_embed_dm(ctx.data(), embed).await?;
+
+    ctx.send(CreateReply::default().ephemeral(true).embed(
+        embed_base("Sent").description(format!("Sent a DM with play details for `{day_key}`.")),
+    ))
+    .await?;
+
     Ok(())
 }
