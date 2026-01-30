@@ -1,0 +1,12 @@
+[package]
+name = "maimai-discord"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+poise = { workspace = true }
+tokio = { workspace = true }
+eyre = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+tracing = { workspace = true }

@@ -1496,6 +1496,60 @@ dependencies = [
 ]
 
 [[package]]
+name = "maimai-db"
+version = "0.1.0"
+dependencies = [
+ "eyre",
+ "serde",
+ "serde_json",
+ "sqlx",
+]
+
+[[package]]
+name = "maimai-discord"
+version = "0.1.0"
+dependencies = [
+ "eyre",
+ "poise",
+ "serde",
+ "serde_json",
+ "tokio",
+ "tracing",
+]
+
+[[package]]
+name = "maimai-http-client"
+version = "0.1.0"
+dependencies = [
+ "cookie_store",
+ "eyre",
+ "reqwest",
+ "reqwest_cookie_store",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "maimai-models"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "strum",
+]
+
+[[package]]
+name = "maimai-parsers"
+version = "0.1.0"
+dependencies = [
+ "eyre",
+ "ordered-float",
+ "scraper",
+ "serde",
+ "serde_json",
+ "strum",
+]
+
+[[package]]
 name = "markup5ever"
 version = "0.36.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"

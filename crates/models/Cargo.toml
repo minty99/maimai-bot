@@ -1,0 +1,8 @@
+[package]
+name = "maimai-models"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+serde = { workspace = true }
+strum = { workspace = true }
