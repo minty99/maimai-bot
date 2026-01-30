@@ -1,26 +1,32 @@
 [package]
-name = "maimai-bot"
+name = "maimai-backend"
 version.workspace = true
 edition.workspace = true
 
+[[bin]]
+name = "maimai-backend"
+path = "src/main.rs"
+
 [dependencies]
-clap = { workspace = true }
-cookie_store = { workspace = true }
+axum = "0.7.7"
 dotenvy = { workspace = true }
 eyre = { workspace = true }
-ordered-float = { workspace = true }
-poise = { workspace = true }
 reqwest = { workspace = true }
-reqwest_cookie_store = { workspace = true }
-scraper = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 sqlx = { workspace = true }
-strum = { workspace = true }
-time = { workspace = true }
 tokio = { workspace = true }
+tower = "0.4.13"
+tower-http = { version = "0.5.2", features = ["trace", "cors"] }
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
 
+models = { path = "../crates/models" }
+maimai-db = { path = "../crates/db" }
+maimai-http-client = { path = "../crates/http-client" }
+maimai-parsers = { path = "../crates/maimai-parsers" }
+time = { workspace = true, features = ["macros", "local-offset"] }
+reqwest_cookie_store.workspace = true
+cookie_store.workspace = true
+
 [dev-dependencies]
-tempfile = { workspace = true }
