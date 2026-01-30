@@ -2,12 +2,28 @@
 
 `maimai-bot`은 **maimai DX NET (maimaidx-eng.com)** 에 로그인(SEGA ID)해서 기록을 크롤링하고, 로컬 SQLite에 저장한 뒤 Discord에서 조회/알림을 받는 **단일 사용자** Rust 앱입니다.
 
+## 아키텍처
+
+이 프로젝트는 **백엔드(HTTP API)** + **Discord 봇** 구조로 분리되어 있습니다:
+
+- **Backend** (`backend/`): maimai 크롤링, DB 관리, REST API 제공
+  - 쿠키를 `data/` 아래에 저장/재사용하고, 만료 시 재로그인해서 갱신합니다.
+  - DB는 `sqlx::migrate!()`로 런타임에 마이그레이션을 실행합니다.
+  - 시작 시 `playerData`를 크롤링하고, 필요하면 scores(난이도 0..4) + recent를 DB에 초기 적재합니다.
+  - 이후 10분마다 `playerData`를 다시 크롤링해서 **total play count 변화가 있을 때만** recent를 크롤링합니다.
+  
+- **Discord Bot** (`discord/`): 백엔드 API를 호출하여 Discord 명령어 처리 및 DM 알림 전송
+  - 백엔드의 `/health/ready` 엔드포인트를 폴링하여 백엔드가 준비될 때까지 대기합니다.
+  - 백엔드에서 새 플레이가 감지되면 DM으로 알림을 보냅니다.
+
+**중요**: 백엔드를 먼저 실행한 후 Discord 봇을 실행해야 합니다.
+
 ## 특징
 
-- 쿠키를 `data/` 아래에 저장/재사용하고, 만료 시 재로그인해서 갱신합니다.
-- DB는 `sqlx::migrate!()`로 런타임에 마이그레이션을 실행합니다.
-- 봇은 시작 시 `playerData`를 크롤링하고, 필요하면 scores(난이도 0..4) + recent를 DB에 초기 적재합니다.
-- 이후 10분마다 `playerData`를 다시 크롤링해서 **total play count 변화가 있을 때만** recent를 크롤링/DM 알림을 보냅니다.
+- 쿠키 기반 인증으로 SEGA ID 로그인 유지
+- SQLite 기반 로컬 데이터 저장
+- 자동 스코어 동기화 및 플레이 로그 추적
+- Discord 슬래시 커맨드 및 DM 알림
 
 ## 요구사항
 
@@ -17,35 +33,68 @@
 
 ## 설정
 
-`.env` (커밋 금지):
+환경 변수는 **백엔드**와 **Discord 봇**에 각각 분리되어 있습니다.
 
-- `SEGA_ID`
-- `SEGA_PASSWORD`
-- `DISCORD_BOT_TOKEN`
-- `DISCORD_USER_ID` (DM을 받을 Discord 유저 ID)
+### Backend 설정 (`backend/.env`)
 
-기본 런타임 경로:
+`.env.example`을 복사하여 `backend/.env`를 생성하고 다음 값을 설정하세요:
+
+```env
+SEGA_ID=your_sega_id_here
+SEGA_PASSWORD=your_password_here
+PORT=3000
+DATABASE_URL=sqlite:../data/maimai.sqlite3
+```
+
+### Discord Bot 설정 (`discord/.env`)
+
+`.env.example`을 복사하여 `discord/.env`를 생성하고 다음 값을 설정하세요:
+
+```env
+DISCORD_BOT_TOKEN=your_bot_token_here
+DISCORD_USER_ID=your_user_id_here
+BACKEND_URL=http://localhost:3000
+```
+
+**주의**: `.env` 파일은 절대 커밋하지 마세요. `.gitignore`에 포함되어 있습니다.
+
+### 기본 런타임 경로
 
 - DB: `data/maimai.sqlite3`
 - 쿠키: `data/cookies.json`
 
 ## 실행
 
-Discord 봇 실행:
+### 배포 순서 (중요)
 
-- `cargo run -- bot run`
+**반드시 백엔드를 먼저 실행한 후 Discord 봇을 실행하세요.**
+
+1. **백엔드 실행**:
+   ```bash
+   cd backend
+   cargo run --bin maimai-backend
+   ```
+   백엔드는 `http://localhost:3000`에서 실행되며, `/health/ready` 엔드포인트를 제공합니다.
+
+2. **Discord 봇 실행** (별도 터미널):
+   ```bash
+   cd discord
+   cargo run --bin maimai-discord
+   ```
+   Discord 봇은 백엔드의 `/health/ready`를 폴링하여 백엔드가 준비될 때까지 대기합니다.
+
+### 개발/디버깅 명령어
+
+백엔드에서 제공하는 CLI 명령어들 (레거시, 참고용):
 
 쿠키 로그인/체크:
-
 - `cargo run -- auth login`
 - `cargo run -- auth check`
 
 HTML/raw fetch (로그인 필요):
-
 - `cargo run -- fetch url --url https://maimaidx-eng.com/maimai-mobile/playerData/ --out data/out/player_data.html`
 
 크롤링/파싱(JSON)만 수행 (DB 미사용):
-
 - `cargo run -- crawl player-data --out data/out/player_data.json`
 - `cargo run -- crawl recent --out data/out/recent.json`
 - `cargo run -- crawl scores --out data/out/scores.json`
