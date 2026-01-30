@@ -1,1 +1,327 @@
-// Models crate
+use serde::{Deserialize, Serialize};
+use strum::{Display, EnumString};
+
+pub mod config;
+
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, EnumString, Display,
+)]
+#[repr(u8)]
+pub enum ChartType {
+    #[serde(rename = "STD")]
+    #[strum(serialize = "STD")]
+    Std = 0,
+    #[serde(rename = "DX")]
+    #[strum(serialize = "DX")]
+    Dx = 1,
+}
+
+impl ChartType {
+    pub fn as_u8(self) -> u8 {
+        self as u8
+    }
+}
+
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, EnumString, Display,
+)]
+#[repr(u8)]
+pub enum DifficultyCategory {
+    #[serde(rename = "BASIC")]
+    #[strum(serialize = "BASIC")]
+    Basic = 0,
+
+    #[serde(rename = "ADVANCED")]
+    #[strum(serialize = "ADVANCED")]
+    Advanced = 1,
+
+    #[serde(rename = "EXPERT")]
+    #[strum(serialize = "EXPERT")]
+    Expert = 2,
+
+    #[serde(rename = "MASTER")]
+    #[strum(serialize = "MASTER")]
+    Master = 3,
+
+    #[serde(rename = "Re:MASTER")]
+    #[strum(serialize = "Re:MASTER")]
+    ReMaster = 4,
+}
+
+impl DifficultyCategory {
+    pub fn as_u8(self) -> u8 {
+        self as u8
+    }
+
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Basic => "BASIC",
+            Self::Advanced => "ADVANCED",
+            Self::Expert => "EXPERT",
+            Self::Master => "MASTER",
+            Self::ReMaster => "Re:MASTER",
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum ScoreRank {
+    #[serde(rename = "SSS+")]
+    SssPlus,
+    #[serde(rename = "SSS")]
+    Sss,
+    #[serde(rename = "SS+")]
+    SsPlus,
+    #[serde(rename = "SS")]
+    Ss,
+    #[serde(rename = "S+")]
+    SPlus,
+    #[serde(rename = "S")]
+    S,
+    #[serde(rename = "AAA")]
+    Aaa,
+    #[serde(rename = "AA")]
+    Aa,
+    #[serde(rename = "A")]
+    A,
+    #[serde(rename = "BBB")]
+    Bbb,
+    #[serde(rename = "BB")]
+    Bb,
+    #[serde(rename = "B")]
+    B,
+    #[serde(rename = "C")]
+    C,
+    #[serde(rename = "D")]
+    D,
+}
+
+impl ScoreRank {
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::SssPlus => "SSS+",
+            Self::Sss => "SSS",
+            Self::SsPlus => "SS+",
+            Self::Ss => "SS",
+            Self::SPlus => "S+",
+            Self::S => "S",
+            Self::Aaa => "AAA",
+            Self::Aa => "AA",
+            Self::A => "A",
+            Self::Bbb => "BBB",
+            Self::Bb => "BB",
+            Self::B => "B",
+            Self::C => "C",
+            Self::D => "D",
+        }
+    }
+
+    pub fn from_score_icon_key(key: &str) -> Option<Self> {
+        Some(match key {
+            "sssp" => Self::SssPlus,
+            "sss" => Self::Sss,
+            "ssp" => Self::SsPlus,
+            "ss" => Self::Ss,
+            "sp" => Self::SPlus,
+            "s" => Self::S,
+            "aaa" => Self::Aaa,
+            "aa" => Self::Aa,
+            "a" => Self::A,
+            "bbb" => Self::Bbb,
+            "bb" => Self::Bb,
+            "b" => Self::B,
+            "c" => Self::C,
+            "d" => Self::D,
+            _ => return None,
+        })
+    }
+
+    pub fn from_playlog_stem(stem: &str) -> Option<Self> {
+        let s = stem.trim().to_ascii_lowercase();
+        Some(match s.as_str() {
+            "sssplus" => Self::SssPlus,
+            "sss" => Self::Sss,
+            "ssplus" => Self::SsPlus,
+            "ss" => Self::Ss,
+            "splus" => Self::SPlus,
+            "s" => Self::S,
+            "aaa" => Self::Aaa,
+            "aa" => Self::Aa,
+            "a" => Self::A,
+            "bbb" => Self::Bbb,
+            "bb" => Self::Bb,
+            "b" => Self::B,
+            "c" => Self::C,
+            "d" => Self::D,
+            _ => return None,
+        })
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum FcStatus {
+    #[serde(rename = "AP+")]
+    ApPlus,
+    #[serde(rename = "AP")]
+    Ap,
+    #[serde(rename = "FC+")]
+    FcPlus,
+    #[serde(rename = "FC")]
+    Fc,
+}
+
+impl FcStatus {
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::ApPlus => "AP+",
+            Self::Ap => "AP",
+            Self::FcPlus => "FC+",
+            Self::Fc => "FC",
+        }
+    }
+
+    pub fn from_score_icon_key(key: &str) -> Option<Self> {
+        Some(match key {
+            "app" => Self::ApPlus,
+            "ap" => Self::Ap,
+            "fcp" => Self::FcPlus,
+            "fc" => Self::Fc,
+            _ => return None,
+        })
+    }
+
+    pub fn from_playlog_key(key: &str) -> Option<Self> {
+        let s = key.trim().to_ascii_lowercase();
+        Some(match s.as_str() {
+            "app" => Self::ApPlus,
+            "ap" => Self::Ap,
+            "fcp" => Self::FcPlus,
+            "fc" => Self::Fc,
+            _ => return None,
+        })
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum SyncStatus {
+    #[serde(rename = "FDX+")]
+    FdxPlus,
+    #[serde(rename = "FDX")]
+    Fdx,
+    #[serde(rename = "FS+")]
+    FsPlus,
+    #[serde(rename = "FS")]
+    Fs,
+    #[serde(rename = "SYNC")]
+    Sync,
+}
+
+impl SyncStatus {
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::FdxPlus => "FDX+",
+            Self::Fdx => "FDX",
+            Self::FsPlus => "FS+",
+            Self::Fs => "FS",
+            Self::Sync => "SYNC",
+        }
+    }
+
+    pub const fn priority(self) -> u8 {
+        match self {
+            Self::FdxPlus => 5,
+            Self::Fdx => 4,
+            Self::FsPlus => 3,
+            Self::Fs => 2,
+            Self::Sync => 1,
+        }
+    }
+
+    pub fn from_score_icon_key(key: &str) -> Option<Self> {
+        Some(match key {
+            "fdxp" => Self::FdxPlus,
+            "fdx" => Self::Fdx,
+            "fsp" => Self::FsPlus,
+            "fs" => Self::Fs,
+            "sync" => Self::Sync,
+            _ => return None,
+        })
+    }
+
+    pub fn from_playlog_key(key: &str) -> Option<Self> {
+        let s = key.trim().to_ascii_lowercase();
+        Some(match s.as_str() {
+            "fdxp" => Self::FdxPlus,
+            "fdx" => Self::Fdx,
+            "fsp" => Self::FsPlus,
+            "fs" => Self::Fs,
+            "sync" => Self::Sync,
+            _ => return None,
+        })
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ParsedScoreEntry {
+    pub title: String,
+    pub chart_type: ChartType,
+    pub diff_category: DifficultyCategory,
+    pub level: String,
+    pub achievement_percent: Option<f32>,
+    pub rank: Option<ScoreRank>,
+    pub fc: Option<FcStatus>,
+    pub sync: Option<SyncStatus>,
+    pub dx_score: Option<i32>,
+    pub dx_score_max: Option<i32>,
+    pub source_idx: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ParsedPlayRecord {
+    pub played_at_unixtime: Option<i64>,
+    pub track: Option<u8>,
+    pub played_at: Option<String>,
+    pub credit_play_count: Option<u32>,
+
+    pub title: String,
+    pub chart_type: ChartType,
+    pub diff_category: Option<DifficultyCategory>,
+    pub level: Option<String>,
+
+    pub achievement_percent: Option<f32>,
+    pub achievement_new_record: bool,
+    pub first_play: bool,
+    pub score_rank: Option<ScoreRank>,
+    pub fc: Option<FcStatus>,
+    pub sync: Option<SyncStatus>,
+    pub dx_score: Option<i32>,
+    pub dx_score_max: Option<i32>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ParsedSongDetail {
+    pub title: String,
+    pub chart_type: ChartType,
+    pub difficulties: Vec<ParsedSongDifficultyDetail>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ParsedSongDifficultyDetail {
+    pub diff_category: DifficultyCategory,
+    pub level: String,
+    pub chart_type: ChartType,
+    pub achievement_percent: Option<f32>,
+    pub rank: Option<ScoreRank>,
+    pub fc: Option<FcStatus>,
+    pub sync: Option<SyncStatus>,
+    pub dx_score: Option<i32>,
+    pub dx_score_max: Option<i32>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ParsedPlayerData {
+    pub user_name: String,
+    pub rating: u32,
+    pub current_version_play_count: u32,
+    pub total_play_count: u32,
+}
