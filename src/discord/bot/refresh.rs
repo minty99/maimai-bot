@@ -16,9 +16,7 @@ use crate::maimai::parse::player_data::parse_player_data_html;
 use crate::maimai::parse::recent::parse_recent_html;
 use crate::maimai::parse::score_list::parse_scores_html;
 
-use super::dm::send_player_update_dm;
 use super::types::BotData;
-use super::util::latest_credit_len;
 
 const STATE_KEY_TOTAL_PLAY_COUNT: &str = "player.total_play_count";
 const STATE_KEY_RATING: &str = "player.rating";
@@ -36,31 +34,18 @@ pub(crate) fn start_background_tasks(bot_data: BotData, _cache: Arc<serenity::Ca
             info!("Running periodic playerData poll...");
 
             match refresh_from_network_if_needed(&bot_data).await {
-                Ok(Some(update)) => {
-                    if let Err(e) = send_player_update_dm(&bot_data, update).await {
-                        error!("Periodic poll failed: {e:#}");
-                    }
-                }
-                Ok(None) => {}
+                Ok(true) => info!("New plays detected; refreshed DB"),
+                Ok(false) => {}
                 Err(e) => error!("Periodic poll failed: {e:#}"),
             }
         }
     });
 }
 
-pub(crate) struct NetworkRefreshUpdate {
-    pub(crate) prev_total: Option<u32>,
-    pub(crate) prev_rating: Option<u32>,
-    pub(crate) current: ParsedPlayerData,
-    pub(crate) credit_entries: Vec<ParsedPlayRecord>,
-}
-
-pub(crate) async fn refresh_from_network_if_needed(
-    bot_data: &BotData,
-) -> Result<Option<NetworkRefreshUpdate>> {
+pub(crate) async fn refresh_from_network_if_needed(bot_data: &BotData) -> Result<bool> {
     if is_maintenance_window_now() {
         info!("Skipping periodic poll due to maintenance window (04:00-07:00 local time)");
-        return Ok(None);
+        return Ok(false);
     }
 
     let mut client = MaimaiClient::new(&bot_data.config).wrap_err("create HTTP client")?;
@@ -75,7 +60,6 @@ pub(crate) async fn refresh_from_network_if_needed(
     *bot_data.maimai_user_name.write().await = player_data.user_name.clone();
 
     let stored_total = db::get_app_state_u32(&bot_data.db, STATE_KEY_TOTAL_PLAY_COUNT).await;
-    let stored_rating = db::get_app_state_u32(&bot_data.db, STATE_KEY_RATING).await;
 
     let stored_total = match stored_total {
         Ok(v) => v,
@@ -84,18 +68,11 @@ pub(crate) async fn refresh_from_network_if_needed(
             None
         }
     };
-    let stored_rating = match stored_rating {
-        Ok(v) => v,
-        Err(e) => {
-            debug!("Failed to read stored rating; treating as missing: {e:#}");
-            None
-        }
-    };
 
     if let Some(stored_total) = stored_total
         && stored_total == player_data.total_play_count
     {
-        return Ok(None);
+        return Ok(false);
     }
 
     let entries = fetch_recent_entries_logged_in(&client)
@@ -123,18 +100,11 @@ pub(crate) async fn refresh_from_network_if_needed(
         .await
         .wrap_err("persist player snapshot")?;
 
-    let credit_entries = latest_credit_entries(&entries);
-
     if stored_total.is_some() {
-        Ok(Some(NetworkRefreshUpdate {
-            prev_total: stored_total,
-            prev_rating: stored_rating,
-            current: player_data,
-            credit_entries,
-        }))
+        Ok(true)
     } else {
         debug!("No stored total play count; seeded DB without sending DM");
-        Ok(None)
+        Ok(false)
     }
 }
 
@@ -336,18 +306,6 @@ pub(crate) async fn initial_recent_sync(bot_data: &BotData, total_play_count: u3
         "Startup recent sync completed: entries_total={count_total} entries_with_idx={count_with_idx}"
     );
     Ok(())
-}
-
-fn latest_credit_entries(entries: &[ParsedPlayRecord]) -> Vec<ParsedPlayRecord> {
-    let take = latest_credit_len(
-        &entries
-            .iter()
-            .map(|e| e.track.map(i64::from))
-            .collect::<Vec<_>>(),
-    );
-    let mut out = entries.iter().take(take).cloned().collect::<Vec<_>>();
-    out.reverse();
-    out
 }
 
 fn annotate_recent_entries_with_play_count(

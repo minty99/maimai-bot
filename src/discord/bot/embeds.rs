@@ -1,9 +1,8 @@
 use poise::serenity_prelude as serenity;
 use serenity::builder::CreateEmbed;
 
-use crate::db::{format_chart_type, format_percent_f64};
-use crate::maimai::models::{ParsedPlayRecord, ParsedPlayerData};
-use crate::maimai::rating::{chart_rating_points, is_ap_like};
+use crate::db::format_percent_f64;
+use crate::maimai::models::ParsedPlayerData;
 use crate::song_data::SongDataIndex;
 
 const EMBED_COLOR: u32 = 0x51BCF3;
@@ -12,20 +11,6 @@ pub(crate) fn embed_base(title: &str) -> CreateEmbed {
     let mut e = CreateEmbed::new();
     e = e.title(title).color(EMBED_COLOR);
     e
-}
-
-pub(crate) fn format_delta(current: u32, previous: Option<u32>) -> String {
-    let Some(previous) = previous else {
-        return format!("{current}");
-    };
-    let delta = current as i64 - previous as i64;
-    if delta > 0 {
-        format!("{current} (+{delta})")
-    } else if delta < 0 {
-        format!("{current} ({delta})")
-    } else {
-        format!("{current} (+0)")
-    }
 }
 
 pub(crate) fn embed_startup(player: &ParsedPlayerData) -> CreateEmbed {
@@ -209,18 +194,38 @@ fn normalize_playlog_rank(rank: &str) -> &str {
     }
 }
 
+#[cfg(test)]
+pub(crate) fn format_delta(current: u32, previous: Option<u32>) -> String {
+    let Some(previous) = previous else {
+        return format!("{current}");
+    };
+    let delta = current as i64 - previous as i64;
+    if delta > 0 {
+        format!("{current} (+{delta})")
+    } else if delta < 0 {
+        format!("{current} ({delta})")
+    } else {
+        format!("{current} (+0)")
+    }
+}
+
+#[cfg(test)]
 pub(crate) fn rating_points_for_credit_entry(
     song_data: Option<&SongDataIndex>,
-    entry: &ParsedPlayRecord,
+    entry: &crate::maimai::models::ParsedPlayRecord,
 ) -> Option<u32> {
     let song_data = song_data?;
     let diff_category = entry.diff_category?;
     let achievement = entry.achievement_percent? as f64;
 
-    let chart_type = format_chart_type(entry.chart_type);
+    let chart_type = crate::db::format_chart_type(entry.chart_type);
     let internal_level =
         song_data.internal_level(&entry.title, chart_type, diff_category.as_str())?;
 
-    let ap = is_ap_like(entry.fc.map(|v| v.as_str()));
-    Some(chart_rating_points(internal_level as f64, achievement, ap))
+    let ap = crate::maimai::rating::is_ap_like(entry.fc.map(|v| v.as_str()));
+    Some(crate::maimai::rating::chart_rating_points(
+        internal_level as f64,
+        achievement,
+        ap,
+    ))
 }
