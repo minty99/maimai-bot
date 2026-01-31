@@ -12,6 +12,10 @@ pub async fn get_cover(
     State(state): State<AppState>,
     Path(image_name): Path<String>,
 ) -> Response {
+    if image_name.contains("..") || image_name.contains('/') || image_name.contains('\\') {
+        return (StatusCode::BAD_REQUEST, "Invalid image name").into_response();
+    }
+    
     let mut file_path = PathBuf::from(&state.fetched_data_path);
     file_path.push("img");
     file_path.push("cover-m");
