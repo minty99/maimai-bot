@@ -209,11 +209,14 @@ fn format_chart_type(chart_type: models::ChartType) -> &'static str {
 fn backend_config_to_app_config(config: &crate::config::BackendConfig) -> models::config::AppConfig {
     use std::path::PathBuf;
     
+    let data_dir = PathBuf::from(&config.data_dir);
+    let cookie_path = data_dir.join("cookies.json");
+    
     models::config::AppConfig {
         sega_id: config.sega_id.clone(),
         sega_password: config.sega_password.clone(),
-        data_dir: PathBuf::from("data"),
-        cookie_path: PathBuf::from("data/cookies.json"),
+        data_dir,
+        cookie_path,
         discord_bot_token: None,
         discord_user_id: None,
     }

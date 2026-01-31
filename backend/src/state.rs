@@ -15,11 +15,14 @@ pub struct AppState {
 
 impl AppState {
     pub fn maimai_client(&self) -> eyre::Result<MaimaiClient> {
+        let data_dir = PathBuf::from(&self.config.data_dir);
+        let cookie_path = data_dir.join("cookies.json");
+
         let app_config = models::config::AppConfig {
             sega_id: self.config.sega_id.clone(),
             sega_password: self.config.sega_password.clone(),
-            data_dir: PathBuf::from("data"),
-            cookie_path: PathBuf::from("data/cookies.json"),
+            data_dir,
+            cookie_path,
             discord_bot_token: None,
             discord_user_id: None,
         };
