@@ -36,6 +36,13 @@ async fn main() -> eyre::Result<()> {
 
     tracing::info!("Database connected successfully");
 
+    tracing::info!("Running database migrations...");
+    sqlx::migrate!("./migrations")
+        .run(&db_pool)
+        .await
+        .wrap_err("Failed to run database migrations")?;
+    tracing::info!("Database migrations completed successfully");
+
     // Attempt startup sync, but allow backend to start even if it fails
     // (useful for testing with invalid credentials)
     match tasks::startup::startup_sync(&db_pool, &config).await {
