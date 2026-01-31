@@ -9,6 +9,7 @@ services:
       - SEGA_ID=${SEGA_ID}
       - SEGA_PASSWORD=${SEGA_PASSWORD}
       - BACKEND_PORT=3000
+      - DATA_DIR=${DATA_DIR:-/app/data}
       - DATABASE_URL=sqlite:/app/data/maimai.sqlite3
       - FETCHED_DATA_PATH=${FETCHED_DATA_PATH:-/app/fetched_data}
     volumes:
