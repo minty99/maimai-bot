@@ -1,12 +1,16 @@
 use crate::config::BackendConfig;
 use maimai_http_client::MaimaiClient;
+use models::SongDataIndex;
 use sqlx::SqlitePool;
 use std::path::PathBuf;
+use std::sync::Arc;
 
 #[derive(Clone)]
 pub struct AppState {
     pub db_pool: SqlitePool,
     pub config: BackendConfig,
+    pub song_data: Option<Arc<SongDataIndex>>,
+    pub fetched_data_path: String,
 }
 
 impl AppState {

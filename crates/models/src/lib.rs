@@ -412,7 +412,12 @@ struct SongDataSheet {
 
 impl SongDataIndex {
     pub fn load_from_default_locations() -> eyre::Result<Option<Self>> {
-        let path = PathBuf::from("fetched_data/data.json");
+        Self::load_with_base_path("fetched_data")
+    }
+
+    pub fn load_with_base_path(base_path: &str) -> eyre::Result<Option<Self>> {
+        let mut path = PathBuf::from(base_path);
+        path.push("data.json");
 
         if let Some(idx) = Self::load_from_path(&path)? {
             return Ok(Some(idx));
@@ -426,11 +431,10 @@ impl SongDataIndex {
             return Ok(None);
         }
 
-        let file = File::open(path)
-            .map_err(|e| eyre::eyre!("open song data: {}", e))?;
+        let file = File::open(path).map_err(|e| eyre::eyre!("open song data: {}", e))?;
         let reader = BufReader::new(file);
-        let root: SongDataRoot = serde_json::from_reader(reader)
-            .map_err(|e| eyre::eyre!("parse song data: {}", e))?;
+        let root: SongDataRoot =
+            serde_json::from_reader(reader).map_err(|e| eyre::eyre!("parse song data: {}", e))?;
         Ok(Some(Self::from_root(root)))
     }
 
