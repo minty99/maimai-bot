@@ -19,6 +19,8 @@ pub struct ScoreResponse {
     pub source_idx: Option<String>,
     pub internal_level: Option<f32>,
     pub image_name: Option<String>,
+    pub rating_points: Option<u32>,
+    pub bucket: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -108,6 +110,11 @@ impl BackendClient {
         resp.bytes().await
             .map(|b| b.to_vec())
             .wrap_err("read cover image bytes")
+    }
+
+    pub async fn get_rated_scores(&self) -> Result<Vec<ScoreResponse>> {
+        self.get_with_retry("/api/scores/rated")
+            .await
     }
 
     pub async fn health_check_with_retry(&self) -> Result<()> {

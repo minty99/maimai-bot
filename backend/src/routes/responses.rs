@@ -17,17 +17,40 @@ pub struct ScoreResponse {
     pub source_idx: Option<String>,
     pub internal_level: Option<f32>,
     pub image_name: Option<String>,
+    pub rating_points: Option<u32>,
+    pub bucket: Option<String>,
 }
 
 impl ScoreResponse {
     pub fn from_entry(entry: ScoreEntry, state: &AppState) -> Self {
-        let (internal_level, image_name) = if let Some(ref song_data) = state.song_data {
+        let (internal_level, image_name, rating_points, bucket) = if let Some(ref song_data) =
+            state.song_data
+        {
             let internal =
                 song_data.internal_level(&entry.title, &entry.chart_type, &entry.diff_category);
             let image = song_data.image_name(&entry.title).map(|s| s.to_string());
-            (internal, image)
+
+            let rating =
+                if let (Some(internal), Some(ach_x10000)) = (internal, entry.achievement_x10000) {
+                    let achievement_percent = ach_x10000 as f64 / 10000.0;
+                    let ap_bonus = crate::rating::is_ap_like(entry.fc.as_deref());
+                    Some(crate::rating::chart_rating_points(
+                        internal as f64,
+                        achievement_percent,
+                        ap_bonus,
+                    ))
+                } else {
+                    None
+                };
+
+            let bucket_val = song_data.bucket(&entry.title).map(|b| match b {
+                models::SongBucket::New => "New".to_string(),
+                models::SongBucket::Old => "Old".to_string(),
+            });
+
+            (internal, image, rating, bucket_val)
         } else {
-            (None, None)
+            (None, None, None, None)
         };
 
         Self {
@@ -44,6 +67,8 @@ impl ScoreResponse {
             source_idx: entry.source_idx,
             internal_level,
             image_name,
+            rating_points,
+            bucket,
         }
     }
 }

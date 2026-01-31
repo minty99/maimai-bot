@@ -20,6 +20,7 @@ pub fn create_routes(state: AppState) -> Router {
         .route("/health", get(health::health))
         .route("/health/ready", get(health::ready))
         .route("/api/scores/search", get(scores::search_scores))
+        .route("/api/scores/rated", get(scores::get_all_rated_scores))
         .route("/api/scores/:title/:chart_type/:diff_category", get(scores::get_score))
         .route("/api/player", get(player::get_player))
         .route("/api/recent", get(recent::get_recent))

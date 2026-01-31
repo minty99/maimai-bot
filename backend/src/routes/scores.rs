@@ -62,3 +62,22 @@ pub async fn get_score(
             title, chart_type, diff_category
         )))
 }
+
+pub async fn get_all_rated_scores(
+    State(state): State<AppState>,
+) -> Result<Json<Vec<ScoreResponse>>> {
+    let rows = sqlx::query_as::<_, ScoreEntry>(
+        "SELECT title, chart_type, diff_category, level, achievement_x10000, rank, fc, sync, dx_score, dx_score_max, source_idx
+         FROM scores
+         WHERE achievement_x10000 IS NOT NULL
+         ORDER BY title, chart_type, diff_category"
+    )
+    .fetch_all(&state.db_pool)
+    .await?;
+
+    let responses = rows.into_iter()
+        .map(|entry| ScoreResponse::from_entry(entry, &state))
+        .collect();
+
+    Ok(Json(responses))
+}

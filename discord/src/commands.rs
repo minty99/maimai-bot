@@ -456,7 +456,7 @@ pub(crate) async fn mai_rating(ctx: Context<'_>) -> Result<(), Error> {
 async fn build_mai_rating_embeds(
     client: &crate::client::BackendClient,
 ) -> Result<Vec<serenity::builder::CreateEmbed>> {
-    let records = client.get_recent(1000).await?;
+    let scores = client.get_rated_scores().await?;
 
     #[derive(Debug, Clone)]
     struct RatedRow {
@@ -474,36 +474,36 @@ async fn build_mai_rating_embeds(
     let mut missing_data = 0usize;
     let mut out_rows = Vec::new();
 
-    for record in records {
-        let Some(achievement_x10000) = record.achievement_x10000 else {
+    for score in scores {
+        let Some(achievement_x10000) = score.achievement_x10000 else {
             continue;
         };
         let achievement_percent = achievement_x10000 as f64 / 10000.0;
 
-        let Some(bucket) = record.bucket.as_ref() else {
+        let Some(ref bucket) = score.bucket else {
             missing_data += 1;
             continue;
         };
 
-        let Some(internal_level) = record.internal_level else {
+        let Some(internal_level) = score.internal_level else {
             missing_data += 1;
             continue;
         };
 
-        let Some(rating_points) = record.rating_points else {
+        let Some(rating_points) = score.rating_points else {
             missing_data += 1;
             continue;
         };
 
         out_rows.push(RatedRow {
             bucket: bucket.clone(),
-            title: record.title,
-            chart_type: record.chart_type,
-            diff_category: record.diff_category.unwrap_or_default(),
-            level: record.level.unwrap_or_default(),
+            title: score.title,
+            chart_type: score.chart_type,
+            diff_category: score.diff_category,
+            level: score.level,
             internal_level,
             achievement_percent,
-            rank: record.score_rank,
+            rank: score.rank,
             rating_points,
         });
     }
