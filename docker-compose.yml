@@ -1,0 +1,40 @@
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    container_name: maimai-backend
+    restart: unless-stopped
+    environment:
+      - SEGA_ID=${SEGA_ID}
+      - SEGA_PASSWORD=${SEGA_PASSWORD}
+      - BACKEND_PORT=3000
+      - DATA_DIR=${DATA_DIR:-/app/data}
+      - DATABASE_URL=sqlite:/app/data/maimai.sqlite3
+      - FETCHED_DATA_PATH=${FETCHED_DATA_PATH:-/app/fetched_data}
+    volumes:
+      - ./data:/app/data
+      - ./backend/migrations:/app/migrations
+      - ./fetched_data:/app/fetched_data
+    ports:
+      - "3000:3000"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+  discord:
+    build:
+      context: .
+      dockerfile: discord/Dockerfile
+    container_name: maimai-discord
+    restart: unless-stopped
+    environment:
+      - DISCORD_BOT_TOKEN=${DISCORD_BOT_TOKEN}
+      - DISCORD_USER_ID=${DISCORD_USER_ID}
+      - BACKEND_URL=http://backend:3000
+    depends_on:
+      backend:
+        condition: service_healthy

@@ -1,0 +1,24 @@
+[package]
+name = "maimai-discord"
+version.workspace = true
+edition.workspace = true
+
+[[bin]]
+name = "maimai-discord"
+path = "src/main.rs"
+
+[dependencies]
+poise = { workspace = true }
+tokio = { workspace = true }
+eyre = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+dotenvy = { workspace = true }
+reqwest = { workspace = true }
+models = { path = "../crates/models" }
+urlencoding = "2.1.3"
+time = { workspace = true, features = ["local-offset"] }
+ordered-float.workspace = true
+strsim = "0.11.1"

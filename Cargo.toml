@@ -1,9 +1,12 @@
-[package]
-name = "maimai-bot"
-version = "0.1.0"
-edition = "2024"
+[workspace]
+members = ["crates/models", "crates/db", "crates/http-client", "crates/maimai-parsers", "backend", "discord"]
+resolver = "2"
 
-[dependencies]
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+
+[workspace.dependencies]
 clap = { version = "4.5.54", features = ["derive"] }
 cookie_store = { version = "0.22.0", features = ["serde_json"] }
 dotenvy = "0.15.7"
@@ -21,6 +24,4 @@ time = { version = "0.3.45", features = ["local-offset"] }
 tokio = { version = "1.49.0", features = ["rt-multi-thread", "macros", "signal"] }
 tracing = "0.1.44"
 tracing-subscriber = { version = "0.3.22", features = ["env-filter"] }
-
-[dev-dependencies]
 tempfile = "3.24.0"
