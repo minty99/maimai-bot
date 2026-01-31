@@ -83,6 +83,46 @@ BACKEND_URL=http://localhost:3000
    ```
    Discord 봇은 백엔드의 `/health/ready`를 폴링하여 백엔드가 준비될 때까지 대기합니다.
 
+### Docker로 실행
+
+Docker Compose를 사용하여 백엔드와 Discord 봇을 함께 실행할 수 있습니다.
+
+#### 환경 변수 설정
+
+프로젝트 루트에 `.env` 파일을 생성하고 다음 값을 설정하세요:
+
+```env
+SEGA_ID=your_sega_id_here
+SEGA_PASSWORD=your_password_here
+DISCORD_BOT_TOKEN=your_bot_token_here
+DISCORD_USER_ID=your_user_id_here
+```
+
+#### 실행
+
+```bash
+docker compose up -d
+```
+
+#### 로그 확인
+
+```bash
+docker compose logs -f backend
+docker compose logs -f discord
+```
+
+#### 종료
+
+```bash
+docker compose down
+```
+
+#### 데이터 영속성
+
+- SQLite 데이터베이스는 `./data/maimai.sqlite3`에 저장됩니다.
+- 쿠키는 `./data/cookies.json`에 저장됩니다.
+- `docker compose down`을 실행해도 `./data/` 디렉토리의 데이터는 유지됩니다.
+
 ### 개발/디버깅 명령어
 
 백엔드에서 제공하는 CLI 명령어들 (레거시, 참고용):
