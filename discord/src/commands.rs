@@ -170,7 +170,7 @@ pub(crate) async fn mai_score(
     for score in &matched_scores {
         has_rows = true;
         let achievement_percent = score.achievement_x10000.map(|x| x as f64 / 10000.0).unwrap_or(0.0);
-        let level = &score.level;
+        let level = format_level_with_internal(&score.level, score.internal_level);
         let rank = score.rank.as_deref().unwrap_or("N/A");
         let fc = score.fc.as_deref().unwrap_or("-");
         let sync = score.sync.as_deref().unwrap_or("-");
@@ -197,10 +197,11 @@ pub(crate) async fn mai_score(
     if let Some(score) = matched_scores.first() {
         if let Some(ref image_name) = score.image_name {
             embed = embed.thumbnail(format!("attachment://{image_name}"));
-            let path = format!("fetched_data/img/cover-m/{image_name}");
-            match serenity::CreateAttachment::path(&path).await {
-                Ok(att) => attachments.push(att),
-                Err(e) => tracing::warn!("failed to attach cover image {path}: {e:?}"),
+            match ctx.data().backend_client.get_cover(image_name).await {
+                Ok(bytes) => {
+                    attachments.push(serenity::CreateAttachment::bytes(bytes, image_name.clone()));
+                }
+                Err(e) => tracing::warn!("failed to fetch cover image {image_name}: {e:?}"),
             }
         }
     }
