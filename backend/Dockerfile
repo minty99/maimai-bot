@@ -1,5 +1,5 @@
 # Multi-stage build for Rust backend
-FROM rust:1.83-slim as builder
+FROM rust:1.93-slim as builder
 
 WORKDIR /app
 
@@ -14,6 +14,7 @@ COPY Cargo.toml ./
 COPY Cargo.lock ./
 COPY crates/ ./crates/
 COPY backend/ ./backend/
+COPY discord/ ./discord/
 
 # Build backend only
 RUN cargo build --release --bin maimai-backend
