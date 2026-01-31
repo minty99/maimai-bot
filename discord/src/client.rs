@@ -1,8 +1,48 @@
 use eyre::{Result, WrapErr};
-use models::{ParsedPlayerData, PlayRecord, ScoreEntry};
+use models::ParsedPlayerData;
 use reqwest::Client;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use tokio::time::{sleep, Duration};
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ScoreResponse {
+    pub title: String,
+    pub chart_type: String,
+    pub diff_category: String,
+    pub level: String,
+    pub achievement_x10000: Option<i64>,
+    pub rank: Option<String>,
+    pub fc: Option<String>,
+    pub sync: Option<String>,
+    pub dx_score: Option<i32>,
+    pub dx_score_max: Option<i32>,
+    pub source_idx: Option<String>,
+    pub internal_level: Option<f32>,
+    pub image_name: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PlayRecordResponse {
+    pub played_at_unixtime: i64,
+    pub played_at: Option<String>,
+    pub track: Option<i32>,
+    pub title: String,
+    pub chart_type: String,
+    pub diff_category: Option<String>,
+    pub level: Option<String>,
+    pub achievement_x10000: Option<i64>,
+    pub score_rank: Option<String>,
+    pub fc: Option<String>,
+    pub sync: Option<String>,
+    pub dx_score: Option<i32>,
+    pub dx_score_max: Option<i32>,
+    pub credit_play_count: Option<i32>,
+    pub achievement_new_record: Option<i32>,
+    pub first_play: Option<i32>,
+    pub internal_level: Option<f32>,
+    pub rating_points: Option<u32>,
+    pub bucket: Option<String>,
+}
 
 #[derive(Debug)]
 pub struct BackendClient {
@@ -23,7 +63,7 @@ impl BackendClient {
         self.get_with_retry("/api/player").await
     }
 
-    pub async fn search_scores(&self, query: &str) -> Result<Vec<ScoreEntry>> {
+    pub async fn search_scores(&self, query: &str) -> Result<Vec<ScoreResponse>> {
         self.get_with_retry(&format!(
             "/api/scores/search?q={}",
             urlencoding::encode(query)
@@ -36,7 +76,7 @@ impl BackendClient {
         title: &str,
         chart: &str,
         diff: &str,
-    ) -> Result<Vec<ScoreEntry>> {
+    ) -> Result<Vec<ScoreResponse>> {
         self.get_with_retry(&format!(
             "/api/scores/{}/{}/{}",
             urlencoding::encode(title),
@@ -46,12 +86,12 @@ impl BackendClient {
         .await
     }
 
-    pub async fn get_recent(&self, limit: usize) -> Result<Vec<PlayRecord>> {
+    pub async fn get_recent(&self, limit: usize) -> Result<Vec<PlayRecordResponse>> {
         self.get_with_retry(&format!("/api/recent?limit={}", limit))
             .await
     }
 
-    pub async fn get_today(&self, day: &str) -> Result<Vec<PlayRecord>> {
+    pub async fn get_today(&self, day: &str) -> Result<Vec<PlayRecordResponse>> {
         self.get_with_retry(&format!("/api/today?day={}", day))
             .await
     }

@@ -1,5 +1,4 @@
 use eyre::WrapErr;
-use models::SongDataIndex;
 use poise::serenity_prelude as serenity;
 use poise::{CreateReply, FrameworkOptions};
 use tracing::info;
@@ -19,7 +18,6 @@ pub struct BotData {
     pub discord_user_id: serenity::UserId,
     pub discord_http: std::sync::Arc<serenity::Http>,
     pub backend_client: BackendClient,
-    pub song_data: Option<SongDataIndex>,
 }
 
 #[tokio::main]
@@ -44,22 +42,14 @@ async fn main() -> eyre::Result<()> {
 
     let backend_client = BackendClient::new(config.backend_url.clone())?;
 
-    // Poll backend health with exponential backoff
     info!("Waiting for backend to be ready...");
     backend_client.health_check_with_retry().await?;
-
-    let song_data = SongDataIndex::load_from_default_locations()
-        .unwrap_or_else(|e| {
-            tracing::warn!("Failed to load song data: {}", e);
-            None
-        });
 
     let bot_data = BotData {
         config,
         discord_user_id,
         discord_http,
         backend_client,
-        song_data,
     };
 
     let framework = poise::Framework::builder()
