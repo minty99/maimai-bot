@@ -33,30 +33,37 @@
 
 ## 설정
 
-환경 변수는 **백엔드**와 **Discord 봇**에 각각 분리되어 있습니다.
+환경 변수는 **실행 모드에 따라 다른 파일**을 사용합니다:
 
-### Backend 설정 (`backend/.env`)
+### Standalone 개발 (로컬 실행)
 
-`.env.example`을 복사하여 `backend/.env`를 생성하고 다음 값을 설정하세요:
+각 서비스별로 `.env` 파일을 생성하세요:
 
-```env
-SEGA_ID=your_sega_id_here
-SEGA_PASSWORD=your_password_here
-PORT=3000
-DATABASE_URL=sqlite:../data/maimai.sqlite3
+**1. Backend 설정** (`backend/.env`)
+```bash
+cp backend/.env.example backend/.env
+# 편집: SEGA_ID, SEGA_PASSWORD 등 입력
 ```
 
-### Discord Bot 설정 (`discord/.env`)
-
-`.env.example`을 복사하여 `discord/.env`를 생성하고 다음 값을 설정하세요:
-
-```env
-DISCORD_BOT_TOKEN=your_bot_token_here
-DISCORD_USER_ID=your_user_id_here
-BACKEND_URL=http://localhost:3000
+**2. Discord Bot 설정** (`discord/.env`)
+```bash
+cp discord/.env.example discord/.env
+# 편집: DISCORD_BOT_TOKEN, DISCORD_USER_ID 등 입력
 ```
 
-**주의**: `.env` 파일은 절대 커밋하지 마세요. `.gitignore`에 포함되어 있습니다.
+### Docker Compose (프로덕션)
+
+루트 `.env` 파일을 생성하세요:
+
+```bash
+cp .env.example .env
+# 편집: 모든 환경 변수 입력
+```
+
+**주의**: 
+- `.env` 파일은 절대 커밋하지 마세요 (`.gitignore`에 포함됨)
+- `dotenvy`가 상위 디렉토리를 자동 탐색하므로 어디서 실행하든 작동합니다
+- **보안**: 각 서비스는 필요한 환경 변수만 로드합니다 (Least Privilege 원칙)
 
 ### 기본 런타임 경로
 
@@ -65,23 +72,32 @@ BACKEND_URL=http://localhost:3000
 
 ## 실행
 
-### 배포 순서 (중요)
+### Standalone 실행 (로컬 개발)
 
 **반드시 백엔드를 먼저 실행한 후 Discord 봇을 실행하세요.**
 
-1. **백엔드 실행**:
+1. **환경 변수 설정** (처음 한 번만):
    ```bash
-   cd backend
+   cp backend/.env.example backend/.env
+   cp discord/.env.example discord/.env
+   # 각 .env 파일 편집하여 실제 credentials 입력
+   ```
+
+2. **백엔드 실행**:
+   ```bash
    cargo run --bin maimai-backend
    ```
    백엔드는 `http://localhost:3000`에서 실행되며, `/health/ready` 엔드포인트를 제공합니다.
 
-2. **Discord 봇 실행** (별도 터미널):
+3. **Discord 봇 실행** (별도 터미널):
    ```bash
-   cd discord
    cargo run --bin maimai-discord
    ```
    Discord 봇은 백엔드의 `/health/ready`를 폴링하여 백엔드가 준비될 때까지 대기합니다.
+
+**참고**: 
+- `dotenvy`가 현재 디렉토리와 상위 디렉토리를 탐색하므로 프로젝트 루트에서 실행해도 `backend/.env`, `discord/.env`를 자동으로 찾습니다.
+- 각 서비스는 자신의 `.env`만 로드하여 보안을 강화합니다.
 
 ### Docker로 실행
 
@@ -89,14 +105,14 @@ Docker Compose를 사용하여 백엔드와 Discord 봇을 함께 실행할 수 
 
 #### 환경 변수 설정
 
-프로젝트 루트에 `.env` 파일을 생성하고 다음 값을 설정하세요:
+프로젝트 루트에 `.env` 파일을 생성하고 모든 환경 변수를 설정하세요:
 
-```env
-SEGA_ID=your_sega_id_here
-SEGA_PASSWORD=your_password_here
-DISCORD_BOT_TOKEN=your_bot_token_here
-DISCORD_USER_ID=your_user_id_here
+```bash
+cp .env.example .env
+# 편집: SEGA_ID, SEGA_PASSWORD, DISCORD_BOT_TOKEN, DISCORD_USER_ID 등 입력
 ```
+
+**중요**: Docker Compose는 `BACKEND_URL=http://backend:3000`을 사용합니다 (서비스 이름으로 통신).
 
 #### 실행
 
