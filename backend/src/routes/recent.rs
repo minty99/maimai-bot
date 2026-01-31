@@ -23,7 +23,7 @@ pub async fn get_recent(
     State(state): State<AppState>,
     Query(params): Query<RecentQuery>,
 ) -> Result<Json<Vec<PlayRecord>>> {
-    let limit = params.limit.max(1).min(500); // Clamp between 1 and 500
+    let limit = params.limit.clamp(1, 500);
 
     let rows = sqlx::query_as::<_, PlayRecord>(
         "SELECT played_at_unixtime, played_at, track, title, chart_type, diff_category, level, 

@@ -4,7 +4,7 @@ use eyre::WrapErr;
 use sqlx::sqlite::{SqliteConnectOptions, SqliteJournalMode, SqlitePoolOptions, SqliteSynchronous};
 use sqlx::{Pool, Sqlite};
 
-use models::{ChartType, DifficultyCategory, ParsedPlayRecord, ParsedScoreEntry};
+use models::{ChartType, DifficultyCategory, ParsedPlayRecord, ParsedScoreEntry, ScoreEntry};
 
 pub type SqlitePool = Pool<Sqlite>;
 
@@ -270,3 +270,30 @@ pub fn format_track(track: Option<i64>) -> String {
         .map(|t| format!("Track {}", t))
         .unwrap_or_else(|| "Single".to_string())
 }
+
+pub async fn query_score_by_pk(
+    pool: &SqlitePool,
+    title: &str,
+    chart_type: &str,
+    diff_category: &str,
+) -> eyre::Result<Option<ScoreEntry>> {
+    let row = sqlx::query_as::<_, ScoreEntry>(
+        r#"
+        SELECT
+            title, chart_type, diff_category, level,
+            achievement_x10000, rank, fc, sync,
+            dx_score, dx_score_max, source_idx
+        FROM scores
+        WHERE title = ? AND chart_type = ? AND diff_category = ? AND achievement_x10000 IS NOT NULL
+        "#,
+    )
+    .bind(title)
+    .bind(chart_type)
+    .bind(diff_category)
+    .fetch_optional(pool)
+    .await
+    .wrap_err("query score by pk")?;
+
+    Ok(row)
+}
+

@@ -4,6 +4,11 @@ use eyre::{Result, WrapErr};
 use tokio::time::interval;
 use tracing::{debug, error, info};
 
+use maimai_db::{get_app_state_u32, set_app_state_u32, upsert_playlogs};
+use maimai_http_client::{is_maintenance_window_now, MaimaiClient};
+use maimai_parsers::{parse_player_data_html, parse_recent_html};
+use models::{ParsedPlayerData, ParsedPlayRecord};
+
 use crate::state::AppState;
 
 const STATE_KEY_TOTAL_PLAY_COUNT: &str = "player.total_play_count";
@@ -31,12 +36,13 @@ pub fn start_background_polling(app_state: AppState) {
 }
 
 async fn poll_and_sync_if_needed(app_state: &AppState) -> Result<bool> {
-    if maimai_bot::http::is_maintenance_window_now() {
+    if is_maintenance_window_now() {
         info!("Skipping periodic poll due to maintenance window (04:00-07:00 local time)");
         return Ok(false);
     }
 
-    let mut client = maimai_bot::http::MaimaiClient::new(&app_state.config)
+    let app_config = backend_config_to_app_config(&app_state.config);
+    let mut client = MaimaiClient::new(&app_config)
         .wrap_err("create HTTP client")?;
     client
         .ensure_logged_in()
@@ -47,16 +53,16 @@ async fn poll_and_sync_if_needed(app_state: &AppState) -> Result<bool> {
         .await
         .wrap_err("fetch player data")?;
 
-    let stored_total = maimai_bot::db::get_app_state_u32(&app_state.db_pool, STATE_KEY_TOTAL_PLAY_COUNT)
+    let stored_total = get_app_state_u32(&app_state.db_pool, STATE_KEY_TOTAL_PLAY_COUNT)
         .await
         .ok()
         .flatten();
 
-    if let Some(stored_total) = stored_total
-        && stored_total == player_data.total_play_count
-    {
-        debug!("No play count change detected (stored={stored_total}, current={})", player_data.total_play_count);
-        return Ok(false);
+    if let Some(stored_total) = stored_total {
+        if stored_total == player_data.total_play_count {
+            debug!("No play count change detected (stored={stored_total}, current={})", player_data.total_play_count);
+            return Ok(false);
+        }
     }
 
     info!("Play count changed (stored={:?}, current={}); syncing recent playlogs", stored_total, player_data.total_play_count);
@@ -75,7 +81,7 @@ async fn poll_and_sync_if_needed(app_state: &AppState) -> Result<bool> {
 
     let scraped_at = unix_timestamp();
 
-    maimai_bot::db::upsert_playlogs(&app_state.db_pool, scraped_at, &entries)
+    upsert_playlogs(&app_state.db_pool, scraped_at, &entries)
         .await
         .wrap_err("upsert playlogs")?;
 
@@ -92,8 +98,8 @@ async fn poll_and_sync_if_needed(app_state: &AppState) -> Result<bool> {
 }
 
 async fn fetch_player_data_logged_in(
-    client: &maimai_bot::http::MaimaiClient,
-) -> Result<maimai_bot::maimai::models::ParsedPlayerData> {
+    client: &MaimaiClient,
+) -> Result<ParsedPlayerData> {
     let url = reqwest::Url::parse("https://maimaidx-eng.com/maimai-mobile/playerData/")
         .wrap_err("parse playerData url")?;
     let bytes = client
@@ -101,24 +107,24 @@ async fn fetch_player_data_logged_in(
         .await
         .wrap_err("fetch playerData url")?;
     let html = String::from_utf8(bytes).wrap_err("playerData response is not utf-8")?;
-    maimai_bot::maimai::parse::player_data::parse_player_data_html(&html)
+    parse_player_data_html(&html)
         .wrap_err("parse playerData html")
 }
 
 async fn fetch_recent_entries_logged_in(
-    client: &maimai_bot::http::MaimaiClient,
-) -> Result<Vec<maimai_bot::maimai::models::ParsedPlayRecord>> {
+    client: &MaimaiClient,
+) -> Result<Vec<ParsedPlayRecord>> {
     let url = reqwest::Url::parse("https://maimaidx-eng.com/maimai-mobile/record/")
         .wrap_err("parse record url")?;
     let bytes = client.get_bytes(&url).await.wrap_err("fetch record url")?;
     let html = String::from_utf8(bytes).wrap_err("record response is not utf-8")?;
-    maimai_bot::maimai::parse::recent::parse_recent_html(&html).wrap_err("parse recent html")
+    parse_recent_html(&html).wrap_err("parse recent html")
 }
 
 fn annotate_recent_entries_with_play_count(
-    mut entries: Vec<maimai_bot::maimai::models::ParsedPlayRecord>,
+    mut entries: Vec<ParsedPlayRecord>,
     total_play_count: u32,
-) -> Vec<maimai_bot::maimai::models::ParsedPlayRecord> {
+) -> Vec<ParsedPlayRecord> {
     let Some(last_track_01_idx) = entries.iter().rposition(|e| e.track == Some(1)) else {
         return Vec::new();
     };
@@ -137,8 +143,8 @@ fn annotate_recent_entries_with_play_count(
 }
 
 async fn annotate_first_play_flags(
-    pool: &maimai_bot::db::SqlitePool,
-    entries: &mut [maimai_bot::maimai::models::ParsedPlayRecord],
+    pool: &sqlx::SqlitePool,
+    entries: &mut [ParsedPlayRecord],
 ) -> Result<()> {
     for entry in entries {
         if !entry.achievement_new_record {
@@ -160,7 +166,7 @@ async fn annotate_first_play_flags(
             "#,
         )
         .bind(&entry.title)
-        .bind(maimai_bot::db::format_chart_type(entry.chart_type))
+        .bind(format_chart_type(entry.chart_type))
         .bind(diff_category.as_str())
         .fetch_optional(pool)
         .await
@@ -175,11 +181,11 @@ async fn annotate_first_play_flags(
 }
 
 async fn persist_player_snapshot(
-    pool: &maimai_bot::db::SqlitePool,
-    player_data: &maimai_bot::maimai::models::ParsedPlayerData,
+    pool: &sqlx::SqlitePool,
+    player_data: &ParsedPlayerData,
 ) -> Result<()> {
     let now = unix_timestamp();
-    maimai_bot::db::set_app_state_u32(
+    set_app_state_u32(
         pool,
         STATE_KEY_TOTAL_PLAY_COUNT,
         player_data.total_play_count,
@@ -187,10 +193,30 @@ async fn persist_player_snapshot(
     )
     .await
     .wrap_err("store total play count")?;
-    maimai_bot::db::set_app_state_u32(pool, STATE_KEY_RATING, player_data.rating, now)
+    set_app_state_u32(pool, STATE_KEY_RATING, player_data.rating, now)
         .await
         .wrap_err("store rating")?;
     Ok(())
+}
+
+fn format_chart_type(chart_type: models::ChartType) -> &'static str {
+    match chart_type {
+        models::ChartType::Std => "STD",
+        models::ChartType::Dx => "DX",
+    }
+}
+
+fn backend_config_to_app_config(config: &crate::config::BackendConfig) -> models::config::AppConfig {
+    use std::path::PathBuf;
+    
+    models::config::AppConfig {
+        sega_id: config.sega_id.clone(),
+        sega_password: config.sega_password.clone(),
+        data_dir: PathBuf::from("data"),
+        cookie_path: PathBuf::from("data/cookies.json"),
+        discord_bot_token: None,
+        discord_user_id: None,
+    }
 }
 
 fn unix_timestamp() -> i64 {

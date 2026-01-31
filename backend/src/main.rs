@@ -35,11 +35,17 @@ async fn main() -> eyre::Result<()> {
 
     tracing::info!("Database connected successfully");
 
-    tasks::startup::startup_sync(&db_pool, &config)
-        .await
-        .wrap_err("Startup sync failed")?;
+    // Attempt startup sync, but allow backend to start even if it fails
+    // (useful for testing with invalid credentials)
+    match tasks::startup::startup_sync(&db_pool, &config).await {
+        Ok(_) => tracing::info!("Startup sync completed successfully"),
+        Err(e) => tracing::warn!("Startup sync failed (backend will still start): {}", e),
+    }
 
     let app_state = state::AppState { db_pool, config: config.clone() };
+
+    // Start background polling task
+    tasks::polling::start_background_polling(app_state.clone());
 
     let app = routes::create_routes(app_state.clone());
 

@@ -32,17 +32,6 @@ pub(crate) struct RecentRecordView {
 }
 
 #[derive(Debug, Clone)]
-pub(crate) struct ScoreRowView {
-    pub(crate) chart_type: String,
-    pub(crate) diff_category: String,
-    pub(crate) level: String,
-    pub(crate) internal_level: Option<f32>,
-    pub(crate) rating_points: Option<u32>,
-    pub(crate) achievement_percent: Option<f64>,
-    pub(crate) rank: Option<String>,
-}
-
-#[derive(Debug, Clone)]
 pub(crate) struct TodayDetailRowView {
     pub(crate) title: String,
     pub(crate) chart_type: String,
@@ -74,28 +63,6 @@ fn format_percent_f64(value: Option<f64>) -> String {
         Some(v) => format!("{:.4}%", v),
         None => "N/A".to_string(),
     }
-}
-
-pub(crate) fn build_mai_score_embed(
-    display_name: &str,
-    title: &str,
-    entries: &[ScoreRowView],
-) -> CreateEmbed {
-    let mut desc = String::new();
-    desc.push_str(&format!("**{}**\n\n", title));
-
-    for entry in entries {
-        let achv = format_percent_f64(entry.achievement_percent);
-        let rank = entry.rank.as_deref().unwrap_or("N/A");
-        let level = format_level_with_internal(&entry.level, entry.internal_level);
-        let rating = format_rating_points_suffix(entry.rating_points);
-        desc.push_str(&format!(
-            "- [{}] {} {} — {} • {}{}\n",
-            entry.chart_type, entry.diff_category, level, achv, rank, rating
-        ));
-    }
-
-    embed_base(&format!("{}'s scores", display_name)).description(desc)
 }
 
 pub(crate) fn build_mai_recent_embeds(

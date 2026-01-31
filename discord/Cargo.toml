@@ -21,3 +21,4 @@ models = { path = "../crates/models" }
 urlencoding = "2.1.3"
 time = { workspace = true, features = ["local-offset"] }
 ordered-float.workspace = true
+strsim = "0.11.1"

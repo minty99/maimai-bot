@@ -3,6 +3,7 @@ use models::SongDataIndex;
 use ordered_float::OrderedFloat;
 use poise::CreateReply;
 use poise::serenity_prelude as serenity;
+use std::time::Duration;
 use time::{Duration as TimeDuration, OffsetDateTime, UtcOffset};
 
 use crate::embeds::{build_mai_recent_embeds, build_mai_today_embed, build_mai_today_detail_embed, embed_base, format_level_with_internal, RecentRecordView};
@@ -10,6 +11,207 @@ use crate::BotData;
 
 type Context<'a> = poise::Context<'a, BotData, Box<dyn std::error::Error + Send + Sync>>;
 type Error = Box<dyn std::error::Error + Send + Sync>;
+
+fn normalize_for_match(s: &str) -> String {
+    s.to_lowercase()
+        .chars()
+        .filter(|c| c.is_alphanumeric())
+        .collect()
+}
+
+fn top_title_matches(query: &str, titles: &[String], limit: usize) -> Vec<String> {
+    let query_norm = normalize_for_match(query);
+    let mut scored: Vec<_> = titles
+        .iter()
+        .map(|title| {
+            let title_norm = normalize_for_match(title);
+            let score = strsim::jaro_winkler(&query_norm, &title_norm);
+            (title.clone(), score)
+        })
+        .collect();
+    scored.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+    scored.into_iter().take(limit).map(|(t, _)| t).collect()
+}
+
+/// Get song records by song title or key
+#[poise::command(slash_command, rename = "mai-score")]
+pub(crate) async fn mai_score(
+    ctx: Context<'_>,
+    #[description = "Song title to search for"] search: String,
+) -> Result<(), Error> {
+    ctx.defer().await?;
+
+    let scores = ctx
+        .data()
+        .backend_client
+        .search_scores(&search)
+        .await
+        .wrap_err("search scores")?;
+
+    if scores.is_empty() {
+        ctx.send(CreateReply::default().embed(embed_base("No records found").description("No titles to match.")))
+            .await?;
+        return Ok(());
+    }
+
+    let titles: Vec<String> = scores.iter().map(|s| s.title.clone()).collect();
+    let search_norm = normalize_for_match(&search);
+    let exact_title = titles
+        .iter()
+        .find(|t| normalize_for_match(t) == search_norm)
+        .cloned();
+
+    let matched_title = if let Some(exact) = exact_title {
+        exact
+    } else {
+        let candidates = top_title_matches(&search, &titles, 5);
+        if candidates.is_empty() {
+            ctx.send(
+                CreateReply::default()
+                    .ephemeral(true)
+                    .embed(embed_base("No records found").description("No titles to match.")),
+            )
+            .await?;
+            return Ok(());
+        }
+
+        let uuid = ctx.id();
+        let button_prefix = format!("{uuid}:score_pick:");
+
+        let mut buttons = Vec::new();
+        let mut lines = Vec::new();
+        for (i, title) in candidates.iter().enumerate() {
+            let custom_id = format!("{button_prefix}{i}");
+            buttons.push(
+                serenity::CreateButton::new(custom_id)
+                    .style(serenity::ButtonStyle::Secondary)
+                    .label(format!("{}", i + 1)),
+            );
+            lines.push(format!("`{}` {}", i + 1, title));
+        }
+
+        let reply = ctx
+            .send(
+                CreateReply::default()
+                    .embed(
+                        embed_base("No exact match")
+                            .description(format!("Query: `{search}`\n\n{}", lines.join("\n"))),
+                    )
+                    .components(vec![serenity::CreateActionRow::Buttons(buttons)]),
+            )
+            .await?;
+
+        let interaction = serenity::ComponentInteractionCollector::new(ctx)
+            .author_id(ctx.author().id)
+            .channel_id(ctx.channel_id())
+            .timeout(Duration::from_secs(60))
+            .filter({
+                let button_prefix = button_prefix.clone();
+                move |mci| mci.data.custom_id.starts_with(&button_prefix)
+            })
+            .await;
+
+        let Some(mci) = interaction else {
+            if let Ok(msg) = reply.message().await {
+                let mut msg = msg.into_owned();
+                msg.edit(
+                    ctx,
+                    serenity::EditMessage::new()
+                        .embed(embed_base("No exact match").description(
+                            "Timed out. Re-run `/mai-score <title>` with one of the suggested titles.",
+                        ))
+                        .components(Vec::new()),
+                )
+                .await?;
+            }
+            return Ok(());
+        };
+
+        mci.create_response(ctx, serenity::CreateInteractionResponse::Acknowledge)
+            .await?;
+
+        let idx = mci
+            .data
+            .custom_id
+            .strip_prefix(&button_prefix)
+            .and_then(|s| s.parse::<usize>().ok());
+
+        let Some(idx) = idx else {
+            return Ok(());
+        };
+        if idx >= candidates.len() {
+            return Ok(());
+        }
+
+        if let Ok(msg) = reply.message().await {
+            let msg = msg.into_owned();
+            let _ = msg.delete(ctx).await;
+        }
+
+        candidates[idx].clone()
+    };
+
+    let matched_scores: Vec<_> = scores
+        .iter()
+        .filter(|s| s.title == matched_title)
+        .cloned()
+        .collect();
+
+    if matched_scores.is_empty() {
+        ctx.send(CreateReply::default().ephemeral(true).embed(
+            embed_base("No records found").description("No scores for this title."),
+        ))
+        .await?;
+        return Ok(());
+    }
+
+    let mut embed = embed_base(&matched_title);
+    let mut has_rows = false;
+
+    for score in &matched_scores {
+        has_rows = true;
+        let achievement_percent = score.achievement_x10000.map(|x| x as f64 / 10000.0).unwrap_or(0.0);
+        let level = &score.level;
+        let rank = score.rank.as_deref().unwrap_or("N/A");
+        let fc = score.fc.as_deref().unwrap_or("-");
+        let sync = score.sync.as_deref().unwrap_or("-");
+
+        let field_value = format!(
+            "[{}] {} {} — {:.4}% • {} • {} • {}",
+            score.chart_type,
+            score.diff_category,
+            level,
+            achievement_percent,
+            rank,
+            fc,
+            sync
+        );
+
+        embed = embed.field(format!("{}%", (achievement_percent * 100.0) as i32), field_value, false);
+    }
+
+    let mut attachments = Vec::new();
+    if let Some(idx) = ctx.data().song_data.as_ref() {
+        if let Some(image_name) = idx.image_name(&matched_title) {
+            embed = embed.thumbnail(format!("attachment://{image_name}"));
+            let path = format!("fetched_data/img/cover-m/{image_name}");
+            match serenity::CreateAttachment::path(&path).await {
+                Ok(att) => attachments.push(att),
+                Err(e) => tracing::warn!("failed to attach cover image {path}: {e:?}"),
+            }
+        }
+    }
+
+    ctx.send(CreateReply {
+        embeds: vec![embed],
+        attachments,
+        ephemeral: Some(!has_rows),
+        ..Default::default()
+    })
+    .await?;
+
+    Ok(())
+}
 
 /// Get most recent credit records
 #[poise::command(slash_command, rename = "mai-recent")]
