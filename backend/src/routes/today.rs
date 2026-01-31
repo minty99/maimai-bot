@@ -6,20 +6,21 @@ use serde::Deserialize;
 use time::{Date, Duration as TimeDuration, Month, OffsetDateTime, UtcOffset};
 
 use models::PlayRecord;
-use crate::{error::Result, state::AppState};
+use crate::{
+    error::Result,
+    routes::responses::PlayRecordResponse,
+    state::AppState,
+};
 
 #[derive(Deserialize)]
 pub struct TodayQuery {
     day: Option<String>,
 }
 
-/// GET /api/today?day=YYYY-MM-DD
-/// Query playlogs for a given day (default: today JST, day boundary 04:00)
-/// Returns Vec<PlayRecord> ordered by played_at_unixtime ASC
 pub async fn get_today(
     State(state): State<AppState>,
     Query(params): Query<TodayQuery>,
-) -> Result<Json<Vec<PlayRecord>>> {
+) -> Result<Json<Vec<PlayRecordResponse>>> {
     let offset = UtcOffset::from_hms(9, 0, 0).unwrap_or(UtcOffset::UTC);
 
     // Parse day or use today (JST)
@@ -96,5 +97,9 @@ pub async fn get_today(
     .fetch_all(&state.db_pool)
     .await?;
 
-    Ok(Json(rows))
+    let responses = rows.into_iter()
+        .map(|record| PlayRecordResponse::from_record(record, &state))
+        .collect();
+
+    Ok(Json(responses))
 }

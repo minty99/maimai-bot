@@ -5,19 +5,21 @@ use axum::{
 use serde::Deserialize;
 
 use models::ScoreEntry;
-use crate::{error::Result, state::AppState};
+use crate::{
+    error::Result,
+    routes::responses::ScoreResponse,
+    state::AppState,
+};
 
 #[derive(Deserialize)]
 pub struct SearchQuery {
     q: String,
 }
 
-/// GET /api/scores/search?q=<title>
-/// Query DB with LIKE %title%, filter achievement_x10000 IS NOT NULL, limit 50
 pub async fn search_scores(
     State(state): State<AppState>,
     Query(params): Query<SearchQuery>,
-) -> Result<Json<Vec<ScoreEntry>>> {
+) -> Result<Json<Vec<ScoreResponse>>> {
     let search_term = format!("%{}%", params.q);
 
     let rows = sqlx::query_as::<_, ScoreEntry>(
@@ -31,15 +33,17 @@ pub async fn search_scores(
     .fetch_all(&state.db_pool)
     .await?;
 
-    Ok(Json(rows))
+    let responses = rows.into_iter()
+        .map(|entry| ScoreResponse::from_entry(entry, &state))
+        .collect();
+
+    Ok(Json(responses))
 }
 
-/// GET /api/scores/:title/:chart_type/:diff_category
-/// Query DB by primary key (title, chart_type, diff_category), filter achievement_x10000 IS NOT NULL
 pub async fn get_score(
     State(state): State<AppState>,
     Path((title, chart_type, diff_category)): Path<(String, String, String)>,
-) -> Result<Json<ScoreEntry>> {
+) -> Result<Json<ScoreResponse>> {
     let score = sqlx::query_as::<_, ScoreEntry>(
         "SELECT title, chart_type, diff_category, level, achievement_x10000, rank, fc, sync, dx_score, dx_score_max, source_idx
          FROM scores
@@ -52,7 +56,7 @@ pub async fn get_score(
     .await?;
 
     score
-        .map(Json)
+        .map(|entry| Json(ScoreResponse::from_entry(entry, &state)))
         .ok_or_else(|| crate::error::AppError::NotFound(format!(
             "Score not found for title='{}', chart_type='{}', diff_category='{}'",
             title, chart_type, diff_category
