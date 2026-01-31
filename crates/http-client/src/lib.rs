@@ -226,6 +226,10 @@ fn save_cookie_store(
     path: &std::path::Path,
     cookie_store: &Arc<CookieStoreMutex>,
 ) -> eyre::Result<()> {
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent).wrap_err("create cookie directory")?;
+    }
+    
     let file = File::create(path).wrap_err("create cookie file")?;
     let mut writer = BufWriter::new(file);
     let guard = cookie_store
