@@ -49,7 +49,7 @@ async fn main() -> eyre::Result<()> {
 
     let app = routes::create_routes(app_state.clone());
 
-    let addr = SocketAddr::from(([127, 0, 0, 1], config.port));
+    let addr = SocketAddr::from(([0, 0, 0, 0], config.port));
     let listener = TcpListener::bind(&addr)
         .await
         .wrap_err("Failed to bind to address")?;
