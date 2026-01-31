@@ -78,7 +78,7 @@ impl BackendClient {
         title: &str,
         chart: &str,
         diff: &str,
-    ) -> Result<Vec<ScoreResponse>> {
+    ) -> Result<ScoreResponse> {
         self.get_with_retry(&format!(
             "/api/scores/{}/{}/{}",
             urlencoding::encode(title),
