@@ -3,7 +3,9 @@ use reqwest::Url;
 use sqlx::SqlitePool;
 use tracing::info;
 
-use maimai_db::{clear_scores, get_app_state_u32, set_app_state_u32, upsert_playlogs, upsert_scores};
+use maimai_db::{
+    clear_scores, get_app_state_u32, set_app_state_u32, upsert_playlogs, upsert_scores,
+};
 use maimai_http_client::{is_maintenance_window_now, MaimaiClient};
 use maimai_parsers::{parse_player_data_html, parse_recent_html, parse_scores_html};
 use models::{config::AppConfig, ParsedPlayRecord, ParsedPlayerData};
@@ -70,7 +72,8 @@ pub async fn startup_sync(db_pool: &SqlitePool, config: &BackendConfig) -> Resul
             .await
             .wrap_err("fetch recent entries")?;
 
-        let entries = annotate_recent_entries_with_play_count(entries, player_data.total_play_count);
+        let entries =
+            annotate_recent_entries_with_play_count(entries, player_data.total_play_count);
         let scraped_at = unix_timestamp();
         let count_total = entries.len();
         let count_with_idx = entries
@@ -98,10 +101,10 @@ pub async fn startup_sync(db_pool: &SqlitePool, config: &BackendConfig) -> Resul
 
 fn backend_config_to_app_config(config: &BackendConfig) -> AppConfig {
     use std::path::PathBuf;
-    
+
     let data_dir = PathBuf::from(&config.data_dir);
     let cookie_path = data_dir.join("cookies.json");
-    
+
     AppConfig {
         sega_id: config.sega_id.clone(),
         sega_password: config.sega_password.clone(),

@@ -4,12 +4,8 @@ use axum::{
 };
 use serde::Deserialize;
 
+use crate::{error::Result, routes::responses::ScoreResponse, state::AppState};
 use models::ScoreEntry;
-use crate::{
-    error::Result,
-    routes::responses::ScoreResponse,
-    state::AppState,
-};
 
 #[derive(Deserialize)]
 pub struct SearchQuery {
@@ -33,7 +29,8 @@ pub async fn search_scores(
     .fetch_all(&state.db_pool)
     .await?;
 
-    let responses = rows.into_iter()
+    let responses = rows
+        .into_iter()
         .map(|entry| ScoreResponse::from_entry(entry, &state))
         .collect();
 
@@ -57,10 +54,12 @@ pub async fn get_score(
 
     score
         .map(|entry| Json(ScoreResponse::from_entry(entry, &state)))
-        .ok_or_else(|| crate::error::AppError::NotFound(format!(
-            "Score not found for title='{}', chart_type='{}', diff_category='{}'",
-            title, chart_type, diff_category
-        )))
+        .ok_or_else(|| {
+            crate::error::AppError::NotFound(format!(
+                "Score not found for title='{}', chart_type='{}', diff_category='{}'",
+                title, chart_type, diff_category
+            ))
+        })
 }
 
 pub async fn get_all_rated_scores(
@@ -75,7 +74,8 @@ pub async fn get_all_rated_scores(
     .fetch_all(&state.db_pool)
     .await?;
 
-    let responses = rows.into_iter()
+    let responses = rows
+        .into_iter()
         .map(|entry| ScoreResponse::from_entry(entry, &state))
         .collect();
 
