@@ -412,7 +412,11 @@ struct SongDataSheet {
 
 impl SongDataIndex {
     pub fn load_from_default_locations() -> eyre::Result<Option<Self>> {
-        Self::load_with_base_path("fetched_data")
+        let data_dir = std::env::var("DATA_DIR").unwrap_or_else(|_| "data".to_string());
+        let base = std::path::PathBuf::from(data_dir)
+            .join("song_data")
+            .join("maimai");
+        Self::load_with_base_path(&base.to_string_lossy())
     }
 
     pub fn load_with_base_path(base_path: &str) -> eyre::Result<Option<Self>> {

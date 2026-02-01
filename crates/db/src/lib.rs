@@ -296,4 +296,3 @@ pub async fn query_score_by_pk(
 
     Ok(row)
 }
-

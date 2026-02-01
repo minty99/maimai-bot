@@ -1,10 +1,10 @@
 use eyre::{Result, WrapErr};
+use models::ParsedPlayerData;
 use poise::serenity_prelude as serenity;
 use serenity::builder::{CreateEmbed, CreateMessage};
-use models::ParsedPlayerData;
 
-use super::embeds::embed_base;
 use super::client::BackendClient;
+use super::embeds::embed_base;
 
 pub(crate) async fn send_startup_dm(
     http: &serenity::Http,

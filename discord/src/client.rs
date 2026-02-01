@@ -73,12 +73,7 @@ impl BackendClient {
         .await
     }
 
-    pub async fn get_score(
-        &self,
-        title: &str,
-        chart: &str,
-        diff: &str,
-    ) -> Result<ScoreResponse> {
+    pub async fn get_score(&self, title: &str, chart: &str, diff: &str) -> Result<ScoreResponse> {
         self.get_with_retry(&format!(
             "/api/scores/{}/{}/{}",
             urlencoding::encode(title),
@@ -100,21 +95,25 @@ impl BackendClient {
 
     pub async fn get_cover(&self, image_name: &str) -> Result<Vec<u8>> {
         let url = format!("{}/api/cover/{}", self.base_url, image_name);
-        let resp = self.client.get(&url).send().await
+        let resp = self
+            .client
+            .get(&url)
+            .send()
+            .await
             .wrap_err("fetch cover image")?;
-        
+
         if !resp.status().is_success() {
             return Err(eyre::eyre!("Failed to fetch cover: HTTP {}", resp.status()));
         }
-        
-        resp.bytes().await
+
+        resp.bytes()
+            .await
             .map(|b| b.to_vec())
             .wrap_err("read cover image bytes")
     }
 
     pub async fn get_rated_scores(&self) -> Result<Vec<ScoreResponse>> {
-        self.get_with_retry("/api/scores/rated")
-            .await
+        self.get_with_retry("/api/scores/rated").await
     }
 
     pub async fn health_check_with_retry(&self) -> Result<()> {
