@@ -11,11 +11,9 @@ services:
       - BACKEND_PORT=3000
       - DATA_DIR=${DATA_DIR:-/app/data}
       - DATABASE_URL=sqlite:/app/data/maimai.sqlite3
-      - FETCHED_DATA_PATH=${FETCHED_DATA_PATH:-/app/fetched_data}
     volumes:
       - ./data:/app/data
       - ./backend/migrations:/app/migrations
-      - ./fetched_data:/app/fetched_data
     ports:
       - "3000:3000"
     healthcheck:

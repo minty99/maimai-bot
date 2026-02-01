@@ -6,7 +6,6 @@ pub struct BackendConfig {
     pub sega_password: String,
     pub port: u16,
     pub database_url: String,
-    pub fetched_data_path: String,
     pub data_dir: String,
 }
 
@@ -21,8 +20,6 @@ impl BackendConfig {
             .wrap_err("BACKEND_PORT must be a valid u16")?;
         let database_url =
             std::env::var("DATABASE_URL").wrap_err("missing env var: DATABASE_URL")?;
-        let fetched_data_path =
-            std::env::var("FETCHED_DATA_PATH").unwrap_or_else(|_| "fetched_data".to_string());
         let data_dir = std::env::var("DATA_DIR").unwrap_or_else(|_| "data".to_string());
 
         Ok(Self {
@@ -30,7 +27,6 @@ impl BackendConfig {
             sega_password,
             port,
             database_url,
-            fetched_data_path,
             data_dir,
         })
     }

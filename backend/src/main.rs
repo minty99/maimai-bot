@@ -6,9 +6,10 @@ mod state;
 mod tasks;
 
 use eyre::WrapErr;
-use tracing_subscriber::EnvFilter;
 use std::net::SocketAddr;
+use std::path::PathBuf;
 use tokio::net::TcpListener;
+use tracing_subscriber::EnvFilter;
 
 #[tokio::main]
 async fn main() -> eyre::Result<()> {
@@ -17,15 +18,13 @@ async fn main() -> eyre::Result<()> {
     // Initialize tracing
     tracing_subscriber::fmt()
         .with_env_filter(
-            EnvFilter::try_from_default_env()
-                .unwrap_or_else(|_| EnvFilter::new("info")),
+            EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info")),
         )
         .init();
 
     tracing::info!("Backend starting...");
 
-    let config = config::BackendConfig::from_env()
-        .wrap_err("Failed to load backend config")?;
+    let config = config::BackendConfig::from_env().wrap_err("Failed to load backend config")?;
 
     // Initialize database pool
     let db_pool = sqlx::sqlite::SqlitePoolOptions::new()
@@ -50,37 +49,46 @@ async fn main() -> eyre::Result<()> {
         Err(e) => tracing::warn!("Startup sync failed (backend will still start): {}", e),
     }
 
-    if !std::path::Path::new(&config.fetched_data_path).exists() {
-        tracing::warn!(
-            "fetched_data directory not found at '{}' - song metadata and album covers will be unavailable",
-            config.fetched_data_path
-        );
-    }
+    let song_data_base_path = std::path::PathBuf::from(&config.data_dir).join("song_data");
 
-    let song_data = match models::SongDataIndex::load_with_base_path(&config.fetched_data_path) {
-        Ok(Some(data)) => {
-            tracing::info!("Song data loaded successfully from {}", config.fetched_data_path);
-            Some(std::sync::Arc::new(data))
-        }
-        Ok(None) => {
-            tracing::warn!("Song data not found at {} (non-fatal)", config.fetched_data_path);
-            None
-        }
-        Err(e) => {
-            tracing::warn!("Failed to load song data from {} (non-fatal): {}", config.fetched_data_path, e);
-            None
-        }
-    };
+    let song_data =
+        match models::SongDataIndex::load_with_base_path(&song_data_base_path.to_string_lossy()) {
+            Ok(Some(data)) => {
+                tracing::info!(
+                    "Song data loaded successfully from {}",
+                    song_data_base_path.display()
+                );
+                Some(std::sync::Arc::new(data))
+            }
+            Ok(None) => {
+                tracing::warn!(
+                    "Song data not found at {} (non-fatal)",
+                    song_data_base_path.display()
+                );
+                None
+            }
+            Err(e) => {
+                tracing::warn!(
+                    "Failed to load song data from {} (non-fatal): {}",
+                    song_data_base_path.display(),
+                    e
+                );
+                None
+            }
+        };
 
-    let app_state = state::AppState { 
-        db_pool, 
+    let app_state = state::AppState {
+        db_pool,
         config: config.clone(),
         song_data,
-        fetched_data_path: config.fetched_data_path.clone(),
+        song_data_base_path,
     };
 
     // Start background polling task
     tasks::polling::start_background_polling(app_state.clone());
+
+    // Start song metadata builder/updater (startup + daily 07:30 KST)
+    tasks::songdb::start_songdb_tasks(app_state.db_pool.clone(), PathBuf::from(&config.data_dir));
 
     let app = routes::create_routes(app_state.clone());
 
@@ -88,12 +96,10 @@ async fn main() -> eyre::Result<()> {
     let listener = TcpListener::bind(&addr)
         .await
         .wrap_err("Failed to bind to address")?;
-    
+
     tracing::info!("Server listening on {}", addr);
 
-    axum::serve(listener, app)
-        .await
-        .wrap_err("Server error")?;
+    axum::serve(listener, app).await.wrap_err("Server error")?;
 
     Ok(())
 }
