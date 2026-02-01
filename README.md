@@ -114,6 +114,21 @@ cp .env.example .env
 
 **중요**: Docker Compose는 `BACKEND_URL=http://backend:3000`을 사용합니다 (서비스 이름으로 통신).
 
+#### Docker 빌드 최적화
+
+이 프로젝트는 **단일 Dockerfile**을 사용하여 두 서비스를 모두 빌드합니다:
+
+- **빌더 스테이지**: 전체 워크스페이스를 한 번만 컴파일
+- **멀티 타겟**: `target` 옵션으로 각 서비스의 런타임 이미지 생성 (`maimai-backend`, `maimai-discord`)
+- **효율성**: 중복 빌드 없이 두 바이너리를 동시에 생성
+
+개별 서비스 빌드:
+```bash
+docker compose build backend   # backend만 빌드
+docker compose build discord   # discord만 빌드
+docker compose build           # 모든 서비스 빌드
+```
+
 #### 실행
 
 ```bash
