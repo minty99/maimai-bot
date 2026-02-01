@@ -1,11 +1,14 @@
 use eyre::{Result, WrapErr};
 use ordered_float::OrderedFloat;
-use poise::CreateReply;
 use poise::serenity_prelude as serenity;
+use poise::CreateReply;
 use std::time::Duration;
 use time::{Duration as TimeDuration, OffsetDateTime, UtcOffset};
 
-use crate::embeds::{build_mai_recent_embeds, build_mai_today_embed, build_mai_today_detail_embed, embed_base, format_level_with_internal, RecentRecordView};
+use crate::embeds::{
+    build_mai_recent_embeds, build_mai_today_detail_embed, build_mai_today_embed, embed_base,
+    format_level_with_internal, RecentRecordView,
+};
 use crate::BotData;
 
 type Context<'a> = poise::Context<'a, BotData, Box<dyn std::error::Error + Send + Sync>>;
@@ -48,8 +51,11 @@ pub(crate) async fn mai_score(
         .wrap_err("search scores")?;
 
     if scores.is_empty() {
-        ctx.send(CreateReply::default().embed(embed_base("No records found").description("No titles to match.")))
-            .await?;
+        ctx.send(
+            CreateReply::default()
+                .embed(embed_base("No records found").description("No titles to match.")),
+        )
+        .await?;
         return Ok(());
     }
 
@@ -157,9 +163,11 @@ pub(crate) async fn mai_score(
         .collect();
 
     if matched_scores.is_empty() {
-        ctx.send(CreateReply::default().ephemeral(true).embed(
-            embed_base("No records found").description("No scores for this title."),
-        ))
+        ctx.send(
+            CreateReply::default()
+                .ephemeral(true)
+                .embed(embed_base("No records found").description("No scores for this title.")),
+        )
         .await?;
         return Ok(());
     }
@@ -169,26 +177,18 @@ pub(crate) async fn mai_score(
 
     for score in &matched_scores {
         has_rows = true;
-        let achievement_percent = score.achievement_x10000.map(|x| x as f64 / 10000.0).unwrap_or(0.0);
+        let achievement_percent = score
+            .achievement_x10000
+            .map(|x| x as f64 / 10000.0)
+            .unwrap_or(0.0);
         let level = format_level_with_internal(&score.level, score.internal_level);
         let rank = score.rank.as_deref().unwrap_or("N/A");
         let fc = score.fc.as_deref().unwrap_or("-");
         let sync = score.sync.as_deref().unwrap_or("-");
 
-        let field_name = format!(
-            "[{}] {} {}",
-            score.chart_type,
-            score.diff_category,
-            level
-        );
+        let field_name = format!("[{}] {} {}", score.chart_type, score.diff_category, level);
 
-        let field_value = format!(
-            "{:.4}% • {} • {} • {}",
-            achievement_percent,
-            rank,
-            fc,
-            sync
-        );
+        let field_value = format!("{:.4}% • {} • {} • {}", achievement_percent, rank, fc, sync);
 
         embed = embed.field(field_name, field_value, false);
     }
@@ -351,12 +351,14 @@ pub(crate) async fn mai_today(ctx: Context<'_>) -> Result<(), Error> {
 #[poise::command(slash_command, rename = "mai-today-detail")]
 pub(crate) async fn mai_today_detail(
     ctx: Context<'_>,
-    #[description = "Date in YYYY-MM-DD (default: today JST, day boundary 04:00)"] date: Option<String>,
+    #[description = "Date in YYYY-MM-DD (default: today JST, day boundary 04:00)"] date: Option<
+        String,
+    >,
 ) -> Result<(), Error> {
     ctx.defer().await?;
 
     let offset = UtcOffset::from_hms(9, 0, 0).unwrap_or(UtcOffset::UTC);
-    
+
     let day_date = if let Some(date_str) = date.as_deref() {
         let key = date_str.trim().replace('-', "/");
         let parts = key.split('/').collect::<Vec<_>>();
@@ -366,8 +368,12 @@ pub(crate) async fn mai_today_detail(
         let year = parts[0].parse::<i32>().wrap_err("parse year")?;
         let month = parts[1].parse::<u8>().wrap_err("parse month")?;
         let day = parts[2].parse::<u8>().wrap_err("parse day")?;
-        time::Date::from_calendar_date(year, time::Month::try_from(month).wrap_err("parse month")?, day)
-            .wrap_err("parse date")?
+        time::Date::from_calendar_date(
+            year,
+            time::Month::try_from(month).wrap_err("parse month")?,
+            day,
+        )
+        .wrap_err("parse date")?
     } else {
         let now_jst = OffsetDateTime::now_utc().to_offset(offset);
         if now_jst.hour() < 4 {
@@ -376,7 +382,7 @@ pub(crate) async fn mai_today_detail(
             now_jst.date()
         }
     };
-    
+
     let end_date = day_date + TimeDuration::days(1);
 
     let day_key = format!(
@@ -415,18 +421,19 @@ pub(crate) async fn mai_today_detail(
     rows.sort_by_key(|r| std::cmp::Reverse(r.rating_points.unwrap_or(0)));
 
     let display_name = "Player";
-    let embed = build_mai_today_detail_embed(
-        display_name,
-        &day_key,
-        &start,
-        &end,
-        &rows,
-    );
+    let embed = build_mai_today_detail_embed(display_name, &day_key, &start, &end, &rows);
 
-    if let Ok(dm) = ctx.author().create_dm_channel(&ctx.serenity_context().http).await {
-        dm.send_message(&ctx.serenity_context().http, serenity::CreateMessage::new().embed(embed.clone()))
-            .await
-            .wrap_err("send DM")?;
+    if let Ok(dm) = ctx
+        .author()
+        .create_dm_channel(&ctx.serenity_context().http)
+        .await
+    {
+        dm.send_message(
+            &ctx.serenity_context().http,
+            serenity::CreateMessage::new().embed(embed.clone()),
+        )
+        .await
+        .wrap_err("send DM")?;
     }
 
     ctx.send(CreateReply::default().ephemeral(true).embed(
@@ -556,11 +563,7 @@ async fn build_mai_rating_embeds(
         .field("NEW 15", new_sum.to_string(), true)
         .field("OLD 35", old_sum.to_string(), true);
     if missing_data > 0 {
-        summary = summary.field(
-            "Notes",
-            format!("missing song data: {missing_data}"),
-            false,
-        );
+        summary = summary.field("Notes", format!("missing song data: {missing_data}"), false);
     }
 
     let new_embed = embed_base("NEW 15").description(list_desc(&new_rows));
@@ -568,5 +571,3 @@ async fn build_mai_rating_embeds(
 
     Ok(vec![summary, new_embed, old_embed])
 }
-
-

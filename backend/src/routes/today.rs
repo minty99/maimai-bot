@@ -5,12 +5,8 @@ use axum::{
 use serde::Deserialize;
 use time::{Date, Duration as TimeDuration, Month, OffsetDateTime, UtcOffset};
 
+use crate::{error::Result, routes::responses::PlayRecordResponse, state::AppState};
 use models::PlayRecord;
-use crate::{
-    error::Result,
-    routes::responses::PlayRecordResponse,
-    state::AppState,
-};
 
 #[derive(Deserialize)]
 pub struct TodayQuery {
@@ -97,7 +93,8 @@ pub async fn get_today(
     .fetch_all(&state.db_pool)
     .await?;
 
-    let responses = rows.into_iter()
+    let responses = rows
+        .into_iter()
         .map(|record| PlayRecordResponse::from_record(record, &state))
         .collect();
 

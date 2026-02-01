@@ -3,14 +3,14 @@ use poise::serenity_prelude as serenity;
 use poise::{CreateReply, FrameworkOptions};
 use tracing::info;
 
-mod config;
 mod client;
 mod commands;
-mod embeds;
+mod config;
 mod dm;
+mod embeds;
 
-use config::DiscordConfig;
 use client::BackendClient;
+use config::DiscordConfig;
 
 #[derive(Debug)]
 pub struct BotData {
@@ -23,7 +23,7 @@ pub struct BotData {
 #[tokio::main]
 async fn main() -> eyre::Result<()> {
     dotenvy::dotenv().ok();
-    
+
     tracing_subscriber::fmt()
         .with_env_filter(
             tracing_subscriber::EnvFilter::try_from_default_env()
@@ -32,7 +32,7 @@ async fn main() -> eyre::Result<()> {
         .init();
 
     let config = DiscordConfig::from_env()?;
-    
+
     let discord_bot_token = config.bot_token.clone();
     let discord_user_id_str = config.user_id.clone();
 
@@ -66,7 +66,11 @@ async fn main() -> eyre::Result<()> {
                 commands::mai_today_detail(),
                 commands::mai_rating(),
             ],
-            on_error: |error: poise::FrameworkError<'_, BotData, Box<dyn std::error::Error + Send + Sync>>| {
+            on_error: |error: poise::FrameworkError<
+                '_,
+                BotData,
+                Box<dyn std::error::Error + Send + Sync>,
+            >| {
                 Box::pin(async move {
                     match error {
                         poise::FrameworkError::Command { error, ctx, .. } => {
@@ -109,9 +113,13 @@ async fn main() -> eyre::Result<()> {
                     .await
                     .wrap_err("register commands globally")?;
 
-                dm::send_startup_dm(&bot_data.discord_http, bot_data.discord_user_id, &bot_data.backend_client)
-                    .await
-                    .wrap_err("send startup DM")?;
+                dm::send_startup_dm(
+                    &bot_data.discord_http,
+                    bot_data.discord_user_id,
+                    &bot_data.backend_client,
+                )
+                .await
+                .wrap_err("send startup DM")?;
 
                 Ok(bot_data)
             })

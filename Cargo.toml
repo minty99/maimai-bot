@@ -1,5 +1,5 @@
 [workspace]
-members = ["crates/models", "crates/db", "crates/http-client", "crates/maimai-parsers", "backend", "discord"]
+members = ["crates/models", "crates/db", "crates/http-client", "crates/maimai-parsers", "backend", "discord", "crates/maimai-songdb"]
 resolver = "2"
 
 [workspace.package]

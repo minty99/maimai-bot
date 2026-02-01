@@ -4,12 +4,8 @@ use axum::{
 };
 use serde::Deserialize;
 
+use crate::{error::Result, routes::responses::PlayRecordResponse, state::AppState};
 use models::PlayRecord;
-use crate::{
-    error::Result,
-    routes::responses::PlayRecordResponse,
-    state::AppState,
-};
 
 #[derive(Deserialize)]
 pub struct RecentQuery {
@@ -33,13 +29,14 @@ pub async fn get_recent(
                 credit_play_count, achievement_new_record, first_play
          FROM playlogs
          ORDER BY played_at_unixtime DESC
-         LIMIT ?"
+         LIMIT ?",
     )
     .bind(limit)
     .fetch_all(&state.db_pool)
     .await?;
 
-    let responses = rows.into_iter()
+    let responses = rows
+        .into_iter()
         .map(|record| PlayRecordResponse::from_record(record, &state))
         .collect();
 

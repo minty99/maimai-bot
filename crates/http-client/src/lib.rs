@@ -3,8 +3,8 @@ use std::io::{BufReader, BufWriter};
 use std::sync::Arc;
 
 use eyre::WrapErr;
-use reqwest::Url;
 use reqwest::header::{HeaderMap, HeaderValue};
+use reqwest::Url;
 use reqwest_cookie_store::{CookieStore, CookieStoreMutex};
 use time::OffsetDateTime;
 
@@ -229,7 +229,7 @@ fn save_cookie_store(
     if let Some(parent) = path.parent() {
         std::fs::create_dir_all(parent).wrap_err("create cookie directory")?;
     }
-    
+
     let file = File::create(path).wrap_err("create cookie file")?;
     let mut writer = BufWriter::new(file);
     let guard = cookie_store

@@ -10,7 +10,7 @@ pub struct AppState {
     pub db_pool: SqlitePool,
     pub config: BackendConfig,
     pub song_data: Option<Arc<SongDataIndex>>,
-    pub fetched_data_path: String,
+    pub song_data_base_path: PathBuf,
 }
 
 impl AppState {

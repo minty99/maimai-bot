@@ -28,5 +28,8 @@ maimai-parsers = { path = "../crates/maimai-parsers" }
 time = { workspace = true, features = ["macros", "local-offset"] }
 reqwest_cookie_store.workspace = true
 cookie_store.workspace = true
+maimai-songdb = { version = "0.1.0", path = "../crates/maimai-songdb" }
+chrono = "0.4.43"
+chrono-tz = "0.10.4"
 
 [dev-dependencies]

@@ -1,14 +1,10 @@
-use axum::{
-    extract::State,
-    http::StatusCode,
-    Json,
-};
+use axum::{extract::State, http::StatusCode, Json};
 use eyre::WrapErr;
 use reqwest::Url;
 use tracing::debug;
 
-use models::ParsedPlayerData;
 use maimai_parsers::parse_player_data_html;
+use models::ParsedPlayerData;
 
 use crate::error::Result;
 use crate::state::AppState;
