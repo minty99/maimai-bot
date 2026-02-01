@@ -2,11 +2,33 @@ use poise::serenity_prelude as serenity;
 use serenity::builder::CreateEmbed;
 
 const EMBED_COLOR: u32 = 0x51BCF3;
+const EMBED_COLOR_MAINTENANCE: u32 = 0xFFA500;
+const EMBED_COLOR_WARNING: u32 = 0xFFD700;
 
 pub(crate) fn embed_base(title: &str) -> CreateEmbed {
     let mut e = CreateEmbed::new();
     e = e.title(title).color(EMBED_COLOR);
     e
+}
+
+pub(crate) fn embed_maintenance() -> CreateEmbed {
+    CreateEmbed::new()
+        .title("🔧 Maintenance Mode")
+        .description(
+            "Bot started successfully! maimai DX NET is in scheduled maintenance \
+            (04:00-07:00). Normal monitoring will resume after maintenance.",
+        )
+        .color(EMBED_COLOR_MAINTENANCE)
+}
+
+pub(crate) fn embed_backend_unavailable() -> CreateEmbed {
+    CreateEmbed::new()
+        .title("⚠️ Backend Starting Up")
+        .description(
+            "Bot started successfully! Couldn't fetch player data right now. \
+            I'll monitor for new plays once the backend is ready.",
+        )
+        .color(EMBED_COLOR_WARNING)
 }
 
 #[derive(Debug, Clone)]

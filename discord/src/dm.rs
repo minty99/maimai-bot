@@ -1,29 +1,45 @@
-use eyre::{Result, WrapErr};
+use eyre::Result;
+use maimai_http_client::is_maintenance_window_now;
 use models::ParsedPlayerData;
 use poise::serenity_prelude as serenity;
 use serenity::builder::{CreateEmbed, CreateMessage};
+use tracing::{info, warn};
 
 use super::client::BackendClient;
-use super::embeds::embed_base;
+use super::embeds::{embed_backend_unavailable, embed_base, embed_maintenance};
 
 pub(crate) async fn send_startup_dm(
     http: &serenity::Http,
     user_id: serenity::UserId,
     backend_client: &BackendClient,
 ) -> Result<()> {
-    let player_data = backend_client.get_player().await?;
+    let dm_channel = user_id.create_dm_channel(http).await.map_err(|e| {
+        warn!("Failed to create DM channel: {e}");
+        e
+    })?;
 
-    let dm_channel = user_id
-        .create_dm_channel(http)
-        .await
-        .wrap_err("create DM channel")?;
+    let embed = if is_maintenance_window_now() {
+        info!("Maintenance window detected, sending maintenance embed");
+        embed_maintenance()
+    } else {
+        match backend_client.get_player().await {
+            Ok(player_data) => {
+                info!("Fetched player data successfully");
+                embed_startup(&player_data)
+            }
+            Err(e) => {
+                warn!("Failed to fetch player data: {e}");
+                embed_backend_unavailable()
+            }
+        }
+    };
 
-    let embed = embed_startup(&player_data);
-
-    dm_channel
+    if let Err(e) = dm_channel
         .send_message(http, CreateMessage::new().embed(embed))
         .await
-        .wrap_err("send startup DM")?;
+    {
+        warn!("Failed to send startup DM: {e}");
+    }
 
     Ok(())
 }
