@@ -16,6 +16,7 @@ chrono-tz = "0.10.4"
 eyre.workspace = true
 hex = "0.4.3"
 image = { version = "0.25.9", features = ["webp"] }
+models = { path = "../models" }
 reqwest = { workspace = true, features = ["json", "rustls-tls"] }
 scraper.workspace = true
 serde = { workspace = true, features = ["derive"] }

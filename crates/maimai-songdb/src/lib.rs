@@ -13,6 +13,14 @@ pub const SONG_DATA_SUBDIR: &str = "song_data";
 const MAIMAI_SONGS_URL: &str = "https://maimai.sega.jp/data/maimai_songs.json";
 const IMAGE_BASE_URL: &str = "https://maimaidx.jp/maimai-mobile/img/Music/";
 
+pub async fn fetch_and_build_index(
+    config: &SongDbConfig,
+    image_output_dir: &Path,
+) -> eyre::Result<models::SongDataIndex> {
+    let database = SongDatabase::fetch(config, image_output_dir).await?;
+    database.into_index()
+}
+
 #[derive(Debug, Deserialize)]
 struct RawSong {
     catcode: String,
@@ -176,6 +184,62 @@ impl SongDatabase {
             sheets,
             internal_levels,
         })
+    }
+
+    pub fn into_data_root(self) -> eyre::Result<models::SongDataRoot> {
+        use std::collections::BTreeMap;
+
+        let mut song_map: BTreeMap<String, models::SongDataSong> = BTreeMap::new();
+
+        for song in self.songs {
+            song_map.insert(
+                song.song_id.clone(),
+                models::SongDataSong {
+                    title: song.title.clone(),
+                    version: song.version.clone(),
+                    image_name: Some(song.image_name.clone()),
+                    sheets: Vec::new(),
+                },
+            );
+        }
+
+        for sheet in self.sheets {
+            let song = match song_map.get_mut(&sheet.song_id) {
+                Some(song) => song,
+                None => continue,
+            };
+
+            let key = (
+                sheet.song_id.clone(),
+                sheet.sheet_type.clone(),
+                sheet.difficulty.clone(),
+            );
+            let internal_level = self.internal_levels.get(&key);
+
+            let Some(internal_level_str) = internal_level.map(|il| &il.internal_level) else {
+                continue;
+            };
+
+            let internal_level_value = internal_level_str
+                .trim()
+                .parse::<f32>()
+                .wrap_err("parse internal_level as f32")?;
+
+            song.sheets.push(models::SongDataSheet {
+                sheet_type: sheet.sheet_type.clone(),
+                difficulty: sheet.difficulty.clone(),
+                internal_level_value,
+            });
+        }
+
+        Ok(models::SongDataRoot {
+            songs: song_map.into_values().collect(),
+        })
+    }
+
+    pub fn into_index(self) -> eyre::Result<models::SongDataIndex> {
+        let data_root = self.into_data_root()?;
+        Ok(models::SongDataIndex::from_root(data_root))
     }
 }
 

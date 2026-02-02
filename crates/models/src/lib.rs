@@ -387,27 +387,28 @@ struct SongKey {
     diff_category: String,
 }
 
-#[derive(Debug, Deserialize)]
-struct SongDataRoot {
-    songs: Vec<SongDataSong>,
+#[derive(Debug, Serialize, Deserialize)]
+pub struct SongDataRoot {
+    pub songs: Vec<SongDataSong>,
 }
 
-#[derive(Debug, Deserialize)]
-struct SongDataSong {
-    title: String,
-    version: Option<String>,
-    #[serde(rename = "imageName")]
-    image_name: Option<String>,
-    sheets: Vec<SongDataSheet>,
+#[derive(Debug, Serialize, Deserialize)]
+pub struct SongDataSong {
+    pub title: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub version: Option<String>,
+    #[serde(rename = "imageName", skip_serializing_if = "Option::is_none")]
+    pub image_name: Option<String>,
+    pub sheets: Vec<SongDataSheet>,
 }
 
-#[derive(Debug, Deserialize)]
-struct SongDataSheet {
+#[derive(Debug, Serialize, Deserialize)]
+pub struct SongDataSheet {
     #[serde(rename = "type")]
-    sheet_type: String,
-    difficulty: String,
+    pub sheet_type: String,
+    pub difficulty: String,
     #[serde(rename = "internalLevelValue")]
-    internal_level_value: f32,
+    pub internal_level_value: f32,
 }
 
 impl SongDataIndex {
@@ -479,7 +480,7 @@ impl SongDataIndex {
         self.song_image_name.get(&title_norm).map(|s| s.as_str())
     }
 
-    fn from_root(root: SongDataRoot) -> Self {
+    pub fn from_root(root: SongDataRoot) -> Self {
         let mut map = HashMap::new();
         let mut song_version = HashMap::new();
         let mut song_image_name = HashMap::new();

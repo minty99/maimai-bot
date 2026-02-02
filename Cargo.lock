@@ -2001,6 +2001,7 @@ dependencies = [
  "eyre",
  "hex",
  "image",
+ "models",
  "reqwest",
  "scraper",
  "serde",

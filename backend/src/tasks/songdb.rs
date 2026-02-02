@@ -4,33 +4,9 @@ use std::sync::Arc;
 use chrono::{DateTime, Datelike, Duration, TimeZone, Utc};
 use chrono_tz::Asia::Seoul;
 use eyre::{ContextCompat, WrapErr};
-use serde::Serialize;
 use tokio::sync::Mutex;
 
 use crate::state::AppState;
-
-#[derive(Debug, Serialize)]
-struct SongDataRoot {
-    songs: Vec<SongDataSong>,
-}
-
-#[derive(Debug, Serialize)]
-struct SongDataSong {
-    title: String,
-    version: Option<String>,
-    #[serde(rename = "imageName")]
-    image_name: Option<String>,
-    sheets: Vec<SongDataSheet>,
-}
-
-#[derive(Debug, Serialize)]
-struct SongDataSheet {
-    #[serde(rename = "type")]
-    sheet_type: String,
-    difficulty: String,
-    #[serde(rename = "internalLevelValue")]
-    internal_level_value: f32,
-}
 
 pub fn start_songdb_tasks(app_state: AppState) {
     let songdb_config = match maimai_songdb::SongDbConfig::from_env() {
@@ -101,66 +77,18 @@ async fn run_update(data_dir: &Path, config: &maimai_songdb::SongDbConfig) -> ey
     let output_dir = data_dir.join(maimai_songdb::SONG_DATA_SUBDIR);
     std::fs::create_dir_all(&output_dir).wrap_err("create song_data output dir")?;
 
-    let data = maimai_songdb::SongDatabase::fetch(config, &output_dir)
+    let database = maimai_songdb::SongDatabase::fetch(config, &output_dir)
         .await
         .wrap_err("failed to fetch song database")?;
 
-    let json_output = build_json_output(&data)?;
-    let json_bytes = serde_json::to_vec_pretty(&json_output).wrap_err("serialize data.json")?;
+    let data_root = database
+        .into_data_root()
+        .wrap_err("failed to convert to data root")?;
+
+    let json_bytes = serde_json::to_vec_pretty(&data_root).wrap_err("serialize data.json")?;
     std::fs::write(output_dir.join("data.json"), json_bytes).wrap_err("write data.json")?;
 
     Ok(())
-}
-
-fn build_json_output(data: &maimai_songdb::SongDatabase) -> eyre::Result<SongDataRoot> {
-    use std::collections::BTreeMap;
-
-    let mut song_map: BTreeMap<String, SongDataSong> = BTreeMap::new();
-
-    for song in &data.songs {
-        song_map.insert(
-            song.song_id.clone(),
-            SongDataSong {
-                title: song.title.clone(),
-                version: song.version.clone(),
-                image_name: Some(song.image_name.clone()),
-                sheets: Vec::new(),
-            },
-        );
-    }
-
-    for sheet in &data.sheets {
-        let song = match song_map.get_mut(&sheet.song_id) {
-            Some(song) => song,
-            None => continue,
-        };
-
-        let key = (
-            sheet.song_id.clone(),
-            sheet.sheet_type.clone(),
-            sheet.difficulty.clone(),
-        );
-        let internal_level = data.internal_levels.get(&key);
-
-        let Some(internal_level_str) = internal_level.map(|il| &il.internal_level) else {
-            continue;
-        };
-
-        let internal_level_value = internal_level_str
-            .trim()
-            .parse::<f32>()
-            .wrap_err("parse internal_level as f32")?;
-
-        song.sheets.push(SongDataSheet {
-            sheet_type: sheet.sheet_type.clone(),
-            difficulty: sheet.difficulty.clone(),
-            internal_level_value,
-        });
-    }
-
-    Ok(SongDataRoot {
-        songs: song_map.into_values().collect(),
-    })
 }
 
 async fn run_daily_0730_kst_loop(
