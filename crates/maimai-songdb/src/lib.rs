@@ -21,21 +21,6 @@ pub async fn fetch_and_build_index(
     database.into_index()
 }
 
-fn parse_level_to_value(level: &str) -> f32 {
-    if level == "*" {
-        return 0.0;
-    }
-
-    let trimmed = level.trim().replace('?', "");
-
-    if trimmed.ends_with('+') {
-        let base = trimmed.trim_end_matches('+');
-        base.parse::<f32>().unwrap_or(0.0) + 0.6
-    } else {
-        trimmed.parse::<f32>().unwrap_or(0.0)
-    }
-}
-
 #[derive(Debug, Deserialize)]
 struct RawSong {
     catcode: String,
@@ -232,13 +217,15 @@ impl SongDatabase {
 
             let internal_level_value = if let Some(internal_level) = self.internal_levels.get(&key)
             {
-                internal_level
-                    .internal_level
-                    .trim()
-                    .parse::<f32>()
-                    .wrap_err("parse internal_level as f32")?
+                Some(
+                    internal_level
+                        .internal_level
+                        .trim()
+                        .parse::<f32>()
+                        .wrap_err("parse internal_level as f32")?,
+                )
             } else {
-                parse_level_to_value(&sheet.level)
+                None
             };
 
             song.sheets.push(models::SongDataSheet {
