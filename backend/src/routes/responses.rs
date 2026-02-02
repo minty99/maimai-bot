@@ -29,8 +29,11 @@ impl ScoreResponse {
             song_data.internal_level(&entry.title, &entry.chart_type, &entry.diff_category);
         let image_name = song_data.image_name(&entry.title).map(|s| s.to_string());
 
+        let effective_internal =
+            internal_level.or_else(|| crate::rating::fallback_internal_level(&entry.level));
+
         let rating_points = if let (Some(internal), Some(ach_x10000)) =
-            (internal_level, entry.achievement_x10000)
+            (effective_internal, entry.achievement_x10000)
         {
             let achievement_percent = ach_x10000 as f64 / 10000.0;
             let ap_bonus = crate::rating::is_ap_like(entry.fc.as_deref());
@@ -60,7 +63,7 @@ impl ScoreResponse {
             dx_score: entry.dx_score,
             dx_score_max: entry.dx_score_max,
             source_idx: entry.source_idx,
-            internal_level,
+            internal_level: effective_internal,
             image_name,
             rating_points,
             bucket,
@@ -101,8 +104,15 @@ impl PlayRecordResponse {
             record.diff_category.as_deref().unwrap_or(""),
         );
 
+        let effective_internal = internal_level.or_else(|| {
+            record
+                .level
+                .as_deref()
+                .and_then(crate::rating::fallback_internal_level)
+        });
+
         let rating_points = if let (Some(internal), Some(ach_x10000)) =
-            (internal_level, record.achievement_x10000)
+            (effective_internal, record.achievement_x10000)
         {
             let achievement_percent = ach_x10000 as f64 / 10000.0;
             let ap_bonus = crate::rating::is_ap_like(record.fc.as_deref());
@@ -137,7 +147,7 @@ impl PlayRecordResponse {
             credit_play_count: record.credit_play_count,
             achievement_new_record: record.achievement_new_record,
             first_play: record.first_play,
-            internal_level,
+            internal_level: effective_internal,
             rating_points,
             bucket,
         }
