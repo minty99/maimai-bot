@@ -46,10 +46,6 @@ COPY backend/migrations /app/migrations
 # Create data directory
 RUN mkdir -p /app/data
 
-# Environment defaults
-ENV DATABASE_URL=sqlite:/app/data/maimai.sqlite3
-ENV BACKEND_PORT=3000
-
 EXPOSE 3000
 
 CMD ["maimai-backend"]
@@ -68,8 +64,5 @@ WORKDIR /app
 
 # Copy discord binary
 COPY --from=builder /app/target/release/maimai-discord /usr/local/bin/maimai-discord
-
-# Environment defaults
-ENV BACKEND_URL=http://backend:3000
 
 CMD ["maimai-discord"]
