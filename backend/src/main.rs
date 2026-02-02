@@ -25,6 +25,9 @@ async fn main() -> eyre::Result<()> {
 
     let config = config::BackendConfig::from_env().wrap_err("Failed to load backend config")?;
 
+    // Create data directory if it doesn't exist (prevents permission errors on first run)
+    std::fs::create_dir_all(&config.data_dir).wrap_err("Failed to create data directory")?;
+
     // Initialize database pool
     let db_pool = sqlx::sqlite::SqlitePoolOptions::new()
         .max_connections(5)
