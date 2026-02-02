@@ -27,7 +27,7 @@ RUN cargo build --release
 # ============================================
 # Target: maimai-backend
 # ============================================
-FROM debian:bookworm-slim as maimai-backend
+FROM ubuntu:noble as maimai-backend
 
 RUN apt-get update && apt-get install -y \
     ca-certificates \
@@ -57,7 +57,7 @@ CMD ["maimai-backend"]
 # ============================================
 # Target: maimai-discord
 # ============================================
-FROM debian:bookworm-slim as maimai-discord
+FROM ubuntu:noble as maimai-discord
 
 RUN apt-get update && apt-get install -y \
     ca-certificates \
