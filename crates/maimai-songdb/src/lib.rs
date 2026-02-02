@@ -409,60 +409,29 @@ async fn download_image(client: &reqwest::Client, image_url: &str) -> eyre::Resu
     const MAX_RETRIES: u32 = 3;
     
     for attempt in 0..MAX_RETRIES {
-        match client.get(image_url).send().await {
-            Ok(resp) => match resp.error_for_status() {
-                Ok(resp) => match resp.bytes().await {
-                    Ok(bytes) => return Ok(bytes.to_vec()),
-                    Err(e) => {
-                        if attempt < MAX_RETRIES - 1 {
-                            let delay_ms = 200 * 2_u64.pow(attempt);
-                            tracing::warn!(
-                                "Failed to read bytes for '{}': {}. Retrying in {}ms (attempt {}/{})",
-                                image_url,
-                                e,
-                                delay_ms,
-                                attempt + 1,
-                                MAX_RETRIES
-                            );
-                            tokio::time::sleep(std::time::Duration::from_millis(delay_ms)).await;
-                            continue;
-                        }
-                        return Err(e).wrap_err("read cover image bytes");
-                    }
-                },
-                Err(e) => {
-                    if attempt < MAX_RETRIES - 1 {
-                        let delay_ms = 200 * 2_u64.pow(attempt);
-                        tracing::warn!(
-                            "Cover image '{}' returned error status: {}. Retrying in {}ms (attempt {}/{})",
-                            image_url,
-                            e,
-                            delay_ms,
-                            attempt + 1,
-                            MAX_RETRIES
-                        );
-                        tokio::time::sleep(std::time::Duration::from_millis(delay_ms)).await;
-                        continue;
-                    }
-                    return Err(e).wrap_err("cover image status");
-                }
-            },
-            Err(e) => {
-                if attempt < MAX_RETRIES - 1 {
-                    let delay_ms = 200 * 2_u64.pow(attempt);
-                    tracing::warn!(
-                        "Connection error for cover '{}': {}. Retrying in {}ms (attempt {}/{})",
-                        image_url,
-                        e,
-                        delay_ms,
-                        attempt + 1,
-                        MAX_RETRIES
-                    );
-                    tokio::time::sleep(std::time::Duration::from_millis(delay_ms)).await;
-                    continue;
-                }
-                return Err(e).wrap_err("fetch cover image");
+        let result = async {
+            let resp = client.get(image_url).send().await?;
+            let resp = resp.error_for_status()?;
+            let bytes = resp.bytes().await?;
+            Ok::<_, eyre::Error>(bytes.to_vec())
+        }
+        .await;
+
+        match result {
+            Ok(data) => return Ok(data),
+            Err(e) if attempt < MAX_RETRIES - 1 => {
+                let delay_ms = 200 * 2_u64.pow(attempt);
+                tracing::warn!(
+                    "Failed to download '{}': {}. Retrying in {}ms (attempt {}/{})",
+                    image_url,
+                    e,
+                    delay_ms,
+                    attempt + 1,
+                    MAX_RETRIES
+                );
+                tokio::time::sleep(std::time::Duration::from_millis(delay_ms)).await;
             }
+            Err(e) => return Err(e.wrap_err("fetch cover image")),
         }
     }
     unreachable!()
