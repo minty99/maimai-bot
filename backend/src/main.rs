@@ -88,7 +88,7 @@ async fn main() -> eyre::Result<()> {
     tasks::polling::start_background_polling(app_state.clone());
 
     // Start song metadata builder/updater (startup + daily 07:30 KST)
-    tasks::songdb::start_songdb_tasks(app_state.db_pool.clone(), PathBuf::from(&config.data_dir));
+    tasks::songdb::start_songdb_tasks(PathBuf::from(&config.data_dir));
 
     let app = routes::create_routes(app_state.clone());
 

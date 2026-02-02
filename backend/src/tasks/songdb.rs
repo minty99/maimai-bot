@@ -5,7 +5,6 @@ use chrono::{DateTime, Datelike, Duration, TimeZone, Utc};
 use chrono_tz::Asia::Seoul;
 use eyre::{ContextCompat, WrapErr};
 use serde::Serialize;
-use sqlx::SqlitePool;
 use tokio::sync::Mutex;
 
 #[derive(Debug, Serialize)]
@@ -31,7 +30,7 @@ struct SongDataSheet {
     internal_level_value: f32,
 }
 
-pub fn start_songdb_tasks(_db_pool: SqlitePool, data_dir: PathBuf) {
+pub fn start_songdb_tasks(data_dir: PathBuf) {
     let songdb_config = match maimai_songdb::SongDbConfig::from_env() {
         Ok(v) => v,
         Err(e) => {
