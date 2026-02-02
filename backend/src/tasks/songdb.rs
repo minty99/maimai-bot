@@ -28,16 +28,16 @@ pub fn start_songdb_tasks(app_state: AppState) {
 
     tokio::spawn(async move {
         let _guard = lock_for_startup.lock().await;
-        
+
         let data_json_path = data_dir_for_startup
             .join(maimai_songdb::SONG_DATA_SUBDIR)
             .join("data.json");
-        
+
         if data_json_path.exists() {
             tracing::info!("songdb: data.json already exists, skipping startup update");
             return;
         }
-        
+
         tracing::info!("songdb: data.json not found, running initial update");
         if let Err(e) = run_update(&data_dir_for_startup, songdb_config_for_startup.as_ref()).await
         {

@@ -33,7 +33,7 @@ impl AppState {
         let new_data = models::SongDataIndex::load_with_base_path(
             &self.song_data_base_path.to_string_lossy(),
         )?
-        .unwrap_or_else(|| SongDataIndex::empty());
+        .unwrap_or_else(SongDataIndex::empty);
 
         let mut song_data = self.song_data.write().unwrap();
         *song_data = Arc::new(new_data);
