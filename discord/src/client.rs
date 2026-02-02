@@ -5,6 +5,20 @@ use serde::{Deserialize, Serialize};
 use tokio::time::{sleep, Duration};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct BackendErrorResponse {
+    pub message: String,
+    pub code: String,
+    #[serde(default)]
+    pub maintenance: Option<bool>,
+}
+
+pub enum PlayerDataResult {
+    Ok(ParsedPlayerData),
+    Maintenance,
+    Unavailable(String),
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ScoreResponse {
     pub title: String,
     pub chart_type: String,
@@ -61,8 +75,56 @@ impl BackendClient {
         Ok(Self { client, base_url })
     }
 
-    pub async fn get_player(&self) -> Result<ParsedPlayerData> {
-        self.get_with_retry("/api/player").await
+    pub async fn get_player(&self) -> PlayerDataResult {
+        let url = format!("{}/api/player", self.base_url);
+        for attempt in 0..3 {
+            match self.client.get(&url).send().await {
+                Ok(resp) if resp.status().is_success() => {
+                    match resp.json::<ParsedPlayerData>().await {
+                        Ok(data) => return PlayerDataResult::Ok(data),
+                        Err(e) => {
+                            if attempt < 2 {
+                                sleep(Duration::from_millis(100 * 2_u64.pow(attempt))).await;
+                                continue;
+                            }
+                            return PlayerDataResult::Unavailable(format!(
+                                "Failed to parse response: {}",
+                                e
+                            ));
+                        }
+                    }
+                }
+                Ok(resp) => {
+                    let status = resp.status();
+                    if let Ok(error_body) = resp.json::<BackendErrorResponse>().await {
+                        if error_body.maintenance == Some(true) {
+                            return PlayerDataResult::Maintenance;
+                        }
+                        if attempt < 2 {
+                            sleep(Duration::from_millis(100 * 2_u64.pow(attempt))).await;
+                            continue;
+                        }
+                        return PlayerDataResult::Unavailable(format!(
+                            "HTTP {}: {}",
+                            status, error_body.message
+                        ));
+                    }
+                    if attempt < 2 {
+                        sleep(Duration::from_millis(100 * 2_u64.pow(attempt))).await;
+                        continue;
+                    }
+                    return PlayerDataResult::Unavailable(format!("HTTP {}", status));
+                }
+                Err(e) => {
+                    if attempt < 2 {
+                        sleep(Duration::from_millis(100 * 2_u64.pow(attempt))).await;
+                        continue;
+                    }
+                    return PlayerDataResult::Unavailable(format!("Connection error: {}", e));
+                }
+            }
+        }
+        PlayerDataResult::Unavailable("Max retries exceeded".to_string())
     }
 
     pub async fn search_scores(&self, query: &str) -> Result<Vec<ScoreResponse>> {

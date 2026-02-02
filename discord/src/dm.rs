@@ -1,11 +1,10 @@
 use eyre::Result;
-use maimai_http_client::is_maintenance_window_now;
 use models::ParsedPlayerData;
 use poise::serenity_prelude as serenity;
 use serenity::builder::{CreateEmbed, CreateMessage};
 use tracing::{info, warn};
 
-use super::client::BackendClient;
+use super::client::{BackendClient, PlayerDataResult};
 use super::embeds::{embed_backend_unavailable, embed_base, embed_maintenance};
 
 pub(crate) async fn send_startup_dm(
@@ -18,19 +17,18 @@ pub(crate) async fn send_startup_dm(
         e
     })?;
 
-    let embed = if is_maintenance_window_now() {
-        info!("Maintenance window detected, sending maintenance embed");
-        embed_maintenance()
-    } else {
-        match backend_client.get_player().await {
-            Ok(player_data) => {
-                info!("Fetched player data successfully");
-                embed_startup(&player_data)
-            }
-            Err(e) => {
-                warn!("Failed to fetch player data: {e}");
-                embed_backend_unavailable()
-            }
+    let embed = match backend_client.get_player().await {
+        PlayerDataResult::Ok(player_data) => {
+            info!("Fetched player data successfully");
+            embed_startup(&player_data)
+        }
+        PlayerDataResult::Maintenance => {
+            info!("Backend reported maintenance window");
+            embed_maintenance()
+        }
+        PlayerDataResult::Unavailable(msg) => {
+            warn!("Backend unavailable: {msg}");
+            embed_backend_unavailable()
         }
     };
 
