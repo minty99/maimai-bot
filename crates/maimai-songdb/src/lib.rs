@@ -151,8 +151,11 @@ pub struct SongDatabase {
 
 impl SongDatabase {
     pub async fn fetch(config: &SongDbConfig, image_output_dir: &Path) -> eyre::Result<Self> {
+        // NOTE: maimaidx.jp sometimes has SSL certificate issues ("unable to get local issuer certificate").
+        // We bypass verification here since we're only fetching public cover images.
         let client = reqwest::Client::builder()
             .user_agent(&config.user_agent)
+            .danger_accept_invalid_certs(true)
             .build()
             .wrap_err("build reqwest client")?;
 
