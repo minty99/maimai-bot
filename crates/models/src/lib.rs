@@ -407,6 +407,7 @@ pub struct SongDataSheet {
     #[serde(rename = "type")]
     pub sheet_type: String,
     pub difficulty: String,
+    pub level: String,
     #[serde(rename = "internalLevelValue")]
     pub internal_level_value: f32,
 }
