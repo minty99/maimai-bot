@@ -215,24 +215,16 @@ impl SongDatabase {
                 sheet.difficulty.clone(),
             );
 
-            let internal_level_value = if let Some(internal_level) = self.internal_levels.get(&key)
-            {
-                Some(
-                    internal_level
-                        .internal_level
-                        .trim()
-                        .parse::<f32>()
-                        .wrap_err("parse internal_level as f32")?,
-                )
-            } else {
-                None
-            };
+            let internal_level = self
+                .internal_levels
+                .get(&key)
+                .map(|il| il.internal_level.trim().to_string());
 
             song.sheets.push(models::SongDataSheet {
                 sheet_type: sheet.sheet_type.clone(),
                 difficulty: sheet.difficulty.clone(),
                 level: sheet.level.clone(),
-                internal_level_value,
+                internal_level,
             });
         }
 
