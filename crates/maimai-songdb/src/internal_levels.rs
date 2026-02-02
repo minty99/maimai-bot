@@ -454,6 +454,7 @@ async fn fetch_sheet_values(
     max_col_idx: usize,
     api_key: &str,
 ) -> eyre::Result<Vec<Vec<Value>>> {
+    const MAX_RETRIES: u32 = 3;
     let end_col = col_idx_to_a1(max_col_idx);
     let range = format!("{sheet_name}!A:{end_col}");
     let encoded_range = urlencoding::encode(&range);
@@ -461,21 +462,69 @@ async fn fetch_sheet_values(
         "https://sheets.googleapis.com/v4/spreadsheets/{spreadsheet_id}/values/{encoded_range}"
     );
 
-    let resp = client
-        .get(url)
-        .query(&[("key", api_key), ("valueRenderOption", "UNFORMATTED_VALUE")])
-        .send()
-        .await
-        .wrap_err("GET sheets values")?
-        .error_for_status()
-        .wrap_err("sheets values status")?;
-
-    let parsed = resp
-        .json::<ValuesResponse>()
-        .await
-        .wrap_err("parse sheets values json")?;
-
-    Ok(parsed.values)
+    for attempt in 0..MAX_RETRIES {
+        match client
+            .get(&url)
+            .query(&[("key", api_key), ("valueRenderOption", "UNFORMATTED_VALUE")])
+            .send()
+            .await
+        {
+            Ok(resp) => match resp.error_for_status() {
+                Ok(resp) => match resp.json::<ValuesResponse>().await {
+                    Ok(parsed) => return Ok(parsed.values),
+                    Err(e) => {
+                        if attempt < MAX_RETRIES - 1 {
+                            let delay_ms = 500 * 2_u64.pow(attempt);
+                            tracing::warn!(
+                                "Failed to parse sheet '{}': {}. Retrying in {}ms (attempt {}/{})",
+                                sheet_name,
+                                e,
+                                delay_ms,
+                                attempt + 1,
+                                MAX_RETRIES
+                            );
+                            sleep(Duration::from_millis(delay_ms)).await;
+                            continue;
+                        }
+                        return Err(e).wrap_err("parse sheets values json");
+                    }
+                },
+                Err(e) => {
+                    if attempt < MAX_RETRIES - 1 {
+                        let delay_ms = 500 * 2_u64.pow(attempt);
+                        tracing::warn!(
+                            "Sheet '{}' request failed with status: {}. Retrying in {}ms (attempt {}/{})",
+                            sheet_name,
+                            e,
+                            delay_ms,
+                            attempt + 1,
+                            MAX_RETRIES
+                        );
+                        sleep(Duration::from_millis(delay_ms)).await;
+                        continue;
+                    }
+                    return Err(e).wrap_err("sheets values status");
+                }
+            },
+            Err(e) => {
+                if attempt < MAX_RETRIES - 1 {
+                    let delay_ms = 500 * 2_u64.pow(attempt);
+                    tracing::warn!(
+                        "Connection error for sheet '{}': {}. Retrying in {}ms (attempt {}/{})",
+                        sheet_name,
+                        e,
+                        delay_ms,
+                        attempt + 1,
+                        MAX_RETRIES
+                    );
+                    sleep(Duration::from_millis(delay_ms)).await;
+                    continue;
+                }
+                return Err(e).wrap_err("GET sheets values");
+            }
+        }
+    }
+    unreachable!()
 }
 
 fn extract_records_from_values(

@@ -160,12 +160,16 @@ impl SongDatabase {
             sheets.len()
         );
 
-        tracing::info!("Fetching internal levels from Google Sheets...");
-        let internal_levels =
-            internal_levels::fetch_internal_levels(&client, &config.google_api_key).await?;
+        tracing::info!("Fetching internal levels and downloading covers in parallel...");
+        let (internal_levels_result, cover_result) = tokio::join!(
+            internal_levels::fetch_internal_levels(&client, &config.google_api_key),
+            download_cover_images(&client, &songs, image_output_dir)
+        );
 
-        tracing::info!("Downloading cover images...");
-        download_cover_images(&client, &songs, image_output_dir).await?;
+        let internal_levels = internal_levels_result?;
+        cover_result?;
+
+        tracing::info!("Completed internal levels fetch and cover downloads");
 
         Ok(SongDatabase {
             songs,
@@ -402,18 +406,66 @@ fn sha256_hex(value: &str) -> String {
 }
 
 async fn download_image(client: &reqwest::Client, image_url: &str) -> eyre::Result<Vec<u8>> {
-    let response = client
-        .get(image_url)
-        .send()
-        .await
-        .wrap_err("fetch cover image")?;
-    let bytes = response
-        .error_for_status()
-        .wrap_err("cover image status")?
-        .bytes()
-        .await
-        .wrap_err("read cover image bytes")?;
-    Ok(bytes.to_vec())
+    const MAX_RETRIES: u32 = 3;
+    
+    for attempt in 0..MAX_RETRIES {
+        match client.get(image_url).send().await {
+            Ok(resp) => match resp.error_for_status() {
+                Ok(resp) => match resp.bytes().await {
+                    Ok(bytes) => return Ok(bytes.to_vec()),
+                    Err(e) => {
+                        if attempt < MAX_RETRIES - 1 {
+                            let delay_ms = 200 * 2_u64.pow(attempt);
+                            tracing::warn!(
+                                "Failed to read bytes for '{}': {}. Retrying in {}ms (attempt {}/{})",
+                                image_url,
+                                e,
+                                delay_ms,
+                                attempt + 1,
+                                MAX_RETRIES
+                            );
+                            tokio::time::sleep(std::time::Duration::from_millis(delay_ms)).await;
+                            continue;
+                        }
+                        return Err(e).wrap_err("read cover image bytes");
+                    }
+                },
+                Err(e) => {
+                    if attempt < MAX_RETRIES - 1 {
+                        let delay_ms = 200 * 2_u64.pow(attempt);
+                        tracing::warn!(
+                            "Cover image '{}' returned error status: {}. Retrying in {}ms (attempt {}/{})",
+                            image_url,
+                            e,
+                            delay_ms,
+                            attempt + 1,
+                            MAX_RETRIES
+                        );
+                        tokio::time::sleep(std::time::Duration::from_millis(delay_ms)).await;
+                        continue;
+                    }
+                    return Err(e).wrap_err("cover image status");
+                }
+            },
+            Err(e) => {
+                if attempt < MAX_RETRIES - 1 {
+                    let delay_ms = 200 * 2_u64.pow(attempt);
+                    tracing::warn!(
+                        "Connection error for cover '{}': {}. Retrying in {}ms (attempt {}/{})",
+                        image_url,
+                        e,
+                        delay_ms,
+                        attempt + 1,
+                        MAX_RETRIES
+                    );
+                    tokio::time::sleep(std::time::Duration::from_millis(delay_ms)).await;
+                    continue;
+                }
+                return Err(e).wrap_err("fetch cover image");
+            }
+        }
+    }
+    unreachable!()
 }
 
 fn cover_image_path(output_dir: &Path, image_name: &str) -> PathBuf {
