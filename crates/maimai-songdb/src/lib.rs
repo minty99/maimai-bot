@@ -466,25 +466,58 @@ async fn download_cover_images(
 
     let total = songs.len();
     let mut downloaded_count = 0;
+    let mut skipped_count = 0;
+    let mut failed_downloads = Vec::new();
 
     for song in songs {
         let cover_path = cover_image_path(output_dir, &song.image_name);
 
         if should_download(&cover_path) {
-            let downloaded = download_image(client, &song.image_url).await?;
-            write_atomic(&cover_path, &downloaded).wrap_err("write cover image")?;
-            downloaded_count += 1;
+            match download_image(client, &song.image_url).await {
+                Ok(downloaded) => match write_atomic(&cover_path, &downloaded) {
+                    Ok(_) => {
+                        downloaded_count += 1;
+                    }
+                    Err(e) => {
+                        tracing::error!(
+                            "Failed to write cover '{}' to '{}': {:#}",
+                            song.title,
+                            cover_path.display(),
+                            e
+                        );
+                        failed_downloads.push(song.title.clone());
+                    }
+                },
+                Err(e) => {
+                    tracing::error!("Failed to download cover for '{}': {:#}", song.title, e);
+                    failed_downloads.push(song.title.clone());
+                }
+            }
+        } else {
+            skipped_count += 1;
         }
     }
 
-    let skipped_count = total - downloaded_count;
-
     tracing::info!(
-        "Cover images: total {} songs, downloaded {}, skipped {}",
+        "Cover images: total {} songs, downloaded {}, skipped {}, failed {}",
         total,
         downloaded_count,
-        skipped_count
+        skipped_count,
+        failed_downloads.len()
     );
+
+    if !failed_downloads.is_empty() {
+        tracing::warn!(
+            "Failed to download {} covers. First 10: {}",
+            failed_downloads.len(),
+            failed_downloads
+                .iter()
+                .take(10)
+                .cloned()
+                .collect::<Vec<_>>()
+                .join(", ")
+        );
+    }
 
     Ok(())
 }

@@ -799,10 +799,18 @@ pub async fn fetch_internal_levels(
     google_api_key: &str,
 ) -> eyre::Result<HashMap<(String, String, String), InternalLevelRow>> {
     let mut all_rows = Vec::new();
+    let mut failed_sheets = Vec::new();
+    let mut total_sheets = 0;
 
     for spreadsheet in SPREADSHEETS {
         for extract in spreadsheet.extracts {
-            let values = fetch_sheet_values(
+            total_sheets += 1;
+            let sheet_identifier = format!(
+                "v{} / {}",
+                spreadsheet.source_version, extract.sheet_name
+            );
+
+            match fetch_sheet_values(
                 client,
                 spreadsheet.spreadsheet_id,
                 extract.sheet_name,
@@ -810,13 +818,19 @@ pub async fn fetch_internal_levels(
                 google_api_key,
             )
             .await
-            .wrap_err("fetch google sheet values")?;
-
-            all_rows.extend(extract_records_from_values(
-                &values,
-                extract,
-                spreadsheet.source_version,
-            ));
+            {
+                Ok(values) => {
+                    all_rows.extend(extract_records_from_values(
+                        &values,
+                        extract,
+                        spreadsheet.source_version,
+                    ));
+                }
+                Err(e) => {
+                    tracing::error!("Failed to fetch sheet '{}': {:#}", sheet_identifier, e);
+                    failed_sheets.push(sheet_identifier);
+                }
+            }
 
             sleep(Duration::from_millis(500)).await;
         }
@@ -837,6 +851,21 @@ pub async fn fetch_internal_levels(
                 }
             })
             .or_insert(row);
+    }
+
+    let success_count = total_sheets - failed_sheets.len();
+    tracing::info!(
+        "Internal levels: fetched {} / {} sheets successfully",
+        success_count,
+        total_sheets
+    );
+
+    if !failed_sheets.is_empty() {
+        tracing::warn!(
+            "Failed to fetch {} sheets: {}",
+            failed_sheets.len(),
+            failed_sheets.join(", ")
+        );
     }
 
     Ok(result)
