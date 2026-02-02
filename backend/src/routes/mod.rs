@@ -19,13 +19,13 @@ pub fn create_routes(state: AppState) -> Router {
         .route("/api/scores/search", get(scores::search_scores))
         .route("/api/scores/rated", get(scores::get_all_rated_scores))
         .route(
-            "/api/scores/:title/:chart_type/:diff_category",
+            "/api/scores/{title}/{chart_type}/{diff_category}",
             get(scores::get_score),
         )
         .route("/api/player", get(player::get_player))
         .route("/api/recent", get(recent::get_recent))
         .route("/api/today", get(today::get_today))
-        .route("/api/cover/:image_name", get(cover::get_cover))
+        .route("/api/cover/{image_name}", get(cover::get_cover))
         .layer(
             TraceLayer::new_for_http()
                 .make_span_with(DefaultMakeSpan::new().level(tracing::Level::INFO))
