@@ -8,28 +8,24 @@ name = "maimai-backend"
 path = "src/main.rs"
 
 [dependencies]
-axum = "0.7.7"
+axum = { workspace = true }
+chrono = { workspace = true }
+chrono-tz = { workspace = true }
 dotenvy = { workspace = true }
 eyre = { workspace = true }
+maimai-db = { path = "../crates/db" }
+maimai-http-client = { path = "../crates/http-client" }
+maimai-parsers = { path = "../crates/maimai-parsers" }
+maimai-songdb = { path = "../crates/maimai-songdb" }
+models = { path = "../crates/models" }
 reqwest = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 sqlx = { workspace = true }
+time = { workspace = true, features = ["macros", "local-offset"] }
 tokio = { workspace = true }
-tower = "0.4.13"
-tower-http = { version = "0.5.2", features = ["trace", "cors"] }
+tower-http = { workspace = true }
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
-
-models = { path = "../crates/models" }
-maimai-db = { path = "../crates/db" }
-maimai-http-client = { path = "../crates/http-client" }
-maimai-parsers = { path = "../crates/maimai-parsers" }
-time = { workspace = true, features = ["macros", "local-offset"] }
-reqwest_cookie_store.workspace = true
-cookie_store.workspace = true
-maimai-songdb = { version = "0.1.0", path = "../crates/maimai-songdb" }
-chrono = "0.4.43"
-chrono-tz = "0.10.4"
 
 [dev-dependencies]

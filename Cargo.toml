@@ -1,5 +1,13 @@
 [workspace]
-members = ["crates/models", "crates/db", "crates/http-client", "crates/maimai-parsers", "backend", "discord", "crates/maimai-songdb"]
+members = [
+    "backend",
+    "crates/db",
+    "crates/http-client",
+    "crates/maimai-parsers",
+    "crates/maimai-songdb",
+    "crates/models",
+    "discord",
+]
 resolver = "2"
 
 [workspace.package]
@@ -7,21 +15,31 @@ version = "0.1.0"
 edition = "2021"
 
 [workspace.dependencies]
+axum = "0.8.8"
+chrono = "0.4.43"
+chrono-tz = "0.10.4"
 clap = { version = "4.5.54", features = ["derive"] }
 cookie_store = { version = "0.22.0", features = ["serde_json"] }
 dotenvy = "0.15.7"
 eyre = "0.6.12"
+hex = "0.4.3"
 ordered-float = "5.1.0"
 poise = "0.6.1"
-reqwest = { version = "0.12.28", features = ["rustls-tls", "rustls-tls-native-roots", "cookies", "gzip", "brotli", "deflate", "json"] }
+reqwest = { version = "0.12.28", features = ["cookies", "gzip", "brotli", "deflate", "json"] }
 reqwest_cookie_store = { version = "0.9.0", features = ["serde"] }
 scraper = "0.25.0"
 serde = { version = "1.0.228", features = ["derive"] }
 serde_json = "1.0.149"
+
+sha2 = "0.10.9"
 sqlx = { version = "0.8.6", features = ["runtime-tokio-rustls", "sqlite", "migrate"] }
+strsim = "0.11.1"
 strum = { version = "0.27.2", features = ["derive"] }
+tempfile = "3.24.0"
 time = { version = "0.3.45", features = ["local-offset"] }
 tokio = { version = "1.49.0", features = ["rt-multi-thread", "macros", "signal"] }
+tower = "0.5.3"
+tower-http = { version = "0.6.8", features = ["trace", "cors"] }
 tracing = "0.1.44"
 tracing-subscriber = { version = "0.3.22", features = ["env-filter"] }
-tempfile = "3.24.0"
+urlencoding = "2.1.3"

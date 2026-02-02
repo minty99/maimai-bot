@@ -4,12 +4,10 @@ version.workspace = true
 edition.workspace = true
 
 [dependencies]
-reqwest = { workspace = true }
-reqwest_cookie_store = { workspace = true }
 cookie_store = { workspace = true }
 eyre = { workspace = true }
-serde = { workspace = true }
-serde_json = { workspace = true }
+reqwest = { workspace = true }
+reqwest_cookie_store = { workspace = true }
 time = { workspace = true }
 
 [dependencies.models]
