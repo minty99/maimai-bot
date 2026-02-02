@@ -1,0 +1,391 @@
+import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
+
+import '../../../../core/constants/app_constants.dart';
+import '../../bloc/settings/settings_cubit.dart';
+import '../../bloc/settings/settings_state.dart';
+
+/// Settings screen for app configuration.
+///
+/// Features:
+/// - Backend URL configuration with TextField
+/// - Save button with SnackBar feedback
+/// - Info card with setup instructions
+/// - Large touch targets for glove-friendly interaction
+class SettingsScreen extends StatefulWidget {
+  const SettingsScreen({super.key});
+
+  static const String routeName = '/settings';
+
+  @override
+  State<SettingsScreen> createState() => _SettingsScreenState();
+}
+
+class _SettingsScreenState extends State<SettingsScreen> {
+  late TextEditingController _urlController;
+  bool _hasChanges = false;
+
+  @override
+  void initState() {
+    super.initState();
+    final currentUrl = context.read<SettingsCubit>().state.backendUrl;
+    _urlController = TextEditingController(text: currentUrl);
+    _urlController.addListener(_onTextChanged);
+  }
+
+  @override
+  void dispose() {
+    _urlController.removeListener(_onTextChanged);
+    _urlController.dispose();
+    super.dispose();
+  }
+
+  void _onTextChanged() {
+    final currentUrl = context.read<SettingsCubit>().state.backendUrl;
+    setState(() {
+      _hasChanges = _urlController.text != currentUrl;
+    });
+  }
+
+  Future<void> _saveSettings() async {
+    final url = _urlController.text.trim();
+    if (url.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('URL cannot be empty'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+
+    await context.read<SettingsCubit>().updateBackendUrl(url);
+
+    if (mounted) {
+      setState(() {
+        _hasChanges = false;
+      });
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Text('Settings saved'),
+          backgroundColor: Theme.of(context).colorScheme.primary,
+        ),
+      );
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Settings'),
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back),
+          iconSize: 28,
+          onPressed: () => Navigator.of(context).pop(),
+        ),
+      ),
+      body: BlocBuilder<SettingsCubit, SettingsState>(
+        builder: (context, state) {
+          return ListView(
+            padding: const EdgeInsets.all(24.0),
+            children: [
+              // ─────────────────────────────────────────────────────────────
+              // Backend URL Section
+              // ─────────────────────────────────────────────────────────────
+              Text(
+                'CONNECTION',
+                style: theme.textTheme.labelLarge?.copyWith(
+                  color: colorScheme.primary,
+                  letterSpacing: 2,
+                ),
+              ),
+              const SizedBox(height: 16),
+
+              // Backend URL TextField
+              TextField(
+                controller: _urlController,
+                style: theme.textTheme.bodyLarge?.copyWith(
+                  color: colorScheme.onSurface,
+                ),
+                decoration: InputDecoration(
+                  labelText: 'Backend URL',
+                  labelStyle: TextStyle(
+                    color: colorScheme.onSurfaceVariant,
+                    fontSize: 18,
+                  ),
+                  hintText: AppConstants.defaultBackendUrl,
+                  hintStyle: TextStyle(
+                    color: colorScheme.onSurfaceVariant.withValues(alpha: 0.5),
+                  ),
+                  filled: true,
+                  fillColor: colorScheme.surfaceContainerHighest,
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(16),
+                    borderSide: BorderSide(
+                      color: colorScheme.outline,
+                      width: 2,
+                    ),
+                  ),
+                  enabledBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(16),
+                    borderSide: BorderSide(
+                      color: colorScheme.outline,
+                      width: 2,
+                    ),
+                  ),
+                  focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(16),
+                    borderSide: BorderSide(
+                      color: colorScheme.primary,
+                      width: 2,
+                    ),
+                  ),
+                  contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 20,
+                    vertical: 20,
+                  ),
+                  suffixIcon: _urlController.text.isNotEmpty
+                      ? IconButton(
+                          icon: const Icon(Icons.clear),
+                          iconSize: 24,
+                          onPressed: () {
+                            _urlController.clear();
+                          },
+                        )
+                      : null,
+                ),
+                keyboardType: TextInputType.url,
+                autocorrect: false,
+              ),
+              const SizedBox(height: 24),
+
+              // Save Button
+              SizedBox(
+                width: double.infinity,
+                height: 60,
+                child: FilledButton(
+                  onPressed: _hasChanges ? _saveSettings : null,
+                  style: FilledButton.styleFrom(
+                    backgroundColor: colorScheme.primary,
+                    foregroundColor: colorScheme.onPrimary,
+                    disabledBackgroundColor: colorScheme.primary.withValues(
+                      alpha: 0.3,
+                    ),
+                    disabledForegroundColor: colorScheme.onPrimary.withValues(
+                      alpha: 0.5,
+                    ),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                  ),
+                  child: Text(
+                    'SAVE',
+                    style: theme.textTheme.titleLarge?.copyWith(
+                      color: _hasChanges
+                          ? colorScheme.onPrimary
+                          : colorScheme.onPrimary.withValues(alpha: 0.5),
+                      fontWeight: FontWeight.bold,
+                      letterSpacing: 2,
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 32),
+
+              // ─────────────────────────────────────────────────────────────
+              // Info Card
+              // ─────────────────────────────────────────────────────────────
+              Card(
+                elevation: 4,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(20),
+                  side: BorderSide(
+                    color: colorScheme.outline.withValues(alpha: 0.3),
+                    width: 1,
+                  ),
+                ),
+                child: Padding(
+                  padding: const EdgeInsets.all(20),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Icon(
+                            Icons.info_outline_rounded,
+                            color: colorScheme.primary,
+                            size: 28,
+                          ),
+                          const SizedBox(width: 12),
+                          Text(
+                            'Setup Instructions',
+                            style: theme.textTheme.titleLarge?.copyWith(
+                              color: colorScheme.onSurface,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 16),
+                      _InfoItem(
+                        icon: Icons.computer_rounded,
+                        text: 'Start the maimai-bot backend server',
+                        theme: theme,
+                        colorScheme: colorScheme,
+                      ),
+                      const SizedBox(height: 12),
+                      _InfoItem(
+                        icon: Icons.wifi_rounded,
+                        text: 'Ensure phone is on the same network',
+                        theme: theme,
+                        colorScheme: colorScheme,
+                      ),
+                      const SizedBox(height: 12),
+                      _InfoItem(
+                        icon: Icons.link_rounded,
+                        text: 'Enter your computer\'s local IP address',
+                        theme: theme,
+                        colorScheme: colorScheme,
+                      ),
+                      const SizedBox(height: 20),
+                      Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.all(16),
+                        decoration: BoxDecoration(
+                          color: colorScheme.surfaceContainerHighest,
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Default:',
+                              style: theme.textTheme.bodyMedium?.copyWith(
+                                color: colorScheme.onSurfaceVariant,
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              AppConstants.defaultBackendUrl,
+                              style: theme.textTheme.bodyLarge?.copyWith(
+                                color: colorScheme.primary,
+                                fontFamily: 'monospace',
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                            const SizedBox(height: 12),
+                            Text(
+                              'Example (local network):',
+                              style: theme.textTheme.bodyMedium?.copyWith(
+                                color: colorScheme.onSurfaceVariant,
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              'http://192.168.1.100:3000',
+                              style: theme.textTheme.bodyLarge?.copyWith(
+                                color: colorScheme.secondary,
+                                fontFamily: 'monospace',
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(height: 32),
+
+              // ─────────────────────────────────────────────────────────────
+              // Reset Button
+              // ─────────────────────────────────────────────────────────────
+              SizedBox(
+                width: double.infinity,
+                height: 52,
+                child: OutlinedButton(
+                  onPressed: () async {
+                    final messenger = ScaffoldMessenger.of(context);
+                    await context.read<SettingsCubit>().resetBackendUrl();
+                    if (mounted) {
+                      _urlController.text = AppConstants.defaultBackendUrl;
+                      messenger.showSnackBar(
+                        const SnackBar(content: Text('Reset to default URL')),
+                      );
+                    }
+                  },
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: colorScheme.error,
+                    side: BorderSide(color: colorScheme.error, width: 2),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                  ),
+                  child: Text(
+                    'RESET TO DEFAULT',
+                    style: theme.textTheme.labelLarge?.copyWith(
+                      color: colorScheme.error,
+                      letterSpacing: 1,
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 40),
+
+              // ─────────────────────────────────────────────────────────────
+              // Version Info
+              // ─────────────────────────────────────────────────────────────
+              Center(
+                child: Text(
+                  'Version 1.0.0',
+                  style: theme.textTheme.bodyMedium?.copyWith(
+                    color: colorScheme.onSurfaceVariant.withValues(alpha: 0.7),
+                  ),
+                ),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+}
+
+class _InfoItem extends StatelessWidget {
+  const _InfoItem({
+    required this.icon,
+    required this.text,
+    required this.theme,
+    required this.colorScheme,
+  });
+
+  final IconData icon;
+  final String text;
+  final ThemeData theme;
+  final ColorScheme colorScheme;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Icon(icon, size: 22, color: colorScheme.onSurfaceVariant),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Text(
+            text,
+            style: theme.textTheme.bodyLarge?.copyWith(
+              color: colorScheme.onSurface,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
