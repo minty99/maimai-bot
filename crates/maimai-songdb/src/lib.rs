@@ -407,7 +407,7 @@ fn sha256_hex(value: &str) -> String {
 
 async fn download_image(client: &reqwest::Client, image_url: &str) -> eyre::Result<Vec<u8>> {
     const MAX_RETRIES: u32 = 3;
-    
+
     for attempt in 0..MAX_RETRIES {
         let result = async {
             let resp = client.get(image_url).send().await?;

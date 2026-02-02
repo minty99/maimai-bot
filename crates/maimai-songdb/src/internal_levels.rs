@@ -805,10 +805,8 @@ pub async fn fetch_internal_levels(
     for spreadsheet in SPREADSHEETS {
         for extract in spreadsheet.extracts {
             total_sheets += 1;
-            let sheet_identifier = format!(
-                "v{} / {}",
-                spreadsheet.source_version, extract.sheet_name
-            );
+            let sheet_identifier =
+                format!("v{} / {}", spreadsheet.source_version, extract.sheet_name);
 
             match fetch_sheet_values(
                 client,
