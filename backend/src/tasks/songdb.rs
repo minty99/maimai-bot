@@ -7,6 +7,8 @@ use eyre::{ContextCompat, WrapErr};
 use serde::Serialize;
 use tokio::sync::Mutex;
 
+use crate::state::AppState;
+
 #[derive(Debug, Serialize)]
 struct SongDataRoot {
     songs: Vec<SongDataSong>,
@@ -30,7 +32,7 @@ struct SongDataSheet {
     internal_level_value: f32,
 }
 
-pub fn start_songdb_tasks(data_dir: PathBuf) {
+pub fn start_songdb_tasks(app_state: AppState) {
     let songdb_config = match maimai_songdb::SongDbConfig::from_env() {
         Ok(v) => v,
         Err(e) => {
@@ -41,7 +43,9 @@ pub fn start_songdb_tasks(data_dir: PathBuf) {
 
     let songdb_config = Arc::new(songdb_config);
 
+    let data_dir = PathBuf::from(&app_state.config.data_dir);
     let data_dir_for_startup = data_dir.clone();
+    let app_state_for_startup = app_state.clone();
     let lock = Arc::new(Mutex::new(()));
     let lock_for_startup = lock.clone();
     let songdb_config_for_startup = songdb_config.clone();
@@ -64,16 +68,23 @@ pub fn start_songdb_tasks(data_dir: PathBuf) {
             tracing::warn!("songdb: startup update failed (non-fatal): {e:#}");
         } else {
             tracing::info!("songdb: startup update complete");
+            if let Err(e) = app_state_for_startup.reload_song_data() {
+                tracing::warn!("songdb: failed to reload song data after update: {e:#}");
+            } else {
+                tracing::info!("songdb: song data reloaded successfully");
+            }
         }
     });
 
     let data_dir_for_loop = data_dir.clone();
+    let app_state_for_loop = app_state;
     let lock_for_loop = lock;
     let songdb_config_for_loop = songdb_config;
 
     tokio::spawn(async move {
         if let Err(e) = run_daily_0730_kst_loop(
             &data_dir_for_loop,
+            &app_state_for_loop,
             songdb_config_for_loop.as_ref(),
             lock_for_loop,
         )
@@ -154,6 +165,7 @@ fn build_json_output(data: &maimai_songdb::SongDatabase) -> eyre::Result<SongDat
 
 async fn run_daily_0730_kst_loop(
     data_dir: &Path,
+    app_state: &AppState,
     config: &maimai_songdb::SongDbConfig,
     lock: Arc<Mutex<()>>,
 ) -> eyre::Result<()> {
@@ -169,7 +181,14 @@ async fn run_daily_0730_kst_loop(
 
         let _guard = lock.lock().await;
         match run_update(data_dir, config).await {
-            Ok(_) => tracing::info!("songdb: scheduled update complete"),
+            Ok(_) => {
+                tracing::info!("songdb: scheduled update complete");
+                if let Err(e) = app_state.reload_song_data() {
+                    tracing::warn!("songdb: failed to reload song data after update: {e:#}");
+                } else {
+                    tracing::info!("songdb: song data reloaded successfully");
+                }
+            }
             Err(e) => tracing::warn!("songdb: scheduled update failed (non-fatal): {e:#}"),
         }
     }

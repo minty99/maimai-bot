@@ -23,35 +23,30 @@ pub struct ScoreResponse {
 
 impl ScoreResponse {
     pub fn from_entry(entry: ScoreEntry, state: &AppState) -> Self {
-        let (internal_level, image_name, rating_points, bucket) = if let Some(ref song_data) =
-            state.song_data
+        let song_data = state.song_data.read().unwrap();
+
+        let internal_level =
+            song_data.internal_level(&entry.title, &entry.chart_type, &entry.diff_category);
+        let image_name = song_data.image_name(&entry.title).map(|s| s.to_string());
+
+        let rating_points = if let (Some(internal), Some(ach_x10000)) =
+            (internal_level, entry.achievement_x10000)
         {
-            let internal =
-                song_data.internal_level(&entry.title, &entry.chart_type, &entry.diff_category);
-            let image = song_data.image_name(&entry.title).map(|s| s.to_string());
-
-            let rating =
-                if let (Some(internal), Some(ach_x10000)) = (internal, entry.achievement_x10000) {
-                    let achievement_percent = ach_x10000 as f64 / 10000.0;
-                    let ap_bonus = crate::rating::is_ap_like(entry.fc.as_deref());
-                    Some(crate::rating::chart_rating_points(
-                        internal as f64,
-                        achievement_percent,
-                        ap_bonus,
-                    ))
-                } else {
-                    None
-                };
-
-            let bucket_val = song_data.bucket(&entry.title).map(|b| match b {
-                models::SongBucket::New => "New".to_string(),
-                models::SongBucket::Old => "Old".to_string(),
-            });
-
-            (internal, image, rating, bucket_val)
+            let achievement_percent = ach_x10000 as f64 / 10000.0;
+            let ap_bonus = crate::rating::is_ap_like(entry.fc.as_deref());
+            Some(crate::rating::chart_rating_points(
+                internal as f64,
+                achievement_percent,
+                ap_bonus,
+            ))
         } else {
-            (None, None, None, None)
+            None
         };
+
+        let bucket = song_data.bucket(&entry.title).map(|b| match b {
+            models::SongBucket::New => "New".to_string(),
+            models::SongBucket::Old => "Old".to_string(),
+        });
 
         Self {
             title: entry.title,
@@ -98,35 +93,32 @@ pub struct PlayRecordResponse {
 
 impl PlayRecordResponse {
     pub fn from_record(record: PlayRecord, state: &AppState) -> Self {
-        let (internal_level, rating_points, bucket) = if let Some(ref song_data) = state.song_data {
-            let internal = song_data.internal_level(
-                &record.title,
-                &record.chart_type,
-                record.diff_category.as_deref().unwrap_or(""),
-            );
+        let song_data = state.song_data.read().unwrap();
 
-            let rating =
-                if let (Some(internal), Some(ach_x10000)) = (internal, record.achievement_x10000) {
-                    let achievement_percent = ach_x10000 as f64 / 10000.0;
-                    let ap_bonus = crate::rating::is_ap_like(record.fc.as_deref());
-                    Some(crate::rating::chart_rating_points(
-                        internal as f64,
-                        achievement_percent,
-                        ap_bonus,
-                    ))
-                } else {
-                    None
-                };
+        let internal_level = song_data.internal_level(
+            &record.title,
+            &record.chart_type,
+            record.diff_category.as_deref().unwrap_or(""),
+        );
 
-            let bucket = song_data.bucket(&record.title).map(|b| match b {
-                models::SongBucket::New => "New".to_string(),
-                models::SongBucket::Old => "Old".to_string(),
-            });
-
-            (internal, rating, bucket)
+        let rating_points = if let (Some(internal), Some(ach_x10000)) =
+            (internal_level, record.achievement_x10000)
+        {
+            let achievement_percent = ach_x10000 as f64 / 10000.0;
+            let ap_bonus = crate::rating::is_ap_like(record.fc.as_deref());
+            Some(crate::rating::chart_rating_points(
+                internal as f64,
+                achievement_percent,
+                ap_bonus,
+            ))
         } else {
-            (None, None, None)
+            None
         };
+
+        let bucket = song_data.bucket(&record.title).map(|b| match b {
+            models::SongBucket::New => "New".to_string(),
+            models::SongBucket::Old => "Old".to_string(),
+        });
 
         Self {
             played_at_unixtime: record.played_at_unixtime,

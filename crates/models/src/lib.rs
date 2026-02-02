@@ -411,6 +411,14 @@ struct SongDataSheet {
 }
 
 impl SongDataIndex {
+    pub fn empty() -> Self {
+        Self {
+            map: HashMap::new(),
+            song_version: HashMap::new(),
+            song_image_name: HashMap::new(),
+        }
+    }
+
     pub fn load_from_default_locations() -> eyre::Result<Option<Self>> {
         let data_dir = std::env::var("DATA_DIR").unwrap_or_else(|_| "data".to_string());
         let base = std::path::PathBuf::from(data_dir)
