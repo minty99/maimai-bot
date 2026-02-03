@@ -1,8 +1,8 @@
 [workspace]
 members = [
     "backend",
-    "crates/db",
     "crates/http-client",
+    "crates/maimai-db",
     "crates/maimai-parsers",
     "crates/maimai-songdb",
     "crates/models",
