@@ -424,6 +424,22 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "0.28.0"
+  sensors_plus:
+    dependency: "direct main"
+    description:
+      name: sensors_plus
+      sha256: "89e2bfc3d883743539ce5774a2b93df61effde40ff958ecad78cd66b1a8b8d52"
+      url: "https://pub.dev"
+    source: hosted
+    version: "6.1.2"
+  sensors_plus_platform_interface:
+    dependency: transitive
+    description:
+      name: sensors_plus_platform_interface
+      sha256: "58815d2f5e46c0c41c40fb39375d3f127306f7742efe3b891c0b1c87e2b5cd5d"
+      url: "https://pub.dev"
+    source: hosted
+    version: "2.0.1"
   shared_preferences:
     dependency: "direct main"
     description:
@@ -613,14 +629,14 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "15.0.2"
-  volume_listener:
+  volume_button_override:
     dependency: "direct main"
     description:
-      name: volume_listener
-      sha256: bfaba6353e61ccc7799432eefae2b5c9f0fdf426e2b2a0b49bbe65f84b7bd959
+      name: volume_button_override
+      sha256: "368926d2fea5b802e9286d98bb47a93e26667521288e8fff60e53b1fcaf2fb1b"
       url: "https://pub.dev"
     source: hosted
-    version: "0.1.0"
+    version: "0.0.1"
   web:
     dependency: transitive
     description:
