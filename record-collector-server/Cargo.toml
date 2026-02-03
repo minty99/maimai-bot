@@ -1,0 +1,33 @@
+[package]
+name = "record-collector-server"
+version.workspace = true
+edition.workspace = true
+
+[[bin]]
+name = "maimai-record-collector"
+path = "src/main.rs"
+
+[dependencies]
+axum = { workspace = true }
+chrono = { workspace = true }
+chrono-tz = { workspace = true }
+dotenvy = { workspace = true }
+eyre = { workspace = true }
+maimai-db = { path = "../crates/maimai-db" }
+maimai-http-client = { path = "../crates/http-client" }
+maimai-parsers = { path = "../crates/maimai-parsers" }
+maimai-songdb = { path = "../crates/maimai-songdb" }
+models = { version = "0.1.0", path = "../crates/models" }
+rand = { workspace = true }
+reqwest = { workspace = true, features = ["json"] }
+serde = { workspace = true }
+serde_json = { workspace = true }
+sqlx = { workspace = true }
+time = { workspace = true, features = ["macros", "local-offset"] }
+tokio = { workspace = true }
+tower-http = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+urlencoding.workspace = true
+
+[dev-dependencies]

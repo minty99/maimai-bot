@@ -1,0 +1,107 @@
+use crate::error::Result;
+use crate::song_info_client::{SongInfoClient, SongMetadata};
+use models::{PlayRecord, ScoreEntry};
+pub use models::{PlayRecordResponse, ScoreResponse};
+
+pub async fn score_response_from_entry(
+    entry: ScoreEntry,
+    song_info_client: &SongInfoClient,
+) -> Result<ScoreResponse> {
+    let metadata = song_info_client
+        .get_song_metadata(&entry.title, &entry.chart_type, &entry.diff_category)
+        .await?;
+
+    let effective_internal = metadata
+        .internal_level
+        .or_else(|| crate::rating::fallback_internal_level(&entry.level));
+
+    let rating_points = if let (Some(internal), Some(ach_x10000)) =
+        (effective_internal, entry.achievement_x10000)
+    {
+        let achievement_percent = ach_x10000 as f64 / 10000.0;
+        let ap_bonus = crate::rating::is_ap_like(entry.fc.as_deref());
+        Some(crate::rating::chart_rating_points(
+            internal as f64,
+            achievement_percent,
+            ap_bonus,
+        ))
+    } else {
+        None
+    };
+
+    Ok(ScoreResponse {
+        title: entry.title,
+        chart_type: entry.chart_type,
+        diff_category: entry.diff_category,
+        level: entry.level,
+        achievement_x10000: entry.achievement_x10000,
+        rank: entry.rank,
+        fc: entry.fc,
+        sync: entry.sync,
+        dx_score: entry.dx_score,
+        dx_score_max: entry.dx_score_max,
+        source_idx: entry.source_idx,
+        internal_level: effective_internal,
+        image_name: metadata.image_name,
+        version: metadata.version,
+        rating_points,
+        bucket: metadata.bucket,
+    })
+}
+
+pub async fn play_record_response_from_record(
+    record: PlayRecord,
+    song_info_client: &SongInfoClient,
+) -> Result<PlayRecordResponse> {
+    let diff_category = record.diff_category.as_deref().unwrap_or("");
+    let metadata = if diff_category.is_empty() {
+        SongMetadata::empty()
+    } else {
+        song_info_client
+            .get_song_metadata(&record.title, &record.chart_type, diff_category)
+            .await?
+    };
+
+    let effective_internal = metadata.internal_level.or_else(|| {
+        record
+            .level
+            .as_deref()
+            .and_then(crate::rating::fallback_internal_level)
+    });
+
+    let rating_points = if let (Some(internal), Some(ach_x10000)) =
+        (effective_internal, record.achievement_x10000)
+    {
+        let achievement_percent = ach_x10000 as f64 / 10000.0;
+        let ap_bonus = crate::rating::is_ap_like(record.fc.as_deref());
+        Some(crate::rating::chart_rating_points(
+            internal as f64,
+            achievement_percent,
+            ap_bonus,
+        ))
+    } else {
+        None
+    };
+
+    Ok(PlayRecordResponse {
+        played_at_unixtime: record.played_at_unixtime,
+        played_at: record.played_at,
+        track: record.track,
+        title: record.title,
+        chart_type: record.chart_type,
+        diff_category: record.diff_category,
+        level: record.level,
+        achievement_x10000: record.achievement_x10000,
+        score_rank: record.score_rank,
+        fc: record.fc,
+        sync: record.sync,
+        dx_score: record.dx_score,
+        dx_score_max: record.dx_score_max,
+        credit_play_count: record.credit_play_count,
+        achievement_new_record: record.achievement_new_record,
+        first_play: record.first_play,
+        internal_level: effective_internal,
+        rating_points,
+        bucket: metadata.bucket,
+    })
+}

@@ -24,7 +24,7 @@ pub async fn connect(database_url: &str) -> eyre::Result<SqlitePool> {
 }
 
 pub async fn migrate(pool: &SqlitePool) -> eyre::Result<()> {
-    sqlx::migrate!("../../backend/migrations")
+    sqlx::migrate!("../../record-collector-server/migrations")
         .run(pool)
         .await
         .wrap_err("run migrations")?;
