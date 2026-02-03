@@ -110,7 +110,7 @@ class _SongSelectionScreenState extends State<SongSelectionScreen>
       ],
       child: Scaffold(
         appBar: AppBar(
-          title: const Text('maimai Randomizer'),
+          title: const Text('maimai picker'),
           actions: [
             IconButton(
               icon: const Icon(Icons.settings),
@@ -260,10 +260,7 @@ class _SongSelectionScreenState extends State<SongSelectionScreen>
 // ═══════════════════════════════════════════════════════════════════════════════
 
 class _HorizontalRangeDisplay extends StatelessWidget {
-  const _HorizontalRangeDisplay({
-    required this.start,
-    required this.end,
-  });
+  const _HorizontalRangeDisplay({required this.start, required this.end});
 
   final double start;
   final double end;
@@ -601,18 +598,19 @@ class _LoadedState extends StatelessWidget {
         const estimatedInfoHeight = 310.0;
         final availableHeight = constraints.maxHeight - estimatedInfoHeight;
         final availableWidth = constraints.maxWidth - 32; // Card padding
-        final jacketSize = (availableHeight > 0
-                ? availableHeight.clamp(100.0, 200.0)
-                : 150.0)
-            .clamp(100.0, availableWidth);
+        final jacketSize =
+            (availableHeight > 0 ? availableHeight.clamp(100.0, 200.0) : 150.0)
+                .clamp(100.0, availableWidth);
 
         return SingleChildScrollView(
           child: Card(
             elevation: 4,
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(16),
-              side:
-                  BorderSide(color: diffColor.withValues(alpha: 0.5), width: 2),
+              side: BorderSide(
+                color: diffColor.withValues(alpha: 0.5),
+                width: 2,
+              ),
             ),
             child: Padding(
               padding: const EdgeInsets.all(12),
@@ -759,11 +757,14 @@ class _LoadedState extends StatelessWidget {
                       children: [
                         if (song.fc != null)
                           _Badge(
-                              label: song.fc!, color: const Color(0xFFFFD700)),
+                            label: song.fc!,
+                            color: const Color(0xFFFFD700),
+                          ),
                         if (song.sync != null)
                           _Badge(
-                              label: song.sync!,
-                              color: const Color(0xFF00BFFF)),
+                            label: song.sync!,
+                            color: const Color(0xFF00BFFF),
+                          ),
                       ],
                     ),
                 ],

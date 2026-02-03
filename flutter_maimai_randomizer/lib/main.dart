@@ -52,7 +52,7 @@ class MaimaiRandomizerApp extends StatelessWidget {
               repository: SongRepositoryImpl(baseUrl: state.backendUrl),
             ),
             child: MaterialApp(
-              title: 'maimai Randomizer',
+              title: 'maimai picker',
               debugShowCheckedModeBanner: false,
 
               // Material 3 dark theme optimized for arcade use
