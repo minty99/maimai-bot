@@ -96,7 +96,6 @@ pub async fn random_song_by_level(
     let rows = sqlx::query_as::<_, ScoreEntry>(
         "SELECT title, chart_type, diff_category, level, achievement_x10000, rank, fc, sync, dx_score, dx_score_max, source_idx
          FROM scores
-         WHERE achievement_x10000 IS NOT NULL
          ORDER BY title, chart_type, diff_category"
     )
     .fetch_all(&state.db_pool)
