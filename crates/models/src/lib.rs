@@ -387,30 +387,40 @@ struct SongKey {
     diff_category: String,
 }
 
-#[derive(Debug, Deserialize)]
-struct SongDataRoot {
-    songs: Vec<SongDataSong>,
+#[derive(Debug, Serialize, Deserialize)]
+pub struct SongDataRoot {
+    pub songs: Vec<SongDataSong>,
 }
 
-#[derive(Debug, Deserialize)]
-struct SongDataSong {
-    title: String,
-    version: Option<String>,
-    #[serde(rename = "imageName")]
-    image_name: Option<String>,
-    sheets: Vec<SongDataSheet>,
+#[derive(Debug, Serialize, Deserialize)]
+pub struct SongDataSong {
+    pub title: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub version: Option<String>,
+    #[serde(rename = "imageName", skip_serializing_if = "Option::is_none")]
+    pub image_name: Option<String>,
+    pub sheets: Vec<SongDataSheet>,
 }
 
-#[derive(Debug, Deserialize)]
-struct SongDataSheet {
+#[derive(Debug, Serialize, Deserialize)]
+pub struct SongDataSheet {
     #[serde(rename = "type")]
-    sheet_type: String,
-    difficulty: String,
-    #[serde(rename = "internalLevelValue")]
-    internal_level_value: f32,
+    pub sheet_type: String,
+    pub difficulty: String,
+    pub level: String,
+    #[serde(rename = "internalLevel", skip_serializing_if = "Option::is_none")]
+    pub internal_level: Option<String>,
 }
 
 impl SongDataIndex {
+    pub fn empty() -> Self {
+        Self {
+            map: HashMap::new(),
+            song_version: HashMap::new(),
+            song_image_name: HashMap::new(),
+        }
+    }
+
     pub fn load_from_default_locations() -> eyre::Result<Option<Self>> {
         let data_dir = std::env::var("DATA_DIR").unwrap_or_else(|_| "data".to_string());
         let base = std::path::PathBuf::from(data_dir)
@@ -471,7 +481,7 @@ impl SongDataIndex {
         self.song_image_name.get(&title_norm).map(|s| s.as_str())
     }
 
-    fn from_root(root: SongDataRoot) -> Self {
+    pub fn from_root(root: SongDataRoot) -> Self {
         let mut map = HashMap::new();
         let mut song_version = HashMap::new();
         let mut song_image_name = HashMap::new();
@@ -498,7 +508,13 @@ impl SongDataIndex {
             }
 
             for sheet in song.sheets {
-                let internal = sheet.internal_level_value;
+                let Some(internal_str) = &sheet.internal_level else {
+                    continue;
+                };
+
+                let Ok(internal_value) = internal_str.trim().parse::<f32>() else {
+                    continue;
+                };
 
                 let Some(chart_type) = map_chart_type(&sheet.sheet_type) else {
                     continue;
@@ -513,7 +529,7 @@ impl SongDataIndex {
                         chart_type: chart_type.to_string(),
                         diff_category: diff_category.to_string(),
                     },
-                    internal,
+                    internal_value,
                 );
             }
         }

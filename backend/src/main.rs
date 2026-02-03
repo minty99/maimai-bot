@@ -7,7 +7,6 @@ mod tasks;
 
 use eyre::WrapErr;
 use std::net::SocketAddr;
-use std::path::PathBuf;
 use tokio::net::TcpListener;
 use tracing_subscriber::EnvFilter;
 
@@ -25,6 +24,9 @@ async fn main() -> eyre::Result<()> {
     tracing::info!("Backend starting...");
 
     let config = config::BackendConfig::from_env().wrap_err("Failed to load backend config")?;
+
+    // Create data directory if it doesn't exist (prevents permission errors on first run)
+    std::fs::create_dir_all(&config.data_dir).wrap_err("Failed to create data directory")?;
 
     // Initialize database pool
     let db_pool = sqlx::sqlite::SqlitePoolOptions::new()
@@ -58,29 +60,29 @@ async fn main() -> eyre::Result<()> {
                     "Song data loaded successfully from {}",
                     song_data_base_path.display()
                 );
-                Some(std::sync::Arc::new(data))
+                std::sync::Arc::new(data)
             }
             Ok(None) => {
                 tracing::warn!(
-                    "Song data not found at {} (non-fatal)",
+                    "Song data not found at {} (using empty index)",
                     song_data_base_path.display()
                 );
-                None
+                std::sync::Arc::new(models::SongDataIndex::empty())
             }
             Err(e) => {
                 tracing::warn!(
-                    "Failed to load song data from {} (non-fatal): {}",
+                    "Failed to load song data from {} (using empty index): {}",
                     song_data_base_path.display(),
                     e
                 );
-                None
+                std::sync::Arc::new(models::SongDataIndex::empty())
             }
         };
 
     let app_state = state::AppState {
         db_pool,
         config: config.clone(),
-        song_data,
+        song_data: std::sync::Arc::new(std::sync::RwLock::new(song_data)),
         song_data_base_path,
     };
 
@@ -88,7 +90,7 @@ async fn main() -> eyre::Result<()> {
     tasks::polling::start_background_polling(app_state.clone());
 
     // Start song metadata builder/updater (startup + daily 07:30 KST)
-    tasks::songdb::start_songdb_tasks(app_state.db_pool.clone(), PathBuf::from(&config.data_dir));
+    tasks::songdb::start_songdb_tasks(app_state.clone());
 
     let app = routes::create_routes(app_state.clone());
 

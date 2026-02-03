@@ -23,18 +23,18 @@ The goal of this file is to keep future changes consistent with the current impl
 - Discord bot: `src/discord/bot.rs`
   - On startup:
     - fetches `playerData` and stores `player.user_name` in memory (`BotData.maimai_user_name`)
-    - checks if scores sync is needed using `app_state`’s `player.total_play_count`
+    - checks if scores sync is needed using `app_state`'s `player.total_play_count`
     - if needed: sync scores (diff 0..4) + seed recent playlogs once
     - sends a startup DM embed with player data
   - Background loop (every 10 minutes):
     - fetches `playerData` again
-    - only if **total play count changed**: fetches recent page, upserts playlogs, then sends a DM embed for “New plays detected”
+    - only if **total play count changed**: fetches recent page, upserts playlogs, then sends a DM embed for "New plays detected"
   - Slash commands:
     - `/mai-score <title>`: selects a single best match
       - exact match: show that title
-      - non-exact: show top 5 candidates as buttons; on click delete the prompt message, then display the selected title’s scores
-      - hide “unplayed” rows (`achievement_x10000 IS NULL`)
-    - `/mai-recent`: shows the latest credit (based on recent page’s TRACK numbering), formatted from `TRACK 01` upwards
+      - non-exact: show top 5 candidates as buttons; on click delete the prompt message, then display the selected title's scores
+      - hide "unplayed" rows (`achievement_x10000 IS NULL`)
+    - `/mai-recent`: shows the latest credit (based on recent page's TRACK numbering), formatted from `TRACK 01` upwards
 
 ## DB & migrations
 
@@ -65,4 +65,7 @@ The goal of this file is to keep future changes consistent with the current impl
 
 - Keep modules small and focused (`config`, `http`, `maimai`, `db`, `discord`).
 - Prefer small testable helpers.
-- If adding “UI preview” tests, keep them `#[ignore]` and ensure they require explicit env vars (and never log secrets).
+- If adding "UI preview" tests, keep them `#[ignore]` and ensure they require explicit env vars (and never log secrets).
+- **Always run before committing**:
+  - `cargo fmt --all` (format all code)
+  - `cargo clippy --all -- -D warnings` (lint with warnings as errors)

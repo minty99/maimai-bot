@@ -4,34 +4,11 @@ use std::sync::Arc;
 use chrono::{DateTime, Datelike, Duration, TimeZone, Utc};
 use chrono_tz::Asia::Seoul;
 use eyre::{ContextCompat, WrapErr};
-use serde::Serialize;
-use sqlx::SqlitePool;
 use tokio::sync::Mutex;
 
-#[derive(Debug, Serialize)]
-struct SongDataRoot {
-    songs: Vec<SongDataSong>,
-}
+use crate::state::AppState;
 
-#[derive(Debug, Serialize)]
-struct SongDataSong {
-    title: String,
-    version: Option<String>,
-    #[serde(rename = "imageName")]
-    image_name: Option<String>,
-    sheets: Vec<SongDataSheet>,
-}
-
-#[derive(Debug, Serialize)]
-struct SongDataSheet {
-    #[serde(rename = "type")]
-    sheet_type: String,
-    difficulty: String,
-    #[serde(rename = "internalLevelValue")]
-    internal_level_value: f32,
-}
-
-pub fn start_songdb_tasks(db_pool: SqlitePool, data_dir: PathBuf) {
+pub fn start_songdb_tasks(app_state: AppState) {
     let songdb_config = match maimai_songdb::SongDbConfig::from_env() {
         Ok(v) => v,
         Err(e) => {
@@ -42,36 +19,48 @@ pub fn start_songdb_tasks(db_pool: SqlitePool, data_dir: PathBuf) {
 
     let songdb_config = Arc::new(songdb_config);
 
+    let data_dir = PathBuf::from(&app_state.config.data_dir);
     let data_dir_for_startup = data_dir.clone();
-    let pool_for_startup = db_pool.clone();
+    let app_state_for_startup = app_state.clone();
     let lock = Arc::new(Mutex::new(()));
     let lock_for_startup = lock.clone();
     let songdb_config_for_startup = songdb_config.clone();
 
     tokio::spawn(async move {
         let _guard = lock_for_startup.lock().await;
-        if let Err(e) = run_update(
-            &pool_for_startup,
-            &data_dir_for_startup,
-            songdb_config_for_startup.as_ref(),
-        )
-        .await
+
+        let data_json_path = data_dir_for_startup
+            .join(maimai_songdb::SONG_DATA_SUBDIR)
+            .join("data.json");
+
+        if data_json_path.exists() {
+            tracing::info!("songdb: data.json already exists, skipping startup update");
+            return;
+        }
+
+        tracing::info!("songdb: data.json not found, running initial update");
+        if let Err(e) = run_update(&data_dir_for_startup, songdb_config_for_startup.as_ref()).await
         {
             tracing::warn!("songdb: startup update failed (non-fatal): {e:#}");
         } else {
             tracing::info!("songdb: startup update complete");
+            if let Err(e) = app_state_for_startup.reload_song_data() {
+                tracing::warn!("songdb: failed to reload song data after update: {e:#}");
+            } else {
+                tracing::info!("songdb: song data reloaded successfully");
+            }
         }
     });
 
     let data_dir_for_loop = data_dir.clone();
-    let pool_for_loop = db_pool;
+    let app_state_for_loop = app_state;
     let lock_for_loop = lock;
     let songdb_config_for_loop = songdb_config;
 
     tokio::spawn(async move {
         if let Err(e) = run_daily_0730_kst_loop(
-            &pool_for_loop,
             &data_dir_for_loop,
+            &app_state_for_loop,
             songdb_config_for_loop.as_ref(),
             lock_for_loop,
         )
@@ -82,113 +71,29 @@ pub fn start_songdb_tasks(db_pool: SqlitePool, data_dir: PathBuf) {
     });
 }
 
-async fn run_update(
-    pool: &SqlitePool,
-    data_dir: &Path,
-    config: &maimai_songdb::SongDbConfig,
-) -> eyre::Result<()> {
-    let last_update_key = "songdb.last_update_timestamp";
-    let now_timestamp = Utc::now().timestamp();
-
-    let last_update: Option<i64> = sqlx::query_scalar("SELECT value FROM app_state WHERE key = ?")
-        .bind(last_update_key)
-        .fetch_optional(pool)
-        .await
-        .wrap_err("fetch last songdb update timestamp")?
-        .and_then(|v: String| v.parse().ok());
-
-    if let Some(last_ts) = last_update {
-        let elapsed_hours = (now_timestamp - last_ts) / 3600;
-        if elapsed_hours < 24 {
-            tracing::info!(
-                "songdb: skipping update (last updated {} hours ago, threshold: 24h)",
-                elapsed_hours
-            );
-            return Ok(());
-        }
-    }
-
+async fn run_update(data_dir: &Path, config: &maimai_songdb::SongDbConfig) -> eyre::Result<()> {
     tracing::info!("songdb: starting update...");
 
     let output_dir = data_dir.join(maimai_songdb::SONG_DATA_SUBDIR);
     std::fs::create_dir_all(&output_dir).wrap_err("create song_data output dir")?;
 
-    let data = maimai_songdb::SongDatabase::fetch(config, &output_dir)
+    let database = maimai_songdb::SongDatabase::fetch(config, &output_dir)
         .await
         .wrap_err("failed to fetch song database")?;
 
-    let json_output = build_json_output(&data)?;
-    let json_bytes = serde_json::to_vec_pretty(&json_output).wrap_err("serialize data.json")?;
-    std::fs::write(output_dir.join("data.json"), json_bytes).wrap_err("write data.json")?;
+    let data_root = database
+        .into_data_root()
+        .wrap_err("failed to convert to data root")?;
 
-    sqlx::query(
-        "INSERT INTO app_state (key, value, updated_at) VALUES (?, ?, ?)
-         ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at",
-    )
-    .bind(last_update_key)
-    .bind(now_timestamp.to_string())
-    .bind(now_timestamp)
-    .execute(pool)
-    .await
-    .wrap_err("save songdb last update timestamp")?;
+    let json_bytes = serde_json::to_vec_pretty(&data_root).wrap_err("serialize data.json")?;
+    std::fs::write(output_dir.join("data.json"), json_bytes).wrap_err("write data.json")?;
 
     Ok(())
 }
 
-fn build_json_output(data: &maimai_songdb::SongDatabase) -> eyre::Result<SongDataRoot> {
-    use std::collections::BTreeMap;
-
-    let mut song_map: BTreeMap<String, SongDataSong> = BTreeMap::new();
-
-    for song in &data.songs {
-        song_map.insert(
-            song.song_id.clone(),
-            SongDataSong {
-                title: song.title.clone(),
-                version: song.version.clone(),
-                image_name: Some(song.image_name.clone()),
-                sheets: Vec::new(),
-            },
-        );
-    }
-
-    for sheet in &data.sheets {
-        let song = match song_map.get_mut(&sheet.song_id) {
-            Some(song) => song,
-            None => continue,
-        };
-
-        let key = (
-            sheet.song_id.clone(),
-            sheet.sheet_type.clone(),
-            sheet.difficulty.clone(),
-        );
-        let internal_level = data.internal_levels.get(&key);
-
-        let Some(internal_level_str) = internal_level.map(|il| &il.internal_level) else {
-            continue;
-        };
-
-        let internal_level_value = internal_level_str
-            .trim()
-            .parse::<f32>()
-            .wrap_err("parse internal_level as f32")?;
-
-        song.sheets.push(SongDataSheet {
-            sheet_type: sheet.sheet_type.clone(),
-            difficulty: sheet.difficulty.clone(),
-            internal_level_value,
-        });
-    }
-
-    Ok(SongDataRoot {
-        songs: song_map.into_values().collect(),
-    })
-}
-
 async fn run_daily_0730_kst_loop(
-    pool: &SqlitePool,
     data_dir: &Path,
+    app_state: &AppState,
     config: &maimai_songdb::SongDbConfig,
     lock: Arc<Mutex<()>>,
 ) -> eyre::Result<()> {
@@ -203,8 +108,15 @@ async fn run_daily_0730_kst_loop(
         tokio::time::sleep(sleep_for).await;
 
         let _guard = lock.lock().await;
-        match run_update(pool, data_dir, config).await {
-            Ok(_) => tracing::info!("songdb: scheduled update complete"),
+        match run_update(data_dir, config).await {
+            Ok(_) => {
+                tracing::info!("songdb: scheduled update complete");
+                if let Err(e) = app_state.reload_song_data() {
+                    tracing::warn!("songdb: failed to reload song data after update: {e:#}");
+                } else {
+                    tracing::info!("songdb: song data reloaded successfully");
+                }
+            }
             Err(e) => tracing::warn!("songdb: scheduled update failed (non-fatal): {e:#}"),
         }
     }

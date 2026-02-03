@@ -13,6 +13,14 @@ pub const SONG_DATA_SUBDIR: &str = "song_data";
 const MAIMAI_SONGS_URL: &str = "https://maimai.sega.jp/data/maimai_songs.json";
 const IMAGE_BASE_URL: &str = "https://maimaidx.jp/maimai-mobile/img/Music/";
 
+pub async fn fetch_and_build_index(
+    config: &SongDbConfig,
+    image_output_dir: &Path,
+) -> eyre::Result<models::SongDataIndex> {
+    let database = SongDatabase::fetch(config, image_output_dir).await?;
+    database.into_index()
+}
+
 #[derive(Debug, Deserialize)]
 struct RawSong {
     catcode: String,
@@ -143,8 +151,11 @@ pub struct SongDatabase {
 
 impl SongDatabase {
     pub async fn fetch(config: &SongDbConfig, image_output_dir: &Path) -> eyre::Result<Self> {
+        // NOTE: maimaidx.jp sometimes has SSL certificate issues ("unable to get local issuer certificate").
+        // We bypass verification here since we're only fetching public cover images.
         let client = reqwest::Client::builder()
             .user_agent(&config.user_agent)
+            .danger_accept_invalid_certs(true)
             .build()
             .wrap_err("build reqwest client")?;
 
@@ -160,18 +171,74 @@ impl SongDatabase {
             sheets.len()
         );
 
-        tracing::info!("Fetching internal levels from Google Sheets...");
-        let internal_levels =
-            internal_levels::fetch_internal_levels(&client, &config.google_api_key).await?;
+        tracing::info!("Fetching internal levels and downloading covers in parallel...");
+        let (internal_levels_result, cover_result) = tokio::join!(
+            internal_levels::fetch_internal_levels(&client, &config.google_api_key),
+            download_cover_images(&client, &songs, image_output_dir)
+        );
 
-        tracing::info!("Downloading cover images...");
-        download_cover_images(&client, &songs, image_output_dir).await?;
+        let internal_levels = internal_levels_result?;
+        cover_result?;
+
+        tracing::info!("Completed internal levels fetch and cover downloads");
 
         Ok(SongDatabase {
             songs,
             sheets,
             internal_levels,
         })
+    }
+
+    pub fn into_data_root(self) -> eyre::Result<models::SongDataRoot> {
+        use std::collections::BTreeMap;
+
+        let mut song_map: BTreeMap<String, models::SongDataSong> = BTreeMap::new();
+
+        for song in self.songs {
+            song_map.insert(
+                song.song_id.clone(),
+                models::SongDataSong {
+                    title: song.title.clone(),
+                    version: song.version.clone(),
+                    image_name: Some(song.image_name.clone()),
+                    sheets: Vec::new(),
+                },
+            );
+        }
+
+        for sheet in self.sheets {
+            let song = match song_map.get_mut(&sheet.song_id) {
+                Some(song) => song,
+                None => continue,
+            };
+
+            let key = (
+                sheet.song_id.clone(),
+                sheet.sheet_type.clone(),
+                sheet.difficulty.clone(),
+            );
+
+            let internal_level = self
+                .internal_levels
+                .get(&key)
+                .map(|il| il.internal_level.trim().to_string());
+
+            song.sheets.push(models::SongDataSheet {
+                sheet_type: sheet.sheet_type.clone(),
+                difficulty: sheet.difficulty.clone(),
+                level: sheet.level.clone(),
+                internal_level,
+            });
+        }
+
+        Ok(models::SongDataRoot {
+            songs: song_map.into_values().collect(),
+        })
+    }
+
+    pub fn into_index(self) -> eyre::Result<models::SongDataIndex> {
+        let data_root = self.into_data_root()?;
+        Ok(models::SongDataIndex::from_root(data_root))
     }
 }
 
@@ -402,18 +469,35 @@ fn sha256_hex(value: &str) -> String {
 }
 
 async fn download_image(client: &reqwest::Client, image_url: &str) -> eyre::Result<Vec<u8>> {
-    let response = client
-        .get(image_url)
-        .send()
-        .await
-        .wrap_err("fetch cover image")?;
-    let bytes = response
-        .error_for_status()
-        .wrap_err("cover image status")?
-        .bytes()
-        .await
-        .wrap_err("read cover image bytes")?;
-    Ok(bytes.to_vec())
+    const MAX_RETRIES: u32 = 3;
+
+    for attempt in 0..MAX_RETRIES {
+        let result = async {
+            let resp = client.get(image_url).send().await?;
+            let resp = resp.error_for_status()?;
+            let bytes = resp.bytes().await?;
+            Ok::<_, eyre::Error>(bytes.to_vec())
+        }
+        .await;
+
+        match result {
+            Ok(data) => return Ok(data),
+            Err(e) if attempt < MAX_RETRIES - 1 => {
+                let delay_ms = 200 * 2_u64.pow(attempt);
+                tracing::warn!(
+                    "Failed to download '{}': {}. Retrying in {}ms (attempt {}/{})",
+                    image_url,
+                    e,
+                    delay_ms,
+                    attempt + 1,
+                    MAX_RETRIES
+                );
+                tokio::time::sleep(std::time::Duration::from_millis(delay_ms)).await;
+            }
+            Err(e) => return Err(e.wrap_err("fetch cover image")),
+        }
+    }
+    unreachable!()
 }
 
 fn cover_image_path(output_dir: &Path, image_name: &str) -> PathBuf {
@@ -445,25 +529,58 @@ async fn download_cover_images(
 
     let total = songs.len();
     let mut downloaded_count = 0;
+    let mut skipped_count = 0;
+    let mut failed_downloads = Vec::new();
 
     for song in songs {
         let cover_path = cover_image_path(output_dir, &song.image_name);
 
         if should_download(&cover_path) {
-            let downloaded = download_image(client, &song.image_url).await?;
-            write_atomic(&cover_path, &downloaded).wrap_err("write cover image")?;
-            downloaded_count += 1;
+            match download_image(client, &song.image_url).await {
+                Ok(downloaded) => match write_atomic(&cover_path, &downloaded) {
+                    Ok(_) => {
+                        downloaded_count += 1;
+                    }
+                    Err(e) => {
+                        tracing::error!(
+                            "Failed to write cover '{}' to '{}': {:#}",
+                            song.title,
+                            cover_path.display(),
+                            e
+                        );
+                        failed_downloads.push(song.title.clone());
+                    }
+                },
+                Err(e) => {
+                    tracing::error!("Failed to download cover for '{}': {:#}", song.title, e);
+                    failed_downloads.push(song.title.clone());
+                }
+            }
+        } else {
+            skipped_count += 1;
         }
     }
 
-    let skipped_count = total - downloaded_count;
-
     tracing::info!(
-        "Cover images: total {} songs, downloaded {}, skipped {}",
+        "Cover images: total {} songs, downloaded {}, skipped {}, failed {}",
         total,
         downloaded_count,
-        skipped_count
+        skipped_count,
+        failed_downloads.len()
     );
+
+    if !failed_downloads.is_empty() {
+        tracing::warn!(
+            "Failed to download {} covers. First 10: {}",
+            failed_downloads.len(),
+            failed_downloads
+                .iter()
+                .take(10)
+                .cloned()
+                .collect::<Vec<_>>()
+                .join(", ")
+        );
+    }
 
     Ok(())
 }

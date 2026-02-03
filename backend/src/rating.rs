@@ -71,3 +71,54 @@ pub fn chart_rating_points(internal_level: f64, achievement_percent: f64, ap_bon
         base
     }
 }
+
+/// Derive a fallback internal level from the displayed level string.
+///
+/// - If level ends with "+": numeric part + 0.6 (e.g., "13+" → 13.6)
+/// - Otherwise: numeric part + 0.0 (e.g., "13" → 13.0)
+/// - Returns None for invalid or empty strings
+pub fn fallback_internal_level(level: &str) -> Option<f32> {
+    let level = level.trim();
+    if level.is_empty() || level == "N/A" {
+        return None;
+    }
+
+    let has_plus = level.ends_with('+');
+    let numeric_part = if has_plus {
+        level.trim_end_matches('+')
+    } else {
+        level
+    };
+
+    let base: f32 = numeric_part.trim().parse().ok()?;
+    let offset = if has_plus { 0.6 } else { 0.0 };
+    Some(base + offset)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_fallback_internal_level_basic() {
+        assert_eq!(fallback_internal_level("13"), Some(13.0));
+        assert_eq!(fallback_internal_level("14"), Some(14.0));
+        assert_eq!(fallback_internal_level("15"), Some(15.0));
+    }
+
+    #[test]
+    fn test_fallback_internal_level_plus() {
+        assert_eq!(fallback_internal_level("13+"), Some(13.6));
+        assert_eq!(fallback_internal_level("14+"), Some(14.6));
+        assert_eq!(fallback_internal_level("15+"), Some(15.6));
+    }
+
+    #[test]
+    fn test_fallback_internal_level_edge_cases() {
+        assert_eq!(fallback_internal_level(""), None);
+        assert_eq!(fallback_internal_level("N/A"), None);
+        assert_eq!(fallback_internal_level("  13  "), Some(13.0));
+        assert_eq!(fallback_internal_level("  13+  "), Some(13.6));
+        assert_eq!(fallback_internal_level("invalid"), None);
+    }
+}

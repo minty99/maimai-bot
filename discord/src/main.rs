@@ -1,7 +1,7 @@
 use eyre::WrapErr;
 use poise::serenity_prelude as serenity;
 use poise::{CreateReply, FrameworkOptions};
-use tracing::info;
+use tracing::{info, warn};
 
 mod client;
 mod commands;
@@ -113,13 +113,15 @@ async fn main() -> eyre::Result<()> {
                     .await
                     .wrap_err("register commands globally")?;
 
-                dm::send_startup_dm(
+                if let Err(e) = dm::send_startup_dm(
                     &bot_data.discord_http,
                     bot_data.discord_user_id,
                     &bot_data.backend_client,
                 )
                 .await
-                .wrap_err("send startup DM")?;
+                {
+                    warn!("Startup DM failed: {e}");
+                }
 
                 Ok(bot_data)
             })

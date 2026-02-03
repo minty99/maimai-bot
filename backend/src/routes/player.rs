@@ -1,5 +1,6 @@
 use axum::{extract::State, http::StatusCode, Json};
 use eyre::WrapErr;
+use maimai_http_client::is_maintenance_window_now;
 use reqwest::Url;
 use tracing::debug;
 
@@ -15,6 +16,13 @@ pub async fn get_player(
     State(state): State<AppState>,
 ) -> Result<(StatusCode, Json<ParsedPlayerData>)> {
     debug!("GET /api/player: fetching player data");
+
+    if is_maintenance_window_now() {
+        debug!("GET /api/player: maintenance window detected (04:00-07:00)");
+        return Err(crate::error::AppError::Maintenance(
+            "maimai DX NET maintenance window (04:00-07:00 local time)".to_string(),
+        ));
+    }
 
     let mut client = state
         .maimai_client()
