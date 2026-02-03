@@ -22,8 +22,8 @@ class AppConstants {
   /// Default minimum level for song selection.
   static const double defaultMinLevel = 12.5;
 
-  /// Default maximum level for song selection.
-  static const double defaultMaxLevel = 12.6;
+  /// Default maximum level for song selection (same as min for gap=0).
+  static const double defaultMaxLevel = 12.5;
 
   /// Default step size when adjusting level range.
   static const double defaultLevelStep = 0.1;
