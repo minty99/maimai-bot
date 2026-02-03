@@ -1,6 +1,7 @@
 [workspace]
 members = [
-    "backend",
+    "record-collector-server",
+    "song-info-server",
     "crates/http-client",
     "crates/maimai-db",
     "crates/maimai-parsers",
