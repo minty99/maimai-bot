@@ -45,7 +45,7 @@ pub(crate) async fn mai_score(
 
     let scores = ctx
         .data()
-        .backend_client
+        .record_collector_client
         .search_scores(&search)
         .await
         .wrap_err("search scores")?;
@@ -197,7 +197,7 @@ pub(crate) async fn mai_score(
     if let Some(score) = matched_scores.first() {
         if let Some(ref image_name) = score.image_name {
             embed = embed.thumbnail(format!("attachment://{image_name}"));
-            match ctx.data().backend_client.get_cover(image_name).await {
+            match ctx.data().song_info_client.get_cover(image_name).await {
                 Ok(bytes) => {
                     attachments.push(serenity::CreateAttachment::bytes(bytes, image_name.clone()));
                 }
@@ -224,7 +224,7 @@ pub(crate) async fn mai_recent(ctx: Context<'_>) -> Result<(), Error> {
 
     let play_records = ctx
         .data()
-        .backend_client
+        .record_collector_client
         .get_recent(50)
         .await
         .wrap_err("fetch recent plays")?;
@@ -305,7 +305,11 @@ pub(crate) async fn mai_today(ctx: Context<'_>) -> Result<(), Error> {
         day_date.day()
     );
 
-    let plays = ctx.data().backend_client.get_today(&today_str).await?;
+    let plays = ctx
+        .data()
+        .record_collector_client
+        .get_today(&today_str)
+        .await?;
 
     let tracks = plays.len() as i64;
     let credits = plays
@@ -401,7 +405,11 @@ pub(crate) async fn mai_today_detail(
     let start = format!("{} 04:00", day_key);
     let end = format!("{} 04:00", end_key);
 
-    let plays = ctx.data().backend_client.get_today(&day_key).await?;
+    let plays = ctx
+        .data()
+        .record_collector_client
+        .get_today(&day_key)
+        .await?;
 
     let mut rows: Vec<_> = plays
         .into_iter()
@@ -449,7 +457,7 @@ pub(crate) async fn mai_today_detail(
 pub(crate) async fn mai_rating(ctx: Context<'_>) -> Result<(), Error> {
     ctx.defer().await?;
 
-    let embeds = build_mai_rating_embeds(&ctx.data().backend_client).await?;
+    let embeds = build_mai_rating_embeds(&ctx.data().record_collector_client).await?;
 
     ctx.send(CreateReply {
         embeds,
@@ -461,7 +469,7 @@ pub(crate) async fn mai_rating(ctx: Context<'_>) -> Result<(), Error> {
 }
 
 async fn build_mai_rating_embeds(
-    client: &crate::client::BackendClient,
+    client: &crate::client::RecordCollectorClient,
 ) -> Result<Vec<serenity::builder::CreateEmbed>> {
     let scores = client.get_rated_scores().await?;
 

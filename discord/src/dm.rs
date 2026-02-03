@@ -4,20 +4,20 @@ use poise::serenity_prelude as serenity;
 use serenity::builder::{CreateEmbed, CreateMessage};
 use tracing::{info, warn};
 
-use super::client::{BackendClient, PlayerDataResult};
+use super::client::{PlayerDataResult, RecordCollectorClient};
 use super::embeds::{embed_backend_unavailable, embed_base, embed_maintenance};
 
 pub(crate) async fn send_startup_dm(
     http: &serenity::Http,
     user_id: serenity::UserId,
-    backend_client: &BackendClient,
+    record_collector_client: &RecordCollectorClient,
 ) -> Result<()> {
     let dm_channel = user_id.create_dm_channel(http).await.map_err(|e| {
         warn!("Failed to create DM channel: {e}");
         e
     })?;
 
-    let embed = match backend_client.get_player().await {
+    let embed = match record_collector_client.get_player().await {
         PlayerDataResult::Ok(player_data) => {
             info!("Fetched player data successfully");
             embed_startup(&player_data)
