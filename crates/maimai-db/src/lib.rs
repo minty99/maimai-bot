@@ -1,4 +1,4 @@
-use std::path::Path;
+use std::str::FromStr;
 
 use eyre::WrapErr;
 use sqlx::sqlite::{SqliteConnectOptions, SqliteJournalMode, SqlitePoolOptions, SqliteSynchronous};
@@ -8,9 +8,9 @@ use models::{ChartType, DifficultyCategory, ParsedPlayRecord, ParsedScoreEntry, 
 
 pub type SqlitePool = Pool<Sqlite>;
 
-pub async fn connect(db_path: &Path) -> eyre::Result<SqlitePool> {
-    let options = SqliteConnectOptions::new()
-        .filename(db_path)
+pub async fn connect(database_url: &str) -> eyre::Result<SqlitePool> {
+    let options = SqliteConnectOptions::from_str(database_url)
+        .wrap_err("parse database url")?
         .create_if_missing(true)
         .foreign_keys(true)
         .journal_mode(SqliteJournalMode::Wal)

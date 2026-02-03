@@ -1554,6 +1554,7 @@ dependencies = [
  "maimai-parsers",
  "maimai-songdb",
  "models",
+ "rand 0.8.5",
  "reqwest",
  "serde",
  "serde_json",

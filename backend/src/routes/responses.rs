@@ -17,6 +17,7 @@ pub struct ScoreResponse {
     pub source_idx: Option<String>,
     pub internal_level: Option<f32>,
     pub image_name: Option<String>,
+    pub version: Option<String>,
     pub rating_points: Option<u32>,
     pub bucket: Option<String>,
 }
@@ -28,6 +29,7 @@ impl ScoreResponse {
         let internal_level =
             song_data.internal_level(&entry.title, &entry.chart_type, &entry.diff_category);
         let image_name = song_data.image_name(&entry.title).map(|s| s.to_string());
+        let version = song_data.version(&entry.title).map(|s| s.to_string());
 
         let effective_internal =
             internal_level.or_else(|| crate::rating::fallback_internal_level(&entry.level));
@@ -65,6 +67,7 @@ impl ScoreResponse {
             source_idx: entry.source_idx,
             internal_level: effective_internal,
             image_name,
+            version,
             rating_points,
             bucket,
         }

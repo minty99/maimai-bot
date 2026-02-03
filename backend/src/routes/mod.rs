@@ -16,6 +16,7 @@ pub fn create_routes(state: AppState) -> Router {
     Router::new()
         .route("/health", get(health::health))
         .route("/health/ready", get(health::ready))
+        .route("/api/songs/random", get(scores::random_song_by_level))
         .route("/api/scores/search", get(scores::search_scores))
         .route("/api/scores/rated", get(scores::get_all_rated_scores))
         .route(

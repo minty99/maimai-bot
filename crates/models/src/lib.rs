@@ -481,6 +481,11 @@ impl SongDataIndex {
         self.song_image_name.get(&title_norm).map(|s| s.as_str())
     }
 
+    pub fn version(&self, title: &str) -> Option<&str> {
+        let title_norm = normalize_title(title);
+        self.song_version.get(&title_norm).map(|s| s.as_str())
+    }
+
     pub fn from_root(root: SongDataRoot) -> Self {
         let mut map = HashMap::new();
         let mut song_version = HashMap::new();
