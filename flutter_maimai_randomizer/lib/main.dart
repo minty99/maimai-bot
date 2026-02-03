@@ -8,13 +8,12 @@ import 'features/settings/presentation/screens/settings_screen.dart';
 import 'features/song_selection/bloc/hardware_input/hardware_input_cubit.dart';
 import 'features/song_selection/bloc/level_range/level_range_cubit.dart';
 import 'features/song_selection/bloc/song/song_cubit.dart';
-import 'features/song_selection/data/repositories/song_repository.dart';
 import 'features/song_selection/presentation/screens/song_selection_screen.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // Create and initialize settings cubit first (for persisted backend URL)
+  // Create and initialize settings cubit first (for persisted server URLs)
   final settingsCubit = SettingsCubit();
   await settingsCubit.initialize();
 
@@ -31,7 +30,7 @@ class MaimaiRandomizerApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MultiBlocProvider(
       providers: [
-        // Settings Cubit (pre-initialized with persisted URL)
+        // Settings Cubit (pre-initialized with persisted server URLs)
         BlocProvider<SettingsCubit>.value(value: settingsCubit),
 
         // Level Range Cubit
@@ -40,17 +39,20 @@ class MaimaiRandomizerApp extends StatelessWidget {
         // Hardware Input Cubit
         BlocProvider<HardwareInputCubit>(create: (_) => HardwareInputCubit()),
       ],
-      // Recreate SongCubit whenever backend URL changes
+      // Recreate SongCubit whenever server URLs change
       child: BlocBuilder<SettingsCubit, SettingsState>(
         buildWhen: (previous, current) {
-          return previous.backendUrl != current.backendUrl;
+          return previous.songInfoServerUrl != current.songInfoServerUrl ||
+              previous.recordCollectorServerUrl !=
+                  current.recordCollectorServerUrl;
         },
         builder: (context, state) {
           return BlocProvider<SongCubit>(
-            key: ValueKey(state.backendUrl),
-            create: (_) => SongCubit(
-              repository: SongRepositoryImpl(baseUrl: state.backendUrl),
+            key: ValueKey(
+              '${state.songInfoServerUrl}_${state.recordCollectorServerUrl}',
             ),
+            create: (_) =>
+                SongCubit(songInfoServerUrl: state.songInfoServerUrl),
             child: MaterialApp(
               title: 'maimai Randomizer',
               debugShowCheckedModeBanner: false,

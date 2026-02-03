@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../../settings/presentation/screens/settings_screen.dart';
+import '../../../settings/bloc/settings/settings_cubit.dart';
 import '../../bloc/hardware_input/hardware_input_cubit.dart';
 import '../../bloc/hardware_input/hardware_input_state.dart';
 import '../../bloc/level_range/level_range_cubit.dart';
@@ -260,10 +261,7 @@ class _SongSelectionScreenState extends State<SongSelectionScreen>
 // ═══════════════════════════════════════════════════════════════════════════════
 
 class _HorizontalRangeDisplay extends StatelessWidget {
-  const _HorizontalRangeDisplay({
-    required this.start,
-    required this.end,
-  });
+  const _HorizontalRangeDisplay({required this.start, required this.end});
 
   final double start;
   final double end;
@@ -592,6 +590,10 @@ class _LoadedState extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final diffColor = _getDifficultyColor();
+    final settingsState = context.watch<SettingsCubit>().state;
+    final showPersonalData = settingsState.recordCollectorServerUrl
+        .trim()
+        .isNotEmpty;
 
     return LayoutBuilder(
       builder: (context, constraints) {
@@ -601,18 +603,19 @@ class _LoadedState extends StatelessWidget {
         const estimatedInfoHeight = 310.0;
         final availableHeight = constraints.maxHeight - estimatedInfoHeight;
         final availableWidth = constraints.maxWidth - 32; // Card padding
-        final jacketSize = (availableHeight > 0
-                ? availableHeight.clamp(100.0, 200.0)
-                : 150.0)
-            .clamp(100.0, availableWidth);
+        final jacketSize =
+            (availableHeight > 0 ? availableHeight.clamp(100.0, 200.0) : 150.0)
+                .clamp(100.0, availableWidth);
 
         return SingleChildScrollView(
           child: Card(
             elevation: 4,
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(16),
-              side:
-                  BorderSide(color: diffColor.withValues(alpha: 0.5), width: 2),
+              side: BorderSide(
+                color: diffColor.withValues(alpha: 0.5),
+                width: 2,
+              ),
             ),
             child: Padding(
               padding: const EdgeInsets.all(12),
@@ -726,7 +729,7 @@ class _LoadedState extends StatelessWidget {
                   const SizedBox(height: 8),
 
                   // Achievement + Rank + Badges (compact row)
-                  if (song.achievementX10000 != null) ...[
+                  if (showPersonalData && song.achievementX10000 != null) ...[
                     Row(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
@@ -753,17 +756,21 @@ class _LoadedState extends StatelessWidget {
                   ],
 
                   // FC/Sync Badges
-                  if (song.fc != null || song.sync != null)
+                  if (showPersonalData &&
+                      (song.fc != null || song.sync != null))
                     Wrap(
                       spacing: 8,
                       children: [
                         if (song.fc != null)
                           _Badge(
-                              label: song.fc!, color: const Color(0xFFFFD700)),
+                            label: song.fc!,
+                            color: const Color(0xFFFFD700),
+                          ),
                         if (song.sync != null)
                           _Badge(
-                              label: song.sync!,
-                              color: const Color(0xFF00BFFF)),
+                            label: song.sync!,
+                            color: const Color(0xFF00BFFF),
+                          ),
                       ],
                     ),
                 ],

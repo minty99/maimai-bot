@@ -3,11 +3,14 @@ class AppConstants {
   AppConstants._();
 
   // ─────────────────────────────────────────────────────────────────────────
-  // Backend Configuration
+  // Server Configuration
   // ─────────────────────────────────────────────────────────────────────────
 
-  /// Default backend URL for API calls.
-  static const String defaultBackendUrl = 'http://localhost:3000';
+  /// Default Song Info Server URL (song data, covers).
+  static const String defaultSongInfoServerUrl = 'http://localhost:3001';
+
+  /// Default Record Collector Server URL (personal scores/playlogs).
+  static const String defaultRecordCollectorServerUrl = 'http://localhost:3000';
 
   // ─────────────────────────────────────────────────────────────────────────
   // Level Range Configuration

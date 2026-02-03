@@ -9,7 +9,8 @@ import '../../bloc/settings/settings_state.dart';
 /// Settings screen for app configuration.
 ///
 /// Features:
-/// - Backend URL configuration with TextField
+/// - Song Info Server URL configuration with TextField
+/// - Record Collector Server URL configuration with TextField
 /// - Save button with SnackBar feedback
 /// - Info card with setup instructions
 /// - Large touch targets for glove-friendly interaction
@@ -23,7 +24,8 @@ class SettingsScreen extends StatefulWidget {
 }
 
 class _SettingsScreenState extends State<SettingsScreen> {
-  late TextEditingController _urlController;
+  late TextEditingController _songInfoUrlController;
+  late TextEditingController _recordCollectorUrlController;
   bool _hasChanges = false;
   bool _isCheckingHealth = false;
   bool? _healthOk;
@@ -32,40 +34,54 @@ class _SettingsScreenState extends State<SettingsScreen> {
   @override
   void initState() {
     super.initState();
-    final currentUrl = context.read<SettingsCubit>().state.backendUrl;
-    _urlController = TextEditingController(text: currentUrl);
-    _urlController.addListener(_onTextChanged);
+    final state = context.read<SettingsCubit>().state;
+    _songInfoUrlController = TextEditingController(
+      text: state.songInfoServerUrl,
+    );
+    _recordCollectorUrlController = TextEditingController(
+      text: state.recordCollectorServerUrl,
+    );
+    _songInfoUrlController.addListener(_onTextChanged);
+    _recordCollectorUrlController.addListener(_onTextChanged);
   }
 
   @override
   void dispose() {
-    _urlController.removeListener(_onTextChanged);
-    _urlController.dispose();
+    _songInfoUrlController.removeListener(_onTextChanged);
+    _recordCollectorUrlController.removeListener(_onTextChanged);
+    _songInfoUrlController.dispose();
+    _recordCollectorUrlController.dispose();
     super.dispose();
   }
 
   void _onTextChanged() {
-    final currentUrl = context.read<SettingsCubit>().state.backendUrl;
+    final state = context.read<SettingsCubit>().state;
     setState(() {
-      _hasChanges = _urlController.text != currentUrl;
+      _hasChanges =
+          _songInfoUrlController.text != state.songInfoServerUrl ||
+          _recordCollectorUrlController.text != state.recordCollectorServerUrl;
       _healthMessage = null;
       _healthOk = null;
     });
   }
 
   Future<void> _saveSettings() async {
-    final url = _urlController.text.trim();
-    if (url.isEmpty) {
+    final songInfoUrl = _songInfoUrlController.text.trim();
+    final recordCollectorUrl = _recordCollectorUrlController.text.trim();
+
+    if (songInfoUrl.isEmpty || recordCollectorUrl.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('URL cannot be empty'),
+          content: Text('URLs cannot be empty'),
           backgroundColor: Colors.red,
         ),
       );
       return;
     }
 
-    await context.read<SettingsCubit>().updateBackendUrl(url);
+    final cubit = context.read<SettingsCubit>();
+    await cubit.updateSongInfoServerUrl(songInfoUrl);
+    await cubit.updateRecordCollectorServerUrl(recordCollectorUrl);
 
     if (mounted) {
       setState(() {
@@ -90,7 +106,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   Future<void> _checkHealth() async {
-    final rawUrl = _urlController.text;
+    final rawUrl = _songInfoUrlController.text;
     final baseUrl = _normalizeBaseUrl(rawUrl);
 
     if (baseUrl.isEmpty) {
@@ -186,7 +202,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             padding: const EdgeInsets.all(24.0),
             children: [
               // ─────────────────────────────────────────────────────────────
-              // Backend URL Section
+              // Server URLs Section
               // ─────────────────────────────────────────────────────────────
               Text(
                 'CONNECTION',
@@ -197,61 +213,23 @@ class _SettingsScreenState extends State<SettingsScreen> {
               ),
               const SizedBox(height: 16),
 
-              // Backend URL TextField
-              TextField(
-                controller: _urlController,
-                style: theme.textTheme.bodyLarge?.copyWith(
-                  color: colorScheme.onSurface,
-                ),
-                decoration: InputDecoration(
-                  labelText: 'Backend URL',
-                  labelStyle: TextStyle(
-                    color: colorScheme.onSurfaceVariant,
-                    fontSize: 18,
-                  ),
-                  hintText: AppConstants.defaultBackendUrl,
-                  hintStyle: TextStyle(
-                    color: colorScheme.onSurfaceVariant.withValues(alpha: 0.5),
-                  ),
-                  filled: true,
-                  fillColor: colorScheme.surfaceContainerHighest,
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(16),
-                    borderSide: BorderSide(
-                      color: colorScheme.outline,
-                      width: 2,
-                    ),
-                  ),
-                  enabledBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(16),
-                    borderSide: BorderSide(
-                      color: colorScheme.outline,
-                      width: 2,
-                    ),
-                  ),
-                  focusedBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(16),
-                    borderSide: BorderSide(
-                      color: colorScheme.primary,
-                      width: 2,
-                    ),
-                  ),
-                  contentPadding: const EdgeInsets.symmetric(
-                    horizontal: 20,
-                    vertical: 20,
-                  ),
-                  suffixIcon: _urlController.text.isNotEmpty
-                      ? IconButton(
-                          icon: const Icon(Icons.clear),
-                          iconSize: 24,
-                          onPressed: () {
-                            _urlController.clear();
-                          },
-                        )
-                      : null,
-                ),
-                keyboardType: TextInputType.url,
-                autocorrect: false,
+              // Song Info Server URL TextField
+              _buildUrlTextField(
+                controller: _songInfoUrlController,
+                labelText: 'Song Info Server URL',
+                hintText: AppConstants.defaultSongInfoServerUrl,
+                theme: theme,
+                colorScheme: colorScheme,
+              ),
+              const SizedBox(height: 16),
+
+              // Record Collector Server URL TextField
+              _buildUrlTextField(
+                controller: _recordCollectorUrlController,
+                labelText: 'Record Collector Server URL',
+                hintText: AppConstants.defaultRecordCollectorServerUrl,
+                theme: theme,
+                colorScheme: colorScheme,
               ),
               const SizedBox(height: 24),
 
@@ -391,7 +369,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       const SizedBox(height: 16),
                       _InfoItem(
                         icon: Icons.computer_rounded,
-                        text: 'Start the maimai-bot backend server',
+                        text: 'Start both maimai-bot servers',
                         theme: theme,
                         colorScheme: colorScheme,
                       ),
@@ -421,14 +399,30 @@ class _SettingsScreenState extends State<SettingsScreen> {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
-                              'Default:',
+                              'Song Info Server (default):',
                               style: theme.textTheme.bodyMedium?.copyWith(
                                 color: colorScheme.onSurfaceVariant,
                               ),
                             ),
                             const SizedBox(height: 4),
                             Text(
-                              AppConstants.defaultBackendUrl,
+                              AppConstants.defaultSongInfoServerUrl,
+                              style: theme.textTheme.bodyLarge?.copyWith(
+                                color: colorScheme.primary,
+                                fontFamily: 'monospace',
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                            const SizedBox(height: 12),
+                            Text(
+                              'Record Collector Server (default):',
+                              style: theme.textTheme.bodyMedium?.copyWith(
+                                color: colorScheme.onSurfaceVariant,
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              AppConstants.defaultRecordCollectorServerUrl,
                               style: theme.textTheme.bodyLarge?.copyWith(
                                 color: colorScheme.primary,
                                 fontFamily: 'monospace',
@@ -444,7 +438,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                             ),
                             const SizedBox(height: 4),
                             Text(
-                              'http://192.168.1.100:3000',
+                              'http://192.168.1.100:3001',
                               style: theme.textTheme.bodyLarge?.copyWith(
                                 color: colorScheme.secondary,
                                 fontFamily: 'monospace',
@@ -469,11 +463,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 child: OutlinedButton(
                   onPressed: () async {
                     final messenger = ScaffoldMessenger.of(context);
-                    await context.read<SettingsCubit>().resetBackendUrl();
+                    await context.read<SettingsCubit>().resetServerUrls();
                     if (mounted) {
-                      _urlController.text = AppConstants.defaultBackendUrl;
+                      _songInfoUrlController.text =
+                          AppConstants.defaultSongInfoServerUrl;
+                      _recordCollectorUrlController.text =
+                          AppConstants.defaultRecordCollectorServerUrl;
                       messenger.showSnackBar(
-                        const SnackBar(content: Text('Reset to default URL')),
+                        const SnackBar(
+                          content: Text('Reset to default server URLs'),
+                        ),
                       );
                     }
                   },
@@ -510,6 +509,59 @@ class _SettingsScreenState extends State<SettingsScreen> {
           );
         },
       ),
+    );
+  }
+
+  Widget _buildUrlTextField({
+    required TextEditingController controller,
+    required String labelText,
+    required String hintText,
+    required ThemeData theme,
+    required ColorScheme colorScheme,
+  }) {
+    return TextField(
+      controller: controller,
+      style: theme.textTheme.bodyLarge?.copyWith(color: colorScheme.onSurface),
+      decoration: InputDecoration(
+        labelText: labelText,
+        labelStyle: TextStyle(
+          color: colorScheme.onSurfaceVariant,
+          fontSize: 18,
+        ),
+        hintText: hintText,
+        hintStyle: TextStyle(
+          color: colorScheme.onSurfaceVariant.withValues(alpha: 0.5),
+        ),
+        filled: true,
+        fillColor: colorScheme.surfaceContainerHighest,
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(16),
+          borderSide: BorderSide(color: colorScheme.outline, width: 2),
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(16),
+          borderSide: BorderSide(color: colorScheme.outline, width: 2),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(16),
+          borderSide: BorderSide(color: colorScheme.primary, width: 2),
+        ),
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: 20,
+          vertical: 20,
+        ),
+        suffixIcon: controller.text.isNotEmpty
+            ? IconButton(
+                icon: const Icon(Icons.clear),
+                iconSize: 24,
+                onPressed: () {
+                  controller.clear();
+                },
+              )
+            : null,
+      ),
+      keyboardType: TextInputType.url,
+      autocorrect: false,
     );
   }
 }

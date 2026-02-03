@@ -6,12 +6,20 @@ import 'settings_state.dart';
 
 /// Cubit for managing application settings.
 ///
-/// Handles backend URL configuration with SharedPreferences persistence.
+/// Handles server URL configuration with SharedPreferences persistence.
 class SettingsCubit extends Cubit<SettingsState> {
   SettingsCubit()
-    : super(const SettingsState(backendUrl: AppConstants.defaultBackendUrl));
+    : super(
+        const SettingsState(
+          songInfoServerUrl: AppConstants.defaultSongInfoServerUrl,
+          recordCollectorServerUrl:
+              AppConstants.defaultRecordCollectorServerUrl,
+        ),
+      );
 
-  static const String _backendUrlKey = 'backend_url';
+  static const String _songInfoServerUrlKey = 'song_info_server_url';
+  static const String _recordCollectorServerUrlKey =
+      'record_collector_server_url';
 
   /// Initialize settings from SharedPreferences.
   ///
@@ -19,41 +27,79 @@ class SettingsCubit extends Cubit<SettingsState> {
   Future<void> initialize() async {
     try {
       final prefs = await SharedPreferences.getInstance();
-      final savedUrl = prefs.getString(_backendUrlKey);
+      final savedSongInfoUrl = prefs.getString(_songInfoServerUrlKey);
+      final savedRecordCollectorUrl = prefs.getString(
+        _recordCollectorServerUrlKey,
+      );
 
-      if (savedUrl != null && savedUrl.isNotEmpty) {
-        emit(SettingsState(backendUrl: savedUrl));
-      }
+      emit(
+        SettingsState(
+          songInfoServerUrl:
+              (savedSongInfoUrl != null && savedSongInfoUrl.isNotEmpty)
+              ? savedSongInfoUrl
+              : AppConstants.defaultSongInfoServerUrl,
+          recordCollectorServerUrl:
+              (savedRecordCollectorUrl != null &&
+                  savedRecordCollectorUrl.isNotEmpty)
+              ? savedRecordCollectorUrl
+              : AppConstants.defaultRecordCollectorServerUrl,
+        ),
+      );
     } catch (e) {
       // If loading fails, keep default state
       // Could emit an error state here if needed
     }
   }
 
-  /// Update the backend URL and persist it.
+  /// Update the Song Info Server URL and persist it.
   ///
-  /// [url] - The new backend URL.
-  Future<void> updateBackendUrl(String url) async {
+  /// [url] - The new Song Info Server URL.
+  Future<void> updateSongInfoServerUrl(String url) async {
     if (url.isEmpty) {
       return;
     }
 
     try {
       final prefs = await SharedPreferences.getInstance();
-      await prefs.setString(_backendUrlKey, url);
-      emit(state.copyWith(backendUrl: url));
+      await prefs.setString(_songInfoServerUrlKey, url);
+      emit(state.copyWith(songInfoServerUrl: url));
     } catch (e) {
       // Handle persistence error
       // Could emit an error state here if needed
     }
   }
 
-  /// Reset backend URL to default.
-  Future<void> resetBackendUrl() async {
+  /// Update the Record Collector Server URL and persist it.
+  ///
+  /// [url] - The new Record Collector Server URL.
+  Future<void> updateRecordCollectorServerUrl(String url) async {
+    if (url.isEmpty) {
+      return;
+    }
+
     try {
       final prefs = await SharedPreferences.getInstance();
-      await prefs.remove(_backendUrlKey);
-      emit(const SettingsState(backendUrl: AppConstants.defaultBackendUrl));
+      await prefs.setString(_recordCollectorServerUrlKey, url);
+      emit(state.copyWith(recordCollectorServerUrl: url));
+    } catch (e) {
+      // Handle persistence error
+      // Could emit an error state here if needed
+    }
+  }
+
+  /// Reset both server URLs to defaults.
+  Future<void> resetServerUrls() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.remove(_songInfoServerUrlKey);
+      await prefs.remove(_recordCollectorServerUrlKey);
+      emit(
+        const SettingsState(
+          songInfoServerUrl: AppConstants.defaultSongInfoServerUrl,
+          recordCollectorServerUrl:
+              AppConstants.defaultRecordCollectorServerUrl,
+        ),
+      );
     } catch (e) {
       // Handle persistence error
     }
