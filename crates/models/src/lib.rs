@@ -361,6 +361,49 @@ pub struct PlayRecord {
     pub first_play: Option<i32>,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ScoreResponse {
+    pub title: String,
+    pub chart_type: String,
+    pub diff_category: String,
+    pub level: String,
+    pub achievement_x10000: Option<i64>,
+    pub rank: Option<String>,
+    pub fc: Option<String>,
+    pub sync: Option<String>,
+    pub dx_score: Option<i32>,
+    pub dx_score_max: Option<i32>,
+    pub source_idx: Option<String>,
+    pub internal_level: Option<f32>,
+    pub image_name: Option<String>,
+    pub version: Option<String>,
+    pub rating_points: Option<u32>,
+    pub bucket: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PlayRecordResponse {
+    pub played_at_unixtime: i64,
+    pub played_at: Option<String>,
+    pub track: Option<i32>,
+    pub title: String,
+    pub chart_type: String,
+    pub diff_category: Option<String>,
+    pub level: Option<String>,
+    pub achievement_x10000: Option<i64>,
+    pub score_rank: Option<String>,
+    pub fc: Option<String>,
+    pub sync: Option<String>,
+    pub dx_score: Option<i32>,
+    pub dx_score_max: Option<i32>,
+    pub credit_play_count: Option<i32>,
+    pub achievement_new_record: Option<i32>,
+    pub first_play: Option<i32>,
+    pub internal_level: Option<f32>,
+    pub rating_points: Option<u32>,
+    pub bucket: Option<String>,
+}
+
 // Song data index for rating calculations
 use std::collections::HashMap;
 use std::fs::File;
