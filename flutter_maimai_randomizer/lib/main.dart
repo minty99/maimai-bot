@@ -3,6 +3,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 
 import 'core/theme/app_theme.dart';
 import 'features/settings/bloc/settings/settings_cubit.dart';
+import 'features/settings/bloc/settings/settings_state.dart';
 import 'features/settings/presentation/screens/settings_screen.dart';
 import 'features/song_selection/bloc/hardware_input/hardware_input_cubit.dart';
 import 'features/song_selection/bloc/level_range/level_range_cubit.dart';
@@ -38,44 +39,37 @@ class MaimaiRandomizerApp extends StatelessWidget {
 
         // Hardware Input Cubit
         BlocProvider<HardwareInputCubit>(create: (_) => HardwareInputCubit()),
-
-        // Song Cubit (depends on SettingsCubit for backend URL)
-        BlocProvider<SongCubit>(
-          create: (context) {
-            final backendUrl = context.read<SettingsCubit>().state.backendUrl;
-            return SongCubit(
-              repository: SongRepositoryImpl(baseUrl: backendUrl),
-            );
-          },
-        ),
       ],
-      // Listen to settings changes to recreate SongCubit with new URL
-      child: BlocListener<SettingsCubit, dynamic>(
-        listenWhen: (previous, current) {
-          // Only trigger when backend URL changes
+      // Recreate SongCubit whenever backend URL changes
+      child: BlocBuilder<SettingsCubit, SettingsState>(
+        buildWhen: (previous, current) {
           return previous.backendUrl != current.backendUrl;
         },
-        listener: (context, state) {
-          // Note: In production, you might want to use a more sophisticated
-          // approach like a repository provider pattern. For now, the SongCubit
-          // will use the URL it was created with until app restart.
+        builder: (context, state) {
+          return BlocProvider<SongCubit>(
+            key: ValueKey(state.backendUrl),
+            create: (_) => SongCubit(
+              repository: SongRepositoryImpl(baseUrl: state.backendUrl),
+            ),
+            child: MaterialApp(
+              title: 'maimai Randomizer',
+              debugShowCheckedModeBanner: false,
+
+              // Material 3 dark theme optimized for arcade use
+              theme: AppTheme.darkTheme,
+              darkTheme: AppTheme.darkTheme,
+              themeMode: ThemeMode.dark,
+
+              // Routes
+              initialRoute: SongSelectionScreen.routeName,
+              routes: {
+                SongSelectionScreen.routeName: (_) =>
+                    const SongSelectionScreen(),
+                SettingsScreen.routeName: (_) => const SettingsScreen(),
+              },
+            ),
+          );
         },
-        child: MaterialApp(
-          title: 'maimai Randomizer',
-          debugShowCheckedModeBanner: false,
-
-          // Material 3 dark theme optimized for arcade use
-          theme: AppTheme.darkTheme,
-          darkTheme: AppTheme.darkTheme,
-          themeMode: ThemeMode.dark,
-
-          // Routes
-          initialRoute: SongSelectionScreen.routeName,
-          routes: {
-            SongSelectionScreen.routeName: (_) => const SongSelectionScreen(),
-            SettingsScreen.routeName: (_) => const SettingsScreen(),
-          },
-        ),
       ),
     );
   }

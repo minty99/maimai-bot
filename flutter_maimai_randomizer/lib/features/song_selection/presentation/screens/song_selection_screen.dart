@@ -4,7 +4,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../../settings/presentation/screens/settings_screen.dart';
 import '../../bloc/hardware_input/hardware_input_cubit.dart';
-import '../../bloc/hardware_input/hardware_input_event.dart';
+import '../../bloc/hardware_input/hardware_input_state.dart';
 import '../../bloc/level_range/level_range_cubit.dart';
 import '../../bloc/level_range/level_range_state.dart';
 import '../../bloc/song/song_cubit.dart';
@@ -28,7 +28,12 @@ class SongSelectionScreen extends StatefulWidget {
   State<SongSelectionScreen> createState() => _SongSelectionScreenState();
 }
 
-class _SongSelectionScreenState extends State<SongSelectionScreen> {
+class _SongSelectionScreenState extends State<SongSelectionScreen>
+    with SingleTickerProviderStateMixin {
+  late AnimationController _rangeAnimController;
+  late Animation<double> _rangeScaleAnimation;
+  LevelRangeState? _previousRangeState;
+
   @override
   void initState() {
     super.initState();
@@ -36,23 +41,42 @@ class _SongSelectionScreenState extends State<SongSelectionScreen> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       context.read<HardwareInputCubit>().initialize();
     });
+
+    // Animation for range change feedback
+    _rangeAnimController = AnimationController(
+      duration: const Duration(milliseconds: 150),
+      vsync: this,
+    );
+    _rangeScaleAnimation = Tween<double>(begin: 1.0, end: 1.08).animate(
+      CurvedAnimation(parent: _rangeAnimController, curve: Curves.easeOut),
+    );
   }
 
-  void _onHardwareInput(BuildContext context, HardwareInputEvent event) {
+  @override
+  void dispose() {
+    _rangeAnimController.dispose();
+    super.dispose();
+  }
+
+  void _onHardwareInput(BuildContext context, HardwareInputState state) {
     final levelRangeCubit = context.read<LevelRangeCubit>();
     final songCubit = context.read<SongCubit>();
     final rangeState = levelRangeCubit.state;
 
-    if (event is IncrementRange) {
-      levelRangeCubit.incrementStart();
-    } else if (event is DecrementRange) {
-      levelRangeCubit.decrementStart();
-    } else if (event is TriggerRandom) {
+    if (state is IncrementRangeState) {
+      levelRangeCubit.incrementLevel();
+    } else if (state is DecrementRangeState) {
+      levelRangeCubit.decrementLevel();
+    } else if (state is TriggerRandomState) {
       songCubit.fetchRandomSong(
         minLevel: rangeState.start,
         maxLevel: rangeState.end,
       );
     }
+  }
+
+  void _triggerRangeAnimation() {
+    _rangeAnimController.forward().then((_) => _rangeAnimController.reverse());
   }
 
   @override
@@ -62,14 +86,25 @@ class _SongSelectionScreenState extends State<SongSelectionScreen> {
 
     return MultiBlocListener(
       listeners: [
-        BlocListener<HardwareInputCubit, dynamic>(
+        BlocListener<HardwareInputCubit, HardwareInputState>(
           listener: (context, state) {
-            // Handle hardware input events
-            if (state is IncrementRange ||
-                state is DecrementRange ||
-                state is TriggerRandom) {
-              _onHardwareInput(context, state as HardwareInputEvent);
+            // Handle hardware input states
+            if (state is IncrementRangeState ||
+                state is DecrementRangeState ||
+                state is TriggerRandomState) {
+              _onHardwareInput(context, state);
             }
+          },
+        ),
+        BlocListener<LevelRangeCubit, LevelRangeState>(
+          listener: (context, state) {
+            // Trigger animation when range changes
+            if (_previousRangeState != null &&
+                (state.start != _previousRangeState!.start ||
+                    state.end != _previousRangeState!.end)) {
+              _triggerRangeAnimation();
+            }
+            _previousRangeState = state;
           },
         ),
       ],
@@ -89,56 +124,14 @@ class _SongSelectionScreenState extends State<SongSelectionScreen> {
         body: SafeArea(
           child: Padding(
             padding: const EdgeInsets.symmetric(
-              horizontal: 24.0,
-              vertical: 16.0,
+              horizontal: 16.0,
+              vertical: 8.0,
             ),
             child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 // ─────────────────────────────────────────────────────────────
-                // Range Display Section
-                // ─────────────────────────────────────────────────────────────
-                BlocBuilder<LevelRangeCubit, LevelRangeState>(
-                  builder: (context, state) {
-                    return _RangeDisplaySection(
-                      start: state.start,
-                      end: state.end,
-                      gap: state.gap,
-                    );
-                  },
-                ),
-                const SizedBox(height: 24),
-
-                // ─────────────────────────────────────────────────────────────
-                // Range Controls Section (large buttons)
-                // ─────────────────────────────────────────────────────────────
-                BlocBuilder<LevelRangeCubit, LevelRangeState>(
-                  builder: (context, state) {
-                    return _RangeControlsSection(
-                      onDecrement: () =>
-                          context.read<LevelRangeCubit>().decrementStart(),
-                      onIncrement: () =>
-                          context.read<LevelRangeCubit>().incrementStart(),
-                    );
-                  },
-                ),
-                const SizedBox(height: 16),
-
-                // ─────────────────────────────────────────────────────────────
-                // Gap Adjustment Section
-                // ─────────────────────────────────────────────────────────────
-                BlocBuilder<LevelRangeCubit, LevelRangeState>(
-                  builder: (context, state) {
-                    return _GapAdjustmentSection(
-                      currentGap: state.gap,
-                      onGapChanged: (gap) =>
-                          context.read<LevelRangeCubit>().adjustGap(gap),
-                    );
-                  },
-                ),
-                const SizedBox(height: 24),
-
-                // ─────────────────────────────────────────────────────────────
-                // RANDOM Button
+                // Controls Row: Level/Gap + Random
                 // ─────────────────────────────────────────────────────────────
                 BlocBuilder<LevelRangeCubit, LevelRangeState>(
                   builder: (context, rangeState) {
@@ -146,61 +139,111 @@ class _SongSelectionScreenState extends State<SongSelectionScreen> {
                       builder: (context, songState) {
                         final isLoading = songState is SongLoading;
 
-                        return SizedBox(
-                          width: double.infinity,
-                          height: 100,
-                          child: FilledButton(
-                            onPressed: isLoading
-                                ? null
-                                : () {
-                                    context.read<SongCubit>().fetchRandomSong(
-                                      minLevel: rangeState.start,
-                                      maxLevel: rangeState.end,
-                                    );
-                                  },
-                            style: FilledButton.styleFrom(
-                              backgroundColor: colorScheme.primary,
-                              foregroundColor: colorScheme.onPrimary,
-                              disabledBackgroundColor: colorScheme.primary
-                                  .withValues(alpha: 0.5),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(20),
+                        return Row(
+                          crossAxisAlignment: CrossAxisAlignment.center,
+                          children: [
+                            // Level/Gap Controls
+                            Expanded(
+                              child: Column(
+                                children: [
+                                  _CompactAdjustRow(
+                                    label: 'LV',
+                                    onDecrement: () => context
+                                        .read<LevelRangeCubit>()
+                                        .decrementLevel(),
+                                    onIncrement: () => context
+                                        .read<LevelRangeCubit>()
+                                        .incrementLevel(),
+                                  ),
+                                  const SizedBox(height: 4),
+                                  _CompactAdjustRow(
+                                    label: 'GAP',
+                                    onDecrement: () => context
+                                        .read<LevelRangeCubit>()
+                                        .decrementGap(),
+                                    onIncrement: () => context
+                                        .read<LevelRangeCubit>()
+                                        .incrementGap(),
+                                  ),
+                                ],
                               ),
                             ),
-                            child: isLoading
-                                ? SizedBox(
-                                    width: 32,
-                                    height: 32,
-                                    child: CircularProgressIndicator(
-                                      strokeWidth: 3,
-                                      color: colorScheme.onPrimary,
-                                    ),
-                                  )
-                                : Text(
-                                    'RANDOM',
-                                    style: theme.textTheme.headlineMedium
-                                        ?.copyWith(
-                                          color: colorScheme.onPrimary,
-                                          fontWeight: FontWeight.bold,
-                                          letterSpacing: 2,
-                                        ),
+                            const SizedBox(width: 8),
+                            // Random Button
+                            SizedBox(
+                              width: 72,
+                              height: 72,
+                              child: FilledButton(
+                                onPressed: isLoading
+                                    ? null
+                                    : () {
+                                        context
+                                            .read<SongCubit>()
+                                            .fetchRandomSong(
+                                              minLevel: rangeState.start,
+                                              maxLevel: rangeState.end,
+                                            );
+                                      },
+                                style: FilledButton.styleFrom(
+                                  backgroundColor: colorScheme.primary,
+                                  foregroundColor: colorScheme.onPrimary,
+                                  disabledBackgroundColor: colorScheme.primary
+                                      .withValues(alpha: 0.5),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(14),
                                   ),
-                          ),
+                                  padding: EdgeInsets.zero,
+                                ),
+                                child: isLoading
+                                    ? SizedBox(
+                                        width: 24,
+                                        height: 24,
+                                        child: CircularProgressIndicator(
+                                          strokeWidth: 3,
+                                          color: colorScheme.onPrimary,
+                                        ),
+                                      )
+                                    : Icon(
+                                        Icons.casino_rounded,
+                                        size: 32,
+                                        color: colorScheme.onPrimary,
+                                      ),
+                              ),
+                            ),
+                          ],
                         );
                       },
                     );
                   },
                 ),
-                const SizedBox(height: 24),
+                const SizedBox(height: 8),
 
                 // ─────────────────────────────────────────────────────────────
-                // Song Display Section
+                // Range Display (horizontal, below buttons)
+                // ─────────────────────────────────────────────────────────────
+                BlocBuilder<LevelRangeCubit, LevelRangeState>(
+                  builder: (context, rangeState) {
+                    return ScaleTransition(
+                      scale: _rangeScaleAnimation,
+                      child: _HorizontalRangeDisplay(
+                        start: rangeState.start,
+                        end: rangeState.end,
+                      ),
+                    );
+                  },
+                ),
+                const SizedBox(height: 8),
+
+                // ─────────────────────────────────────────────────────────────
+                // Song Display Section (fills remaining space)
                 // ─────────────────────────────────────────────────────────────
                 Expanded(
-                  child: BlocBuilder<SongCubit, SongState>(
-                    builder: (context, state) {
-                      return _SongDisplaySection(state: state);
-                    },
+                  child: Center(
+                    child: BlocBuilder<SongCubit, SongState>(
+                      builder: (context, state) {
+                        return _SongDisplaySection(state: state);
+                      },
+                    ),
                   ),
                 ),
               ],
@@ -213,19 +256,17 @@ class _SongSelectionScreenState extends State<SongSelectionScreen> {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// Range Display Section
+// Control Widgets
 // ═══════════════════════════════════════════════════════════════════════════════
 
-class _RangeDisplaySection extends StatelessWidget {
-  const _RangeDisplaySection({
+class _HorizontalRangeDisplay extends StatelessWidget {
+  const _HorizontalRangeDisplay({
     required this.start,
     required this.end,
-    required this.gap,
   });
 
   final double start;
   final double end;
-  final double gap;
 
   @override
   Widget build(BuildContext context) {
@@ -233,29 +274,47 @@ class _RangeDisplaySection extends StatelessWidget {
     final colorScheme = theme.colorScheme;
 
     return Container(
-      padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 32),
+      padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 16),
       decoration: BoxDecoration(
-        color: colorScheme.surfaceContainerHighest,
-        borderRadius: BorderRadius.circular(20),
+        color: colorScheme.primaryContainer,
+        borderRadius: BorderRadius.circular(12),
         border: Border.all(
-          color: colorScheme.primary.withValues(alpha: 0.3),
+          color: colorScheme.primary.withValues(alpha: 0.5),
           width: 2,
         ),
       ),
-      child: Column(
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
         children: [
           Text(
-            'LEVEL RANGE',
-            style: theme.textTheme.labelLarge?.copyWith(
-              color: colorScheme.primary,
-              letterSpacing: 2,
+            'RANGE',
+            style: theme.textTheme.labelMedium?.copyWith(
+              color: colorScheme.onPrimaryContainer,
+              letterSpacing: 1.5,
+              fontWeight: FontWeight.w600,
             ),
           ),
-          const SizedBox(height: 8),
+          const SizedBox(width: 16),
           Text(
-            '${start.toStringAsFixed(1)} - ${end.toStringAsFixed(1)}',
-            style: theme.textTheme.displayMedium?.copyWith(
-              color: colorScheme.onSurface,
+            start.toStringAsFixed(1),
+            style: theme.textTheme.headlineSmall?.copyWith(
+              color: colorScheme.onPrimaryContainer,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+            child: Text(
+              '~',
+              style: theme.textTheme.titleLarge?.copyWith(
+                color: colorScheme.onPrimaryContainer.withValues(alpha: 0.7),
+              ),
+            ),
+          ),
+          Text(
+            end.toStringAsFixed(1),
+            style: theme.textTheme.headlineSmall?.copyWith(
+              color: colorScheme.onPrimaryContainer,
               fontWeight: FontWeight.bold,
             ),
           ),
@@ -265,16 +324,14 @@ class _RangeDisplaySection extends StatelessWidget {
   }
 }
 
-// ═══════════════════════════════════════════════════════════════════════════════
-// Range Controls Section
-// ═══════════════════════════════════════════════════════════════════════════════
-
-class _RangeControlsSection extends StatelessWidget {
-  const _RangeControlsSection({
+class _CompactAdjustRow extends StatelessWidget {
+  const _CompactAdjustRow({
+    required this.label,
     required this.onDecrement,
     required this.onIncrement,
   });
 
+  final String label;
   final VoidCallback onDecrement;
   final VoidCallback onIncrement;
 
@@ -284,120 +341,61 @@ class _RangeControlsSection extends StatelessWidget {
     final colorScheme = theme.colorScheme;
 
     return Row(
-      mainAxisAlignment: MainAxisAlignment.center,
       children: [
-        // Decrement button (80x80)
         SizedBox(
-          width: 80,
-          height: 80,
-          child: FilledButton.tonal(
-            onPressed: onDecrement,
-            style: FilledButton.styleFrom(
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(16),
-              ),
-            ),
-            child: Icon(
-              Icons.remove,
-              size: 40,
-              color: colorScheme.onSecondaryContainer,
+          width: 36,
+          child: Text(
+            label,
+            style: theme.textTheme.labelSmall?.copyWith(
+              color: colorScheme.onSurfaceVariant,
+              fontWeight: FontWeight.w600,
             ),
           ),
         ),
-        const SizedBox(width: 32),
-        // Increment button (80x80)
-        SizedBox(
-          width: 80,
-          height: 80,
-          child: FilledButton.tonal(
-            onPressed: onIncrement,
-            style: FilledButton.styleFrom(
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(16),
-              ),
-            ),
-            child: Icon(
-              Icons.add,
-              size: 40,
-              color: colorScheme.onSecondaryContainer,
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-// ═══════════════════════════════════════════════════════════════════════════════
-// Gap Adjustment Section
-// ═══════════════════════════════════════════════════════════════════════════════
-
-class _GapAdjustmentSection extends StatelessWidget {
-  const _GapAdjustmentSection({
-    required this.currentGap,
-    required this.onGapChanged,
-  });
-
-  final double currentGap;
-  final void Function(double) onGapChanged;
-
-  static const List<double> gapOptions = [0.05, 0.1, 0.2, 0.5];
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final colorScheme = theme.colorScheme;
-
-    return Column(
-      children: [
-        Text(
-          'Gap: ${currentGap.toStringAsFixed(2)}',
-          style: theme.textTheme.bodyLarge?.copyWith(
-            color: colorScheme.onSurfaceVariant,
-          ),
-        ),
-        const SizedBox(height: 8),
-        Wrap(
-          spacing: 8,
-          children: gapOptions.map((gap) {
-            final isSelected = (currentGap - gap).abs() < 0.001;
-
-            return SizedBox(
-              width: 64,
-              height: 48,
-              child: isSelected
-                  ? FilledButton(
-                      onPressed: () => onGapChanged(gap),
-                      style: FilledButton.styleFrom(
-                        padding: EdgeInsets.zero,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
-                        ),
+        Expanded(
+          child: Row(
+            children: [
+              Expanded(
+                child: SizedBox(
+                  height: 34,
+                  child: FilledButton.tonal(
+                    onPressed: onDecrement,
+                    style: FilledButton.styleFrom(
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8),
                       ),
-                      child: Text(
-                        gap.toString(),
-                        style: theme.textTheme.labelLarge?.copyWith(
-                          color: colorScheme.onPrimary,
-                        ),
-                      ),
-                    )
-                  : OutlinedButton(
-                      onPressed: () => onGapChanged(gap),
-                      style: OutlinedButton.styleFrom(
-                        padding: EdgeInsets.zero,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                      ),
-                      child: Text(
-                        gap.toString(),
-                        style: theme.textTheme.labelLarge?.copyWith(
-                          color: colorScheme.onSurface,
-                        ),
-                      ),
+                      padding: EdgeInsets.zero,
                     ),
-            );
-          }).toList(),
+                    child: Icon(
+                      Icons.remove,
+                      size: 20,
+                      color: colorScheme.onSecondaryContainer,
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 6),
+              Expanded(
+                child: SizedBox(
+                  height: 34,
+                  child: FilledButton.tonal(
+                    onPressed: onIncrement,
+                    style: FilledButton.styleFrom(
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      padding: EdgeInsets.zero,
+                    ),
+                    child: Icon(
+                      Icons.add,
+                      size: 20,
+                      color: colorScheme.onSecondaryContainer,
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
         ),
       ],
     );
@@ -451,11 +449,11 @@ class _InitialState extends StatelessWidget {
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
           Container(
-            width: 180,
-            height: 180,
+            width: 120,
+            height: 120,
             decoration: BoxDecoration(
               color: colorScheme.surfaceContainerHighest,
-              borderRadius: BorderRadius.circular(24),
+              borderRadius: BorderRadius.circular(16),
               border: Border.all(
                 color: colorScheme.outline.withValues(alpha: 0.3),
                 width: 2,
@@ -463,21 +461,21 @@ class _InitialState extends StatelessWidget {
             ),
             child: Icon(
               Icons.music_note_rounded,
-              size: 80,
+              size: 50,
               color: colorScheme.primary.withValues(alpha: 0.5),
             ),
           ),
-          const SizedBox(height: 24),
+          const SizedBox(height: 16),
           Text(
             'Press RANDOM to start',
-            style: theme.textTheme.titleLarge?.copyWith(
+            style: theme.textTheme.titleMedium?.copyWith(
               color: colorScheme.onSurfaceVariant,
             ),
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: 4),
           Text(
             'or use volume buttons / arrow keys',
-            style: theme.textTheme.bodyMedium?.copyWith(
+            style: theme.textTheme.bodySmall?.copyWith(
               color: colorScheme.onSurfaceVariant.withValues(alpha: 0.7),
             ),
           ),
@@ -595,141 +593,185 @@ class _LoadedState extends StatelessWidget {
   Widget build(BuildContext context) {
     final diffColor = _getDifficultyColor();
 
-    return SingleChildScrollView(
-      child: Card(
-        elevation: 8,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(24),
-          side: BorderSide(color: diffColor.withValues(alpha: 0.5), width: 2),
-        ),
-        child: Padding(
-          padding: const EdgeInsets.all(20),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              // Jacket Image
-              ClipRRect(
-                borderRadius: BorderRadius.circular(16),
-                child: CachedNetworkImage(
-                  imageUrl: song.imageUrl,
-                  width: 280,
-                  height: 280,
-                  fit: BoxFit.cover,
-                  placeholder: (context, url) => Container(
-                    width: 280,
-                    height: 280,
-                    color: colorScheme.surfaceContainerHighest,
-                    child: Center(
-                      child: CircularProgressIndicator(
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        // Calculate jacket size based on available space
+        // Reserve space for title (~60), chart info (~50), version (~40),
+        // internal level (~40), achievement (~80), badges (~40), padding (40)
+        const estimatedInfoHeight = 310.0;
+        final availableHeight = constraints.maxHeight - estimatedInfoHeight;
+        final availableWidth = constraints.maxWidth - 32; // Card padding
+        final jacketSize = (availableHeight > 0
+                ? availableHeight.clamp(100.0, 200.0)
+                : 150.0)
+            .clamp(100.0, availableWidth);
+
+        return SingleChildScrollView(
+          child: Card(
+            elevation: 4,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(16),
+              side:
+                  BorderSide(color: diffColor.withValues(alpha: 0.5), width: 2),
+            ),
+            child: Padding(
+              padding: const EdgeInsets.all(12),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  // Jacket Image (dynamic size)
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(12),
+                    child: song.imageUrl.isNotEmpty
+                        ? CachedNetworkImage(
+                            imageUrl: song.imageUrl,
+                            width: jacketSize,
+                            height: jacketSize,
+                            fit: BoxFit.cover,
+                            placeholder: (context, url) => Container(
+                              width: jacketSize,
+                              height: jacketSize,
+                              color: colorScheme.surfaceContainerHighest,
+                              child: Center(
+                                child: CircularProgressIndicator(
+                                  color: colorScheme.primary,
+                                ),
+                              ),
+                            ),
+                            errorWidget: (context, url, error) => Container(
+                              width: jacketSize,
+                              height: jacketSize,
+                              color: colorScheme.surfaceContainerHighest,
+                              child: Icon(
+                                Icons.broken_image_rounded,
+                                size: jacketSize * 0.3,
+                                color: colorScheme.error,
+                              ),
+                            ),
+                          )
+                        : Container(
+                            width: jacketSize,
+                            height: jacketSize,
+                            color: colorScheme.surfaceContainerHighest,
+                            child: Icon(
+                              Icons.broken_image_rounded,
+                              size: jacketSize * 0.3,
+                              color: colorScheme.error,
+                            ),
+                          ),
+                  ),
+                  const SizedBox(height: 10),
+
+                  // Title
+                  Text(
+                    song.title,
+                    style: theme.textTheme.titleLarge?.copyWith(
+                      fontWeight: FontWeight.bold,
+                      color: colorScheme.onSurface,
+                    ),
+                    textAlign: TextAlign.center,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  const SizedBox(height: 8),
+
+                  // Chart Info (type + difficulty + level) + Internal Level
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 6,
+                        ),
+                        decoration: BoxDecoration(
+                          color: diffColor.withValues(alpha: 0.2),
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(color: diffColor, width: 1.5),
+                        ),
+                        child: Text(
+                          '${song.chartType} ${song.diffCategory} ${song.level}',
+                          style: theme.textTheme.titleSmall?.copyWith(
+                            color: diffColor,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Icon(
+                        Icons.bolt_rounded,
                         color: colorScheme.primary,
+                        size: 18,
+                      ),
+                      Text(
+                        song.internalLevel?.toStringAsFixed(1) ?? '--',
+                        style: theme.textTheme.titleSmall?.copyWith(
+                          color: colorScheme.primary,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ],
+                  ),
+
+                  if (song.version != null) ...[
+                    const SizedBox(height: 6),
+                    Text(
+                      song.version!,
+                      style: theme.textTheme.labelMedium?.copyWith(
+                        color: colorScheme.primary,
+                        fontWeight: FontWeight.w500,
                       ),
                     ),
-                  ),
-                  errorWidget: (context, url, error) => Container(
-                    width: 280,
-                    height: 280,
-                    color: colorScheme.surfaceContainerHighest,
-                    child: Icon(
-                      Icons.broken_image_rounded,
-                      size: 80,
-                      color: colorScheme.error,
+                  ],
+                  const SizedBox(height: 8),
+
+                  // Achievement + Rank + Badges (compact row)
+                  if (song.achievementX10000 != null) ...[
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Text(
+                          _formatAchievement(),
+                          style: theme.textTheme.headlineSmall?.copyWith(
+                            fontWeight: FontWeight.bold,
+                            color: colorScheme.onSurface,
+                          ),
+                        ),
+                        if (song.rank != null) ...[
+                          const SizedBox(width: 8),
+                          Text(
+                            song.rank!,
+                            style: theme.textTheme.titleLarge?.copyWith(
+                              color: _getRankColor(song.rank!),
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ],
+                      ],
                     ),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 16),
+                    const SizedBox(height: 6),
+                  ],
 
-              // Title
-              Text(
-                song.title,
-                style: theme.textTheme.headlineMedium?.copyWith(
-                  fontWeight: FontWeight.bold,
-                  color: colorScheme.onSurface,
-                ),
-                textAlign: TextAlign.center,
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-              ),
-              const SizedBox(height: 12),
-
-              // Chart Info (type + difficulty + level)
-              Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 16,
-                  vertical: 8,
-                ),
-                decoration: BoxDecoration(
-                  color: diffColor.withValues(alpha: 0.2),
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: diffColor, width: 1.5),
-                ),
-                child: Text(
-                  '${song.chartType}  ${song.diffCategory}  ${song.level}',
-                  style: theme.textTheme.titleLarge?.copyWith(
-                    color: diffColor,
-                    fontWeight: FontWeight.w600,
-                    letterSpacing: 1,
-                  ),
-                ),
-              ),
-              const SizedBox(height: 12),
-
-              // Internal Level
-              Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(
-                    Icons.bolt_rounded,
-                    color: colorScheme.primary,
-                    size: 24,
-                  ),
-                  const SizedBox(width: 4),
-                  Text(
-                    song.internalLevel.toStringAsFixed(1),
-                    style: theme.textTheme.titleLarge?.copyWith(
-                      color: colorScheme.primary,
-                      fontWeight: FontWeight.bold,
+                  // FC/Sync Badges
+                  if (song.fc != null || song.sync != null)
+                    Wrap(
+                      spacing: 8,
+                      children: [
+                        if (song.fc != null)
+                          _Badge(
+                              label: song.fc!, color: const Color(0xFFFFD700)),
+                        if (song.sync != null)
+                          _Badge(
+                              label: song.sync!,
+                              color: const Color(0xFF00BFFF)),
+                      ],
                     ),
-                  ),
                 ],
               ),
-              const SizedBox(height: 16),
-
-              // Achievement + Rank
-              if (song.achievementX10000 != null) ...[
-                Text(
-                  _formatAchievement(),
-                  style: theme.textTheme.displayMedium?.copyWith(
-                    fontWeight: FontWeight.bold,
-                    color: colorScheme.onSurface,
-                  ),
-                ),
-                if (song.rank != null)
-                  Text(
-                    song.rank!,
-                    style: theme.textTheme.headlineMedium?.copyWith(
-                      color: _getRankColor(song.rank!),
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                const SizedBox(height: 12),
-              ],
-
-              // FC/Sync Badges
-              if (song.fc != null || song.sync != null)
-                Wrap(
-                  spacing: 12,
-                  children: [
-                    if (song.fc != null)
-                      _Badge(label: song.fc!, color: const Color(0xFFFFD700)),
-                    if (song.sync != null)
-                      _Badge(label: song.sync!, color: const Color(0xFF00BFFF)),
-                  ],
-                ),
-            ],
+            ),
           ),
-        ),
-      ),
+        );
+      },
     );
   }
 
@@ -753,18 +795,18 @@ class _Badge extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
       decoration: BoxDecoration(
         color: color.withValues(alpha: 0.2),
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: color, width: 2),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: color, width: 1.5),
       ),
       child: Text(
         label,
         style: TextStyle(
           color: color,
           fontWeight: FontWeight.bold,
-          fontSize: 16,
+          fontSize: 13,
         ),
       ),
     );
