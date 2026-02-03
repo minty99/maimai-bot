@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:dio/dio.dart';
 
 import '../../../../core/constants/app_constants.dart';
 import '../../bloc/settings/settings_cubit.dart';
@@ -24,6 +25,9 @@ class SettingsScreen extends StatefulWidget {
 class _SettingsScreenState extends State<SettingsScreen> {
   late TextEditingController _urlController;
   bool _hasChanges = false;
+  bool _isCheckingHealth = false;
+  bool? _healthOk;
+  String? _healthMessage;
 
   @override
   void initState() {
@@ -44,6 +48,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final currentUrl = context.read<SettingsCubit>().state.backendUrl;
     setState(() {
       _hasChanges = _urlController.text != currentUrl;
+      _healthMessage = null;
+      _healthOk = null;
     });
   }
 
@@ -73,6 +79,91 @@ class _SettingsScreenState extends State<SettingsScreen> {
         ),
       );
     }
+  }
+
+  String _normalizeBaseUrl(String rawUrl) {
+    final trimmed = rawUrl.trim();
+    if (trimmed.endsWith('/')) {
+      return trimmed.substring(0, trimmed.length - 1);
+    }
+    return trimmed;
+  }
+
+  Future<void> _checkHealth() async {
+    final rawUrl = _urlController.text;
+    final baseUrl = _normalizeBaseUrl(rawUrl);
+
+    if (baseUrl.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('URL cannot be empty'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+
+    setState(() {
+      _isCheckingHealth = true;
+      _healthOk = null;
+      _healthMessage = null;
+    });
+
+    final dio = Dio(
+      BaseOptions(
+        connectTimeout: const Duration(seconds: 5),
+        receiveTimeout: const Duration(seconds: 5),
+      ),
+    );
+
+    try {
+      final response = await dio.get<Map<String, dynamic>>('$baseUrl/health');
+
+      final statusCode = response.statusCode ?? 0;
+      final status = response.data?['status']?.toString();
+
+      if (statusCode == 200 && status == 'ok') {
+        if (!mounted) return;
+        setState(() {
+          _healthOk = true;
+          _healthMessage = 'Healthy (HTTP 200)';
+        });
+      } else {
+        if (!mounted) return;
+        setState(() {
+          _healthOk = false;
+          _healthMessage = 'Unexpected response (HTTP $statusCode)';
+        });
+      }
+    } on DioException catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _healthOk = false;
+        _healthMessage = 'Connection failed: ${e.message ?? 'unknown error'}';
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _healthOk = false;
+        _healthMessage = 'Unexpected error: $e';
+      });
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isCheckingHealth = false;
+        });
+      }
+    }
+
+    if (!mounted) return;
+    final message = _healthMessage ?? 'Health check completed';
+    final backgroundColor = _healthOk == true
+        ? Theme.of(context).colorScheme.primary
+        : Theme.of(context).colorScheme.error;
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(message), backgroundColor: backgroundColor),
+    );
   }
 
   @override
@@ -195,6 +286,72 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   ),
                 ),
               ),
+              const SizedBox(height: 16),
+
+              // Health Check Button
+              SizedBox(
+                width: double.infinity,
+                height: 52,
+                child: FilledButton(
+                  onPressed: _isCheckingHealth ? null : _checkHealth,
+                  style: FilledButton.styleFrom(
+                    backgroundColor: colorScheme.secondary,
+                    foregroundColor: colorScheme.onSecondary,
+                    disabledBackgroundColor: colorScheme.secondary.withValues(
+                      alpha: 0.3,
+                    ),
+                    disabledForegroundColor: colorScheme.onSecondary.withValues(
+                      alpha: 0.5,
+                    ),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                  ),
+                  child: _isCheckingHealth
+                      ? Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            SizedBox(
+                              width: 20,
+                              height: 20,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                color: colorScheme.onSecondary,
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            Text(
+                              'CHECKING...',
+                              style: theme.textTheme.labelLarge?.copyWith(
+                                color: colorScheme.onSecondary,
+                                letterSpacing: 1,
+                              ),
+                            ),
+                          ],
+                        )
+                      : Text(
+                          'HEALTH CHECK',
+                          style: theme.textTheme.labelLarge?.copyWith(
+                            color: colorScheme.onSecondary,
+                            letterSpacing: 1,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                ),
+              ),
+              if (_healthMessage != null) ...[
+                const SizedBox(height: 12),
+                Text(
+                  _healthMessage!,
+                  textAlign: TextAlign.center,
+                  style: theme.textTheme.bodyMedium?.copyWith(
+                    color: _healthOk == true
+                        ? colorScheme.primary
+                        : colorScheme.error,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ],
               const SizedBox(height: 32),
 
               // ─────────────────────────────────────────────────────────────
