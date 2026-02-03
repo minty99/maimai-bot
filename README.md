@@ -4,19 +4,28 @@
 
 ## 아키텍처
 
-이 프로젝트는 **백엔드(HTTP API)** + **Discord 봇** 구조로 분리되어 있습니다:
+이 프로젝트는 **두 개의 독립적인 서버** + **Discord 봇** 구조로 분리되어 있습니다:
 
-- **Backend** (`backend/`): maimai 크롤링, DB 관리, REST API 제공
+- **Song Info Server** (`song-info-server/`): 공개 곡 정보 제공 (인증 불필요, stateless)
+  - maimai 곡 데이터(제목, 난이도, 내부 레벨 등)를 JSON 파일에서 로드하여 제공합니다.
+  - 재킷 이미지를 정적 파일로 서빙합니다.
+  - 포트: `3001` (기본값)
+  - 의존성: 없음 (독립 실행 가능)
+  
+- **Record Collector Server** (`record-collector-server/`): 개인 기록 수집 및 관리 (인증 필요, stateful)
   - 쿠키를 `data/` 아래에 저장/재사용하고, 만료 시 재로그인해서 갱신합니다.
   - DB는 `sqlx::migrate!()`로 런타임에 마이그레이션을 실행합니다.
   - 시작 시 `playerData`를 크롤링하고, 필요하면 scores(난이도 0..4) + recent를 DB에 초기 적재합니다.
   - 이후 10분마다 `playerData`를 다시 크롤링해서 **total play count 변화가 있을 때만** recent를 크롤링합니다.
+  - 포트: `3000` (기본값)
+  - 의존성: Song Info Server (곡 정보 조회용)
   
-- **Discord Bot** (`discord/`): 백엔드 API를 호출하여 Discord 명령어 처리 및 DM 알림 전송
-  - 백엔드의 `/health/ready` 엔드포인트를 폴링하여 백엔드가 준비될 때까지 대기합니다.
-  - 백엔드에서 새 플레이가 감지되면 DM으로 알림을 보냅니다.
+- **Discord Bot** (`discord/`): 두 서버의 API를 호출하여 Discord 명령어 처리 및 DM 알림 전송
+  - Record Collector Server의 `/health/ready` 엔드포인트를 폴링하여 서버가 준비될 때까지 대기합니다.
+  - Record Collector Server에서 새 플레이가 감지되면 DM으로 알림을 보냅니다.
+  - 의존성: Song Info Server + Record Collector Server
 
-**중요**: 백엔드를 먼저 실행한 후 Discord 봇을 실행해야 합니다.
+**중요**: Song Info Server와 Record Collector Server를 먼저 실행한 후 Discord 봇을 실행해야 합니다.
 
 ## 특징
 
@@ -28,8 +37,9 @@
 ## 요구사항
 
 - Rust (stable)
-- Discord Bot Token / 단일 수신자(User ID)
-- SEGA ID 계정 (maimaidx-eng.com)
+- Discord Bot Token / 단일 수신자(User ID) (Discord 봇 사용 시)
+- SEGA ID 계정 (maimaidx-eng.com) (Record Collector Server 사용 시)
+- maimai 곡 데이터 JSON 파일 (Song Info Server용)
 
 ## 설정
 
@@ -39,16 +49,22 @@
 
 각 서비스별로 `.env` 파일을 생성하세요:
 
-**1. Backend 설정** (`backend/.env`)
+**1. Song Info Server 설정** (`song-info-server/.env`)
 ```bash
-cp backend/.env.example backend/.env
-# 편집: SEGA_ID, SEGA_PASSWORD 등 입력
+cp song-info-server/.env.example song-info-server/.env
+# 편집: SONG_INFO_PORT, SONG_DATA_PATH 등 입력
 ```
 
-**2. Discord Bot 설정** (`discord/.env`)
+**2. Record Collector Server 설정** (`record-collector-server/.env`)
+```bash
+cp record-collector-server/.env.example record-collector-server/.env
+# 편집: SEGA_ID, SEGA_PASSWORD, DATABASE_URL, SONG_INFO_SERVER_URL 등 입력
+```
+
+**3. Discord Bot 설정** (`discord/.env`)
 ```bash
 cp discord/.env.example discord/.env
-# 편집: DISCORD_BOT_TOKEN, DISCORD_USER_ID 등 입력
+# 편집: DISCORD_BOT_TOKEN, DISCORD_USER_ID, SONG_INFO_SERVER_URL, RECORD_COLLECTOR_SERVER_URL 등 입력
 ```
 
 ### Docker Compose (프로덕션)
@@ -67,41 +83,53 @@ cp .env.example .env
 
 ### 기본 런타임 경로
 
-- DB: `data/maimai.sqlite3`
-- 쿠키: `data/cookies.json`
+- Song Info Server:
+  - 곡 데이터: `song-info-server/data/songs.json` (기본값)
+  - 재킷 이미지: `song-info-server/data/covers/`
+- Record Collector Server:
+  - DB: `data/maimai.sqlite3`
+  - 쿠키: `data/cookies.json`
 
 ## 실행
 
 ### Standalone 실행 (로컬 개발)
 
-**반드시 백엔드를 먼저 실행한 후 Discord 봇을 실행하세요.**
+**반드시 두 서버를 먼저 실행한 후 Discord 봇을 실행하세요.**
 
 1. **환경 변수 설정** (처음 한 번만):
    ```bash
-   cp backend/.env.example backend/.env
+   cp song-info-server/.env.example song-info-server/.env
+   cp record-collector-server/.env.example record-collector-server/.env
    cp discord/.env.example discord/.env
    # 각 .env 파일 편집하여 실제 credentials 입력
    ```
 
-2. **백엔드 실행**:
+2. **Song Info Server 실행** (터미널 1):
    ```bash
-   cargo run --bin maimai-backend
+   cargo run --bin maimai-song-info
    ```
-   백엔드는 `http://localhost:3000`에서 실행되며, `/health/ready` 엔드포인트를 제공합니다.
+   Song Info Server는 `http://localhost:3001`에서 실행되며, 곡 정보 및 재킷 이미지를 제공합니다.
 
-3. **Discord 봇 실행** (별도 터미널):
+3. **Record Collector Server 실행** (터미널 2):
+   ```bash
+   cargo run --bin maimai-record-collector
+   ```
+   Record Collector Server는 `http://localhost:3000`에서 실행되며, `/health/ready` 엔드포인트를 제공합니다.
+
+4. **Discord 봇 실행** (터미널 3):
    ```bash
    cargo run --bin maimai-discord
    ```
-   Discord 봇은 백엔드의 `/health/ready`를 폴링하여 백엔드가 준비될 때까지 대기합니다.
+   Discord 봇은 Record Collector Server의 `/health/ready`를 폴링하여 서버가 준비될 때까지 대기합니다.
 
 **참고**: 
-- `dotenvy`가 현재 디렉토리와 상위 디렉토리를 탐색하므로 프로젝트 루트에서 실행해도 `backend/.env`, `discord/.env`를 자동으로 찾습니다.
+- `dotenvy`가 현재 디렉토리와 상위 디렉토리를 탐색하므로 프로젝트 루트에서 실행해도 각 서비스의 `.env`를 자동으로 찾습니다.
 - 각 서비스는 자신의 `.env`만 로드하여 보안을 강화합니다.
+- Song Info Server는 독립적으로 실행 가능하며, Record Collector Server나 Discord 봇 없이도 사용할 수 있습니다.
 
 ### Docker로 실행
 
-Docker Compose를 사용하여 백엔드와 Discord 봇을 함께 실행할 수 있습니다.
+Docker Compose를 사용하여 세 개의 서비스를 함께 실행할 수 있습니다.
 
 #### 환경 변수 설정
 
@@ -112,21 +140,24 @@ cp .env.example .env
 # 편집: SEGA_ID, SEGA_PASSWORD, DISCORD_BOT_TOKEN, DISCORD_USER_ID 등 입력
 ```
 
-**중요**: Docker Compose는 `BACKEND_URL=http://backend:3000`을 사용합니다 (서비스 이름으로 통신).
+**중요**: Docker Compose는 서비스 이름으로 통신합니다:
+- `SONG_INFO_SERVER_URL=http://song-info-server:3001`
+- `RECORD_COLLECTOR_SERVER_URL=http://record-collector-server:3000`
 
 #### Docker 빌드 최적화
 
-이 프로젝트는 **단일 Dockerfile**을 사용하여 두 서비스를 모두 빌드합니다:
+이 프로젝트는 **단일 Dockerfile**을 사용하여 세 서비스를 모두 빌드합니다:
 
 - **빌더 스테이지**: 전체 워크스페이스를 한 번만 컴파일
-- **멀티 타겟**: `target` 옵션으로 각 서비스의 런타임 이미지 생성 (`maimai-backend`, `maimai-discord`)
-- **효율성**: 중복 빌드 없이 두 바이너리를 동시에 생성
+- **멀티 타겟**: `target` 옵션으로 각 서비스의 런타임 이미지 생성 (`maimai-song-info`, `maimai-record-collector`, `maimai-discord`)
+- **효율성**: 중복 빌드 없이 세 바이너리를 동시에 생성
 
 개별 서비스 빌드:
 ```bash
-docker compose build backend   # backend만 빌드
-docker compose build discord   # discord만 빌드
-docker compose build           # 모든 서비스 빌드
+docker compose build song-info-server        # song-info-server만 빌드
+docker compose build record-collector-server # record-collector-server만 빌드
+docker compose build discord                 # discord만 빌드
+docker compose build                         # 모든 서비스 빌드
 ```
 
 #### 실행
@@ -138,7 +169,8 @@ docker compose up -d
 #### 로그 확인
 
 ```bash
-docker compose logs -f backend
+docker compose logs -f song-info-server
+docker compose logs -f record-collector-server
 docker compose logs -f discord
 ```
 
@@ -150,25 +182,29 @@ docker compose down
 
 #### 데이터 영속성
 
-- SQLite 데이터베이스는 `./data/maimai.sqlite3`에 저장됩니다.
-- 쿠키는 `./data/cookies.json`에 저장됩니다.
-- `docker compose down`을 실행해도 `./data/` 디렉토리의 데이터는 유지됩니다.
+- Song Info Server:
+  - 곡 데이터: `./song-info-server/data/songs.json`
+  - 재킷 이미지: `./song-info-server/data/covers/`
+- Record Collector Server:
+  - SQLite 데이터베이스: `./data/maimai.sqlite3`
+  - 쿠키: `./data/cookies.json`
+- `docker compose down`을 실행해도 데이터는 유지됩니다.
 
 ### 개발/디버깅 명령어
 
-백엔드에서 제공하는 CLI 명령어들 (레거시, 참고용):
+Record Collector Server에서 제공하는 CLI 명령어들 (레거시, 참고용):
 
 쿠키 로그인/체크:
-- `cargo run -- auth login`
-- `cargo run -- auth check`
+- `cargo run --bin maimai-record-collector -- auth login`
+- `cargo run --bin maimai-record-collector -- auth check`
 
 HTML/raw fetch (로그인 필요):
-- `cargo run -- fetch url --url https://maimaidx-eng.com/maimai-mobile/playerData/ --out data/out/player_data.html`
+- `cargo run --bin maimai-record-collector -- fetch url --url https://maimaidx-eng.com/maimai-mobile/playerData/ --out data/out/player_data.html`
 
 크롤링/파싱(JSON)만 수행 (DB 미사용):
-- `cargo run -- crawl player-data --out data/out/player_data.json`
-- `cargo run -- crawl recent --out data/out/recent.json`
-- `cargo run -- crawl scores --out data/out/scores.json`
+- `cargo run --bin maimai-record-collector -- crawl player-data --out data/out/player_data.json`
+- `cargo run --bin maimai-record-collector -- crawl recent --out data/out/recent.json`
+- `cargo run --bin maimai-record-collector -- crawl scores --out data/out/scores.json`
 
 ## Discord 명령어
 

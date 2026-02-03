@@ -21,7 +21,8 @@ Flutter app for randomly selecting maimai DX songs by internal level range. Desi
 ## Prerequisites
 
 - Flutter SDK (latest stable)
-- Running maimai-bot backend instance (default: `http://localhost:3000`)
+- Running song-info-server instance (default: `http://localhost:3001`)
+- (Optional) Running record-collector-server instance for personal scores (default: `http://localhost:3000`)
 
 ## Setup
 
@@ -31,11 +32,14 @@ cd flutter_maimai_randomizer
 flutter pub get
 ```
 
-2. Configure backend URL:
+2. Configure backend URLs:
    - Launch the app
    - Tap the settings icon (top right)
-   - Enter your backend URL
+   - Enter your Song Info Server URL (required for basic functionality)
+   - (Optional) Enter your Record Collector Server URL for personal scores
    - Tap Save
+   
+   **Note**: The app works in degraded mode with only Song Info Server configured. Personal achievement data will not be displayed without Record Collector Server.
 
 ## Running
 
@@ -78,7 +82,8 @@ When a song is selected, you'll see:
 
 ### Settings Screen
 
-- Configure backend URL
+- Configure Song Info Server URL (required)
+- Configure Record Collector Server URL (optional)
 - Reset to default settings
 
 ## Hardware Input Reference
@@ -119,7 +124,9 @@ lib/
 
 ## Backend Integration
 
-The app connects to the maimai-bot backend's REST API:
+The app connects to two separate backend servers:
+
+### Song Info Server (Required)
 
 **Endpoint**: `GET /api/songs/random`
 
@@ -127,7 +134,17 @@ The app connects to the maimai-bot backend's REST API:
 - `min_level` (float): Minimum internal level
 - `max_level` (float): Maximum internal level
 
-**Response**: Song data with jacket image URL, chart info, internal level, and player scores
+**Response**: Song data with jacket image URL, chart info, and internal level
+
+**Cover Images**: `GET /api/cover/{image_name}`
+
+Returns jacket image files for display.
+
+### Record Collector Server (Optional)
+
+Used to fetch personal achievement data for selected songs. If not configured, the app will display songs without personal scores.
+
+**Note**: The app works with only Song Info Server configured. Personal achievement, FC status, and Sync status will not be displayed without Record Collector Server.
 
 ## Building for Release
 
@@ -150,9 +167,10 @@ flutter build macos --release
 ## Troubleshooting
 
 ### Backend Connection Issues
-- Ensure backend is running on the configured URL
+- Ensure Song Info Server is running on the configured URL (required)
+- Ensure Record Collector Server is running if you want personal scores (optional)
 - Check network connectivity
-- Verify backend URL in Settings (include `http://` prefix)
+- Verify backend URLs in Settings (include `http://` prefix)
 
 ### Volume Buttons Not Working (Android)
 - Ensure app has necessary permissions
@@ -160,9 +178,14 @@ flutter build macos --release
 - System volume UI should be hidden automatically
 
 ### No Songs Found
-- Ensure you have played songs in the selected level range
+- Check Song Info Server connection (required for song data)
 - Try widening the level range (increase gap)
-- Check backend connection
+- Verify that song data is loaded in Song Info Server
+
+### Personal Scores Not Showing
+- Ensure Record Collector Server is running and configured in Settings
+- Verify you have played songs in the selected level range
+- Check Record Collector Server connection
 
 ## License
 
