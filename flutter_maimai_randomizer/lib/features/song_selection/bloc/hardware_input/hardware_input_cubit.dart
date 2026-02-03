@@ -1,34 +1,41 @@
 import 'dart:async';
+import 'dart:developer' as developer;
 import 'dart:io';
 
 import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:volume_listener/volume_listener.dart';
+import 'package:sensors_plus/sensors_plus.dart';
+import 'package:volume_button_override/volume_button_override.dart';
 
 import 'hardware_input_state.dart';
 
 /// Cubit for handling cross-platform hardware input
-/// - Android: volume buttons (up/down) and simultaneous press for trigger
-/// - iOS/macOS: keyboard arrows (up/down) and space/enter for trigger
+/// - Android/iOS: volume buttons (up/down) and shake gesture for trigger
+/// - macOS: keyboard arrows (up/down) and space/enter for trigger
 class HardwareInputCubit extends Cubit<HardwareInputState> {
   HardwareInputCubit() : super(const HardwareInputInitial());
 
-  // Android volume button state tracking
-  bool _volumeUpPressed = false;
-  bool _volumeDownPressed = false;
-  Timer? _simultaneousPressTimer;
-  final Duration _simultaneousPressWindow = const Duration(milliseconds: 200);
+  // Volume button controller
+  VolumeButtonController? _volumeController;
 
-  // iOS/macOS keyboard listener callback
+  // Shake detection via accelerometer
+  StreamSubscription<AccelerometerEvent>? _accelerometerSubscription;
+  DateTime? _lastShakeTime;
+  final Duration _shakeCooldown = const Duration(milliseconds: 500);
+  final double _shakeThreshold = 2.7; // g-force threshold
+
+  // macOS keyboard listener callback
   late final KeyEventCallback _keyboardListener;
 
   /// Initialize hardware input listeners based on platform
   Future<void> initialize() async {
     try {
-      if (Platform.isAndroid) {
-        _initializeAndroidVolumeListener();
-      } else if (Platform.isIOS || Platform.isMacOS) {
-        _initializeIOSMacOSKeyboardListener();
+      if (Platform.isAndroid || Platform.isIOS) {
+        await _initializeVolumeListener();
+        _initializeShakeListener();
+      }
+      if (Platform.isMacOS) {
+        _initializeMacOSKeyboardListener();
       }
       emit(const HardwareInputListening());
     } catch (e) {
@@ -36,91 +43,85 @@ class HardwareInputCubit extends Cubit<HardwareInputState> {
     }
   }
 
-  /// Initialize Android volume button listener
-  void _initializeAndroidVolumeListener() {
-    // Listen to volume button events using VolumeListener
-    // The volume_listener package provides addListener for volume key events
-    VolumeListener.addListener((VolumeKey event) {
-      switch (event) {
-        case VolumeKey.up:
-          _handleVolumeUp();
-          break;
-        case VolumeKey.down:
-          _handleVolumeDown();
-          break;
-        case VolumeKey.capture:
-          // iOS 17.2+ hardware camera capture button - ignore for now
-          break;
-      }
-    });
+  /// Initialize volume button listener for Android and iOS
+  /// Uses volume_button_override which prevents OS volume changes
+  Future<void> _initializeVolumeListener() async {
+    _volumeController = VolumeButtonController();
+
+    final volumeUpAction = ButtonAction(
+      id: ButtonActionId.volumeUp,
+      onAction: () => _handleVolumeUp(),
+    );
+
+    final volumeDownAction = ButtonAction(
+      id: ButtonActionId.volumeDown,
+      onAction: () => _handleVolumeDown(),
+    );
+
+    await _volumeController!.startListening(
+      volumeUpAction: volumeUpAction,
+      volumeDownAction: volumeDownAction,
+    );
   }
 
-  /// Handle volume up button press on Android
+  /// Initialize shake detection listener for Android and iOS
+  void _initializeShakeListener() {
+    _accelerometerSubscription = accelerometerEventStream().listen(
+      (AccelerometerEvent event) {
+        // Calculate g-force magnitude
+        final gForce = (event.x.abs() + event.y.abs() + event.z.abs()) / 9.8;
+
+        if (gForce > _shakeThreshold) {
+          final now = DateTime.now();
+          if (_lastShakeTime == null ||
+              now.difference(_lastShakeTime!) > _shakeCooldown) {
+            _lastShakeTime = now;
+            developer.log(
+              'Shake detected (g-force: ${gForce.toStringAsFixed(2)}) -> RANDOM',
+              name: 'HardwareInput',
+            );
+            emit(TriggerRandomState());
+          }
+        }
+      },
+      onError: (error) {
+        developer.log(
+          'Accelerometer error: $error',
+          name: 'HardwareInput',
+          error: error,
+        );
+      },
+      cancelOnError: true,
+    );
+  }
+
+  /// Handle volume up button press
   void _handleVolumeUp() {
-    _volumeUpPressed = true;
-
-    // Check if both buttons are pressed simultaneously
-    if (_volumeDownPressed) {
-      _cancelSimultaneousPressTimer();
-      _triggerSimultaneousPress();
-    } else {
-      // Set a timer to detect if the other button is pressed
-      _simultaneousPressTimer = Timer(_simultaneousPressWindow, () {
-        if (_volumeUpPressed && !_volumeDownPressed) {
-          emit(const HardwareInputListening());
-        }
-        _volumeUpPressed = false;
-      });
-    }
+    developer.log('Volume UP pressed -> INCREMENT', name: 'HardwareInput');
+    emit(IncrementRangeState());
   }
 
-  /// Handle volume down button press on Android
+  /// Handle volume down button press
   void _handleVolumeDown() {
-    _volumeDownPressed = true;
-
-    // Check if both buttons are pressed simultaneously
-    if (_volumeUpPressed) {
-      _cancelSimultaneousPressTimer();
-      _triggerSimultaneousPress();
-    } else {
-      // Set a timer to detect if the other button is pressed
-      _simultaneousPressTimer = Timer(_simultaneousPressWindow, () {
-        if (_volumeDownPressed && !_volumeUpPressed) {
-          emit(const HardwareInputListening());
-        }
-        _volumeDownPressed = false;
-      });
-    }
+    developer.log('Volume DOWN pressed -> DECREMENT', name: 'HardwareInput');
+    emit(DecrementRangeState());
   }
 
-  /// Handle simultaneous press of both volume buttons
-  void _triggerSimultaneousPress() {
-    _volumeUpPressed = false;
-    _volumeDownPressed = false;
-    emit(const HardwareInputListening());
-  }
-
-  /// Cancel the simultaneous press timer
-  void _cancelSimultaneousPressTimer() {
-    _simultaneousPressTimer?.cancel();
-    _simultaneousPressTimer = null;
-  }
-
-  /// Initialize iOS/macOS keyboard listener
-  void _initializeIOSMacOSKeyboardListener() {
+  /// Initialize macOS keyboard listener
+  void _initializeMacOSKeyboardListener() {
     _keyboardListener = (KeyEvent event) {
       if (event is KeyDownEvent) {
         final logicalKey = event.logicalKey;
 
         if (logicalKey == LogicalKeyboardKey.arrowUp) {
-          emit(const HardwareInputListening());
+          emit(IncrementRangeState());
           return true;
         } else if (logicalKey == LogicalKeyboardKey.arrowDown) {
-          emit(const HardwareInputListening());
+          emit(DecrementRangeState());
           return true;
         } else if (logicalKey == LogicalKeyboardKey.space ||
             logicalKey == LogicalKeyboardKey.enter) {
-          emit(const HardwareInputListening());
+          emit(TriggerRandomState());
           return true;
         }
       }
@@ -132,11 +133,13 @@ class HardwareInputCubit extends Cubit<HardwareInputState> {
 
   @override
   Future<void> close() async {
-    _cancelSimultaneousPressTimer();
-    if (Platform.isIOS || Platform.isMacOS) {
+    await _accelerometerSubscription?.cancel();
+    if (Platform.isMacOS) {
       HardwareKeyboard.instance.removeHandler(_keyboardListener);
     }
-    VolumeListener.removeListener();
+    if (Platform.isAndroid || Platform.isIOS) {
+      await _volumeController?.stopListening();
+    }
     return super.close();
   }
 }
