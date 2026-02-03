@@ -3,7 +3,6 @@
 backend/.env
 discord/.env
 /data
-data/
 *.sqlite3
 
 # OpenCode
