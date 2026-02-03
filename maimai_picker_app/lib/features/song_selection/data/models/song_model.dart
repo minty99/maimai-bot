@@ -77,7 +77,7 @@ class SongModel extends Equatable {
     // Construct jacket image URL from image_name
     final imageName = json['image_name'] as String?;
     final imageUrl = imageName != null && imageName.isNotEmpty
-        ? '$baseUrl/api/jackets/$imageName'
+        ? '$baseUrl/api/cover/$imageName'
         : '';
 
     return SongModel(
