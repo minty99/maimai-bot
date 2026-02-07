@@ -12,6 +12,7 @@ clap.workspace = true
 dotenvy.workspace = true
 eyre.workspace = true
 hex = { workspace = true }
+image = "0.25.9"
 models = { path = "../models" }
 reqwest = { workspace = true }
 serde = { workspace = true, features = ["derive"] }

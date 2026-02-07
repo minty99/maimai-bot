@@ -8,6 +8,7 @@ use std::fmt;
 use std::path::{Path, PathBuf};
 
 pub mod internal_levels;
+pub mod user_tiers;
 
 pub const SONG_DATA_SUBDIR: &str = "song_data";
 const MAIMAI_SONGS_URL: &str = "https://maimai.sega.jp/data/maimai_songs.json";
