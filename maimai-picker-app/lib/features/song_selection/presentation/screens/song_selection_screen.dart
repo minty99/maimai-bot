@@ -3,7 +3,6 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../../../core/constants/app_constants.dart';
 import '../../../../core/theme/app_colors.dart';
-import '../../../../core/theme/app_motion.dart';
 import '../../../../core/theme/app_spacing.dart';
 import '../../../settings/bloc/settings/settings_cubit.dart';
 import '../../../settings/bloc/settings/settings_state.dart';
@@ -31,30 +30,14 @@ class SongSelectionScreen extends StatefulWidget {
   State<SongSelectionScreen> createState() => _SongSelectionScreenState();
 }
 
-class _SongSelectionScreenState extends State<SongSelectionScreen>
-    with SingleTickerProviderStateMixin {
-  late final AnimationController _rangeAnimController;
-  late final Animation<double> _rangeScaleAnimation;
-
+class _SongSelectionScreenState extends State<SongSelectionScreen> {
   final VersionRepository _versionRepository = VersionRepositoryImpl();
-  LevelRangeState? _previousRangeState;
   List<VersionOption> _versionOptions = const [];
   bool _isLoadingVersions = false;
 
   @override
   void initState() {
     super.initState();
-    _rangeAnimController = AnimationController(
-      duration: AppMotion.fast,
-      vsync: this,
-    );
-    _rangeScaleAnimation = Tween<double>(begin: 1, end: 1.08).animate(
-      CurvedAnimation(
-        parent: _rangeAnimController,
-        curve: AppMotion.emphasized,
-      ),
-    );
-
     WidgetsBinding.instance.addPostFrameCallback((_) {
       context.read<HardwareInputCubit>().initialize();
       _loadVersionOptions(
@@ -63,20 +46,16 @@ class _SongSelectionScreenState extends State<SongSelectionScreen>
     });
   }
 
-  @override
-  void dispose() {
-    _rangeAnimController.dispose();
-    super.dispose();
-  }
+  // ─────────────────────────────────────────────────────────────────────────
+  // Data helpers
+  // ─────────────────────────────────────────────────────────────────────────
 
   Future<void> _loadVersionOptions(String baseUrl) async {
     setState(() => _isLoadingVersions = true);
     final versions = await _versionRepository.fetchVersionOptions(
       baseUrl: baseUrl,
     );
-    if (!mounted) {
-      return;
-    }
+    if (!mounted) return;
     setState(() {
       _versionOptions = versions;
       _isLoadingVersions = false;
@@ -89,9 +68,7 @@ class _SongSelectionScreenState extends State<SongSelectionScreen>
     if (selected) {
       next.add(chartType);
     } else {
-      if (next.length == 1) {
-        return;
-      }
+      if (next.length == 1) return;
       next.remove(chartType);
     }
     await cubit.updateEnabledChartTypes(next);
@@ -103,9 +80,7 @@ class _SongSelectionScreenState extends State<SongSelectionScreen>
     if (selected) {
       next.add(index);
     } else {
-      if (next.length == 1) {
-        return;
-      }
+      if (next.length == 1) return;
       next.remove(index);
     }
     await cubit.updateEnabledDifficulties(next);
@@ -117,15 +92,11 @@ class _SongSelectionScreenState extends State<SongSelectionScreen>
     final allIndices = _versionOptions
         .map((version) => version.versionIndex)
         .toSet();
-    if (allIndices.isEmpty) {
-      return;
-    }
+    if (allIndices.isEmpty) return;
 
     final current = state.includeVersionIndices;
     if (selected) {
-      if (current == null) {
-        return;
-      }
+      if (current == null) return;
       final next = {...current, versionIndex};
       if (next.length == allIndices.length) {
         await cubit.updateIncludeVersionIndices(null);
@@ -138,6 +109,10 @@ class _SongSelectionScreenState extends State<SongSelectionScreen>
       await cubit.updateIncludeVersionIndices(base);
     }
   }
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // Label builders
+  // ─────────────────────────────────────────────────────────────────────────
 
   String _buildChartTypeLabel(SettingsState state) {
     if (state.enabledChartTypes.length ==
@@ -168,18 +143,18 @@ class _SongSelectionScreenState extends State<SongSelectionScreen>
 
   String _buildVersionLabel(SettingsState state) {
     final included = state.includeVersionIndices;
-    if (included == null) {
-      return 'VER ALL';
-    }
-    if (included.isEmpty) {
-      return 'VER NONE';
-    }
+    if (included == null) return 'VER ALL';
+    if (included.isEmpty) return 'VER NONE';
     if (_versionOptions.isNotEmpty &&
         included.length == _versionOptions.length) {
       return 'VER ALL';
     }
     return 'VER ${included.length}';
   }
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // Actions
+  // ─────────────────────────────────────────────────────────────────────────
 
   Future<void> _fetchRandomSong() async {
     final rangeState = context.read<LevelRangeCubit>().state;
@@ -203,6 +178,10 @@ class _SongSelectionScreenState extends State<SongSelectionScreen>
       _fetchRandomSong();
     }
   }
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // Filter sheets
+  // ─────────────────────────────────────────────────────────────────────────
 
   void _showChartTypeSheet(SettingsState state) {
     showFilterBottomSheet<String>(
@@ -281,9 +260,9 @@ class _SongSelectionScreenState extends State<SongSelectionScreen>
     );
   }
 
-  void _triggerRangeAnimation() {
-    _rangeAnimController.forward().then((_) => _rangeAnimController.reverse());
-  }
+  // ─────────────────────────────────────────────────────────────────────────
+  // Build
+  // ─────────────────────────────────────────────────────────────────────────
 
   @override
   Widget build(BuildContext context) {
@@ -296,16 +275,6 @@ class _SongSelectionScreenState extends State<SongSelectionScreen>
                 state is TriggerRandomState) {
               _onHardwareInput(state);
             }
-          },
-        ),
-        BlocListener<LevelRangeCubit, LevelRangeState>(
-          listener: (context, state) {
-            if (_previousRangeState != null &&
-                (_previousRangeState!.start != state.start ||
-                    _previousRangeState!.end != state.end)) {
-              _triggerRangeAnimation();
-            }
-            _previousRangeState = state;
           },
         ),
         BlocListener<SettingsCubit, SettingsState>(
@@ -327,67 +296,53 @@ class _SongSelectionScreenState extends State<SongSelectionScreen>
             ),
             child: Column(
               children: [
-                // ── Row 1: LV + GAP controls + Settings gear ──
+                // ── Level range + GAP controls ──
                 BlocBuilder<LevelRangeCubit, LevelRangeState>(
                   builder: (context, levelState) {
-                    return Row(
-                      children: [
-                        Expanded(
-                          child: ScaleTransition(
-                            scale: _rangeScaleAnimation,
-                            child: LevelGapControls(
-                              rangeStart: levelState.start.toStringAsFixed(1),
-                              rangeEnd: levelState.end.toStringAsFixed(1),
-                              gapText: levelState.gap.toStringAsFixed(1),
-                              onLevelDecrement: () => context
-                                  .read<LevelRangeCubit>()
-                                  .decrementLevel(),
-                              onLevelIncrement: () => context
-                                  .read<LevelRangeCubit>()
-                                  .incrementLevel(),
-                              onGapDecrement: () => context
-                                  .read<LevelRangeCubit>()
-                                  .decrementGap(),
-                              onGapIncrement: () => context
-                                  .read<LevelRangeCubit>()
-                                  .incrementGap(),
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: AppSpacing.sm),
-                        SizedBox(
-                          width: 40,
-                          height: 40,
-                          child: IconButton(
-                            style: IconButton.styleFrom(
-                              backgroundColor: AppColors.surfaceElevated,
-                              padding: EdgeInsets.zero,
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(10),
-                                side: BorderSide(
-                                  color: AppColors.accentPrimary.withValues(
-                                    alpha: 0.3,
-                                  ),
+                    return LevelGapControls(
+                      rangeStart: levelState.start.toStringAsFixed(1),
+                      rangeEnd: levelState.end.toStringAsFixed(1),
+                      gapText: levelState.gap.toStringAsFixed(1),
+                      onLevelDecrement: () =>
+                          context.read<LevelRangeCubit>().decrementLevel(),
+                      onLevelIncrement: () =>
+                          context.read<LevelRangeCubit>().incrementLevel(),
+                      onGapDecrement: () =>
+                          context.read<LevelRangeCubit>().decrementGap(),
+                      onGapIncrement: () =>
+                          context.read<LevelRangeCubit>().incrementGap(),
+                      trailing: SizedBox(
+                        width: 42,
+                        height: 42,
+                        child: IconButton(
+                          style: IconButton.styleFrom(
+                            backgroundColor: AppColors.surfaceElevated,
+                            padding: EdgeInsets.zero,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                              side: BorderSide(
+                                color: AppColors.accentPrimary.withValues(
+                                  alpha: 0.3,
                                 ),
                               ),
                             ),
-                            onPressed: () => Navigator.pushNamed(
-                              context,
-                              SettingsScreen.routeName,
-                            ),
-                            icon: const Icon(
-                              Icons.settings_rounded,
-                              size: 18,
-                              color: AppColors.textSecondary,
-                            ),
+                          ),
+                          onPressed: () => Navigator.pushNamed(
+                            context,
+                            SettingsScreen.routeName,
+                          ),
+                          icon: const Icon(
+                            Icons.settings_rounded,
+                            size: 18,
+                            color: AppColors.textSecondary,
                           ),
                         ),
-                      ],
+                      ),
                     );
                   },
                 ),
                 const SizedBox(height: AppSpacing.xs + 2), // 6px
-                // ── Row 2: Filter chips ──
+                // ── Filter chips ──
                 BlocBuilder<SettingsCubit, SettingsState>(
                   builder: (context, settingsState) {
                     return FilterChipBar(

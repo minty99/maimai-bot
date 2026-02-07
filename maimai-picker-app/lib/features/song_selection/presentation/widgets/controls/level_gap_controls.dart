@@ -23,6 +23,7 @@ class LevelGapControls extends StatelessWidget {
     required this.onLevelIncrement,
     required this.onGapDecrement,
     required this.onGapIncrement,
+    this.trailing,
   });
 
   final String rangeStart;
@@ -33,12 +34,16 @@ class LevelGapControls extends StatelessWidget {
   final VoidCallback onGapDecrement;
   final VoidCallback onGapIncrement;
 
+  /// Optional widget placed at the right end of the range row
+  /// (e.g. a settings icon button).
+  final Widget? trailing;
+
   @override
   Widget build(BuildContext context) {
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
-        // ── Primary row: [ ◀ ]  12.5 ~ 13.0  [ ▶ ] ──
+        // ── Primary row: [ ◀ ]  12.5 ~ 13.0  [ ▶ ]  [trailing] ──
         Row(
           children: [
             _LevelArrow(
@@ -80,6 +85,10 @@ class LevelGapControls extends StatelessWidget {
               icon: Icons.chevron_right_rounded,
               onTap: onLevelIncrement,
             ),
+            if (trailing != null) ...[
+              const SizedBox(width: AppSpacing.sm),
+              trailing!,
+            ],
           ],
         ),
         const SizedBox(height: AppSpacing.xs),
