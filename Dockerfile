@@ -20,7 +20,7 @@ COPY Cargo.lock ./
 COPY crates/ ./crates/
 COPY record-collector-server/ ./record-collector-server/
 COPY song-info-server/ ./song-info-server/
-COPY discord/ ./discord/
+COPY personal-discord-bot/ ./personal-discord-bot/
 
 # Build entire workspace (both binaries)
 RUN cargo build --release
@@ -75,9 +75,9 @@ EXPOSE 3000
 CMD ["record-collector-server"]
 
 # ============================================
-# Target: maimai-discord
+# Target: personal-discord-bot
 # ============================================
-FROM ubuntu:noble as maimai-discord
+FROM ubuntu:noble as personal-discord-bot
 
 RUN apt-get update && apt-get install -y \
     ca-certificates \
@@ -87,6 +87,6 @@ RUN apt-get update && apt-get install -y \
 WORKDIR /app
 
 # Copy discord binary
-COPY --from=builder /app/target/release/maimai-discord /usr/local/bin/maimai-discord
+COPY --from=builder /app/target/release/personal-discord-bot /usr/local/bin/personal-discord-bot
 
-CMD ["maimai-discord"]
+CMD ["personal-discord-bot"]

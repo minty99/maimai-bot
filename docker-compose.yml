@@ -53,12 +53,12 @@ services:
       retries: 3
       start_period: 10s
 
-  discord:
+  personal-discord-bot:
     build:
       context: .
       dockerfile: Dockerfile
-      target: maimai-discord
-    container_name: maimai-discord
+      target: personal-discord-bot
+    container_name: personal-discord-bot
     restart: unless-stopped
     environment:
       - DISCORD_BOT_TOKEN=${DISCORD_BOT_TOKEN}

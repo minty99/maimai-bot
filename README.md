@@ -22,7 +22,7 @@
   - 포트: `3000` (기본값)
   - 의존성: Song Info Server (곡 정보 조회용)
 
-- **Discord Bot** (`discord/`): 두 서버의 API를 호출하여 Discord 명령어 처리 및 DM 알림 전송
+- **Discord Bot** (`personal-discord-bot/`): 두 서버의 API를 호출하여 Discord 명령어 처리 및 DM 알림 전송
   - Record Collector Server의 `/health/ready` 엔드포인트를 폴링하여 서버가 준비될 때까지 대기합니다.
   - Record Collector Server에서 새 플레이가 감지되면 DM으로 알림을 보냅니다.
   - 의존성: Song Info Server + Record Collector Server
@@ -63,9 +63,9 @@ cp record-collector-server/.env.example record-collector-server/.env
 # 편집: SEGA_ID, SEGA_PASSWORD, DATABASE_URL, SONG_INFO_SERVER_URL 등 입력
 ```
 
-**3. Discord Bot 설정** (`discord/.env`)
+**3. Discord Bot 설정** (`personal-discord-bot/.env`)
 ```bash
-cp discord/.env.example discord/.env
+cp personal-discord-bot/.env.example personal-discord-bot/.env
 # 편집: DISCORD_BOT_TOKEN, DISCORD_USER_ID, SONG_INFO_SERVER_URL, RECORD_COLLECTOR_SERVER_URL 등 입력
 ```
 
@@ -102,7 +102,7 @@ cp .env.example .env
    ```bash
    cp song-info-server/.env.example song-info-server/.env
    cp record-collector-server/.env.example record-collector-server/.env
-   cp discord/.env.example discord/.env
+   cp personal-discord-bot/.env.example personal-discord-bot/.env
    # 각 .env 파일 편집하여 실제 credentials 입력
    ```
 
@@ -120,7 +120,7 @@ cp .env.example .env
 
 4. **Discord 봇 실행** (터미널 3):
    ```bash
-   cargo run --bin maimai-discord
+   cargo run --bin personal-discord-bot
    ```
    Discord 봇은 Record Collector Server의 `/health/ready`를 폴링하여 서버가 준비될 때까지 대기합니다.
 
@@ -151,14 +151,14 @@ cp .env.example .env
 이 프로젝트는 **단일 Dockerfile**을 사용하여 세 서비스를 모두 빌드합니다:
 
 - **빌더 스테이지**: 전체 워크스페이스를 한 번만 컴파일
-- **멀티 타겟**: `target` 옵션으로 각 서비스의 런타임 이미지 생성 (`maimai-song-info`, `record-collector-server`, `maimai-discord`)
+- **멀티 타겟**: `target` 옵션으로 각 서비스의 런타임 이미지 생성 (`maimai-song-info`, `record-collector-server`, `personal-discord-bot`)
 - **효율성**: 중복 빌드 없이 세 바이너리를 동시에 생성
 
 개별 서비스 빌드:
 ```bash
 docker compose build song-info-server        # song-info-server만 빌드
 docker compose build record-collector-server # record-collector-server만 빌드
-docker compose build discord                 # discord만 빌드
+docker compose build personal-discord-bot     # discord만 빌드
 docker compose build                         # 모든 서비스 빌드
 ```
 
@@ -173,7 +173,7 @@ docker compose up -d
 ```bash
 docker compose logs -f song-info-server
 docker compose logs -f record-collector-server
-docker compose logs -f discord
+docker compose logs -f personal-discord-bot
 ```
 
 #### 종료

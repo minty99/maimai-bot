@@ -20,7 +20,7 @@ The goal of this file is to keep future changes consistent with the current impl
   - `crawl scores|recent|song-detail|player-data` (parse to JSON; no DB)
   - `db init|sync-scores|sync-recent`
   - `bot run` (Discord bot)
-- Discord bot: `src/discord/bot.rs`
+- Discord bot: `personal-discord-bot/src/main.rs`
   - On startup:
     - fetches `playerData` and stores `player.user_name` in memory (`BotData.maimai_user_name`)
     - checks if scores sync is needed using `app_state`'s `player.total_play_count`
