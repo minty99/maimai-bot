@@ -4,8 +4,8 @@ use eyre::{Result, WrapErr};
 use tokio::time::interval;
 use tracing::{debug, error, info};
 
-use maimai_db::{get_app_state_u32, set_app_state_u32, upsert_playlogs};
-use maimai_http_client::{is_maintenance_window_now, MaimaiClient};
+use crate::db::{get_app_state_u32, set_app_state_u32, upsert_playlogs};
+use crate::http_client::{is_maintenance_window_now, MaimaiClient};
 use maimai_parsers::{parse_player_data_html, parse_recent_html};
 use models::{ParsedPlayRecord, ParsedPlayerData};
 

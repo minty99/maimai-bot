@@ -1,5 +1,5 @@
 use crate::config::RecordCollectorConfig;
-use maimai_http_client::MaimaiClient;
+use crate::http_client::MaimaiClient;
 use reqwest::Client;
 use sqlx::SqlitePool;
 use std::path::PathBuf;

@@ -1,5 +1,7 @@
 mod config;
+mod db;
 mod error;
+mod http_client;
 mod rating;
 mod routes;
 mod song_info_client;
@@ -32,14 +34,14 @@ async fn main() -> eyre::Result<()> {
     std::fs::create_dir_all(&config.data_dir).wrap_err("Failed to create data directory")?;
 
     // Initialize database pool
-    let db_pool = maimai_db::connect(&config.database_url)
+    let db_pool = db::connect(&config.database_url)
         .await
         .wrap_err("Failed to connect to database")?;
 
     tracing::info!("Database connected successfully");
 
     tracing::info!("Running database migrations...");
-    maimai_db::migrate(&db_pool)
+    db::migrate(&db_pool)
         .await
         .wrap_err("Failed to run database migrations")?;
     tracing::info!("Database migrations completed successfully");

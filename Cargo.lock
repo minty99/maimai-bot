@@ -1889,15 +1889,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c41e0c4fef86961ac6d6f8a82609f55f31b05e4fce149ac5710e439df7619ba4"
 
 [[package]]
-name = "maimai-db"
-version = "0.1.0"
-dependencies = [
- "eyre",
- "models",
- "sqlx",
-]
-
-[[package]]
 name = "maimai-discord"
 version = "0.1.0"
 dependencies = [
@@ -1914,18 +1905,6 @@ dependencies = [
  "tracing",
  "tracing-subscriber",
  "urlencoding",
-]
-
-[[package]]
-name = "maimai-http-client"
-version = "0.1.0"
-dependencies = [
- "cookie_store",
- "eyre",
- "models",
- "reqwest",
- "reqwest_cookie_store",
- "time",
 ]
 
 [[package]]
@@ -2811,14 +2790,14 @@ dependencies = [
  "axum",
  "chrono",
  "chrono-tz",
+ "cookie_store",
  "dotenvy",
  "eyre",
- "maimai-db",
- "maimai-http-client",
  "maimai-parsers",
  "models",
  "rand 0.8.5",
  "reqwest",
+ "reqwest_cookie_store",
  "serde",
  "serde_json",
  "sqlx",

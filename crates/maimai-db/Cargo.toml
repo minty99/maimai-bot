@@ -1,9 +1,0 @@
-[package]
-name = "maimai-db"
-version.workspace = true
-edition.workspace = true
-
-[dependencies]
-eyre = { workspace = true }
-models = { path = "../models" }
-sqlx = { workspace = true }

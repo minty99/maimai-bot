@@ -4,7 +4,7 @@ use eyre::WrapErr;
 use sqlx::sqlite::{SqliteConnectOptions, SqliteJournalMode, SqlitePoolOptions, SqliteSynchronous};
 use sqlx::{Pool, Sqlite};
 
-use models::{ChartType, DifficultyCategory, ParsedPlayRecord, ParsedScoreEntry, ScoreEntry};
+use models::{ChartType, ParsedPlayRecord, ParsedScoreEntry};
 
 pub type SqlitePool = Pool<Sqlite>;
 
@@ -24,7 +24,7 @@ pub async fn connect(database_url: &str) -> eyre::Result<SqlitePool> {
 }
 
 pub async fn migrate(pool: &SqlitePool) -> eyre::Result<()> {
-    sqlx::migrate!("../../record-collector-server/migrations")
+    sqlx::migrate!("./migrations")
         .run(pool)
         .await
         .wrap_err("run migrations")?;
@@ -72,56 +72,14 @@ pub async fn clear_scores(pool: &SqlitePool) -> eyre::Result<()> {
     Ok(())
 }
 
-pub async fn clear_playlogs(pool: &SqlitePool) -> eyre::Result<()> {
-    sqlx::query("DELETE FROM playlogs")
-        .execute(pool)
-        .await
-        .wrap_err("clear playlogs")?;
-    Ok(())
-}
-
-pub async fn clear_app_state(pool: &SqlitePool) -> eyre::Result<()> {
-    sqlx::query("DELETE FROM app_state")
-        .execute(pool)
-        .await
-        .wrap_err("clear app_state")?;
-    Ok(())
-}
-
-pub async fn get_app_state(pool: &SqlitePool, key: &str) -> eyre::Result<Option<String>> {
-    sqlx::query_scalar::<_, Option<String>>("SELECT value FROM app_state WHERE key = ?")
-        .bind(key)
-        .fetch_one(pool)
-        .await
-        .wrap_err("get app_state value")
-}
-
-pub async fn set_app_state(
-    pool: &SqlitePool,
-    key: &str,
-    value: &str,
-    updated_at: i64,
-) -> eyre::Result<()> {
-    sqlx::query(
-        r#"
-INSERT INTO app_state (key, value, updated_at)
-VALUES (?1, ?2, ?3)
-ON CONFLICT(key) DO UPDATE SET
-  value = excluded.value,
-  updated_at = excluded.updated_at
-"#,
-    )
-    .bind(key)
-    .bind(value)
-    .bind(updated_at)
-    .execute(pool)
-    .await
-    .wrap_err("set app_state value")?;
-    Ok(())
-}
-
 pub async fn get_app_state_u32(pool: &SqlitePool, key: &str) -> eyre::Result<Option<u32>> {
-    let Some(value) = get_app_state(pool, key).await? else {
+    let value: Option<String> =
+        sqlx::query_scalar::<_, Option<String>>("SELECT value FROM app_state WHERE key = ?")
+            .bind(key)
+            .fetch_one(pool)
+            .await
+            .wrap_err("get app_state value")?;
+    let Some(value) = value else {
         return Ok(None);
     };
     let parsed = value.parse::<u32>().wrap_err("parse app_state as u32")?;
@@ -134,7 +92,22 @@ pub async fn set_app_state_u32(
     value: u32,
     updated_at: i64,
 ) -> eyre::Result<()> {
-    set_app_state(pool, key, &value.to_string(), updated_at).await
+    sqlx::query(
+        r#"
+INSERT INTO app_state (key, value, updated_at)
+VALUES (?1, ?2, ?3)
+ON CONFLICT(key) DO UPDATE SET
+  value = excluded.value,
+  updated_at = excluded.updated_at
+"#,
+    )
+    .bind(key)
+    .bind(value.to_string())
+    .bind(updated_at)
+    .execute(pool)
+    .await
+    .wrap_err("set app_state value")?;
+    Ok(())
 }
 
 async fn upsert_score(
@@ -238,61 +211,6 @@ fn chart_type_str(t: ChartType) -> &'static str {
     }
 }
 
-pub fn format_diff_category(diff_category: Option<DifficultyCategory>) -> &'static str {
-    diff_category.map(|d| d.as_str()).unwrap_or("Unknown")
-}
-
-pub fn format_chart_type(chart_type: ChartType) -> &'static str {
-    match chart_type {
-        ChartType::Std => "STD",
-        ChartType::Dx => "DX",
-    }
-}
-
-pub fn format_percent_f32(percent: Option<f32>) -> String {
-    percent
-        .map(|p| format!("{:.4}%", p))
-        .unwrap_or_else(|| "N/A".to_string())
-}
-
-pub fn format_percent_f64(percent: Option<f64>) -> String {
-    percent
-        .map(|p| format!("{:.4}%", p))
-        .unwrap_or_else(|| "N/A".to_string())
-}
-
 fn percent_to_x10000(percent: Option<f32>) -> Option<i64> {
     percent.map(|p| (p as f64 * 10000.0).round() as i64)
-}
-
-pub fn format_track(track: Option<i64>) -> String {
-    track
-        .map(|t| format!("Track {}", t))
-        .unwrap_or_else(|| "Single".to_string())
-}
-
-pub async fn query_score_by_pk(
-    pool: &SqlitePool,
-    title: &str,
-    chart_type: &str,
-    diff_category: &str,
-) -> eyre::Result<Option<ScoreEntry>> {
-    let row = sqlx::query_as::<_, ScoreEntry>(
-        r#"
-        SELECT
-            title, chart_type, diff_category, level,
-            achievement_x10000, rank, fc, sync,
-            dx_score, dx_score_max, source_idx
-        FROM scores
-        WHERE title = ? AND chart_type = ? AND diff_category = ? AND achievement_x10000 IS NOT NULL
-        "#,
-    )
-    .bind(title)
-    .bind(chart_type)
-    .bind(diff_category)
-    .fetch_optional(pool)
-    .await
-    .wrap_err("query score by pk")?;
-
-    Ok(row)
 }

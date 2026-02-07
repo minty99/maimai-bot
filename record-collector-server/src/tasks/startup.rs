@@ -3,10 +3,10 @@ use reqwest::Url;
 use sqlx::SqlitePool;
 use tracing::info;
 
-use maimai_db::{
+use crate::db::{
     clear_scores, get_app_state_u32, set_app_state_u32, upsert_playlogs, upsert_scores,
 };
-use maimai_http_client::{is_maintenance_window_now, MaimaiClient};
+use crate::http_client::{is_maintenance_window_now, MaimaiClient};
 use maimai_parsers::{parse_player_data_html, parse_recent_html, parse_scores_html};
 use models::{config::AppConfig, ParsedPlayRecord, ParsedPlayerData};
 
