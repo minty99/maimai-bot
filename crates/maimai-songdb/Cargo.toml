@@ -3,10 +3,6 @@ name = "maimai-songdb"
 version.workspace = true
 edition.workspace = true
 
-[[bin]]
-name = "maimai-songdb"
-path = "src/bin/maimai-songdb.rs"
-
 [dependencies]
 clap.workspace = true
 dotenvy.workspace = true
