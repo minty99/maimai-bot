@@ -1,13 +1,11 @@
 use std::path::PathBuf;
 
-use maimai_bot::maimai::models::DifficultyCategory;
-use maimai_bot::maimai::parse::score_list::parse_scores_html;
+use maimai_parsers::parse_scores_html;
+use models::{ChartType, DifficultyCategory};
 
 fn fixture_path(name: &str) -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("examples")
-        .join("maimai")
-        .join("scores")
+        .join("examples/maimai/scores")
         .join(name)
 }
 
@@ -26,39 +24,21 @@ fn run_fixture_test(diff: u8, filename: &str) {
     };
     assert!(entries.iter().all(|e| e.diff_category == expected_category));
     assert!(entries.iter().all(|e| !e.level.trim().is_empty()));
-    assert!(
-        entries
-            .iter()
-            .filter(|e| e.dx_score.is_some())
-            .all(|e| e.dx_score_max.is_some())
-    );
+    assert!(entries
+        .iter()
+        .filter(|e| e.dx_score.is_some())
+        .all(|e| e.dx_score_max.is_some()));
     if diff == 0 {
-        assert!(
-            entries
-                .iter()
-                .any(|e| e.chart_type == maimai_bot::maimai::models::ChartType::Std)
-        );
-        assert!(
-            entries
-                .iter()
-                .any(|e| e.chart_type == maimai_bot::maimai::models::ChartType::Dx)
-        );
+        assert!(entries.iter().any(|e| e.chart_type == ChartType::Std));
+        assert!(entries.iter().any(|e| e.chart_type == ChartType::Dx));
     }
 
     println!("diff={diff} entries={}", entries.len());
     for e in entries.iter().take(5) {
         println!(
             "  chart={:?} title={:?} diff={:?} lv={:?} achv={:?} rank={:?} fc={:?} sync={:?} dx={:?}/{:?}",
-            e.chart_type,
-            e.title,
-            e.diff_category,
-            e.level,
-            e.achievement_percent,
-            e.rank,
-            e.fc,
-            e.sync,
-            e.dx_score,
-            e.dx_score_max,
+            e.chart_type, e.title, e.diff_category, e.level,
+            e.achievement_percent, e.rank, e.fc, e.sync, e.dx_score, e.dx_score_max,
         );
     }
 }

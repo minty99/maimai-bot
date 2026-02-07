@@ -1,12 +1,17 @@
-use maimai_bot::maimai::parse::player_data::parse_player_data_html;
+use std::path::PathBuf;
 
-fn read_fixture(path: &str) -> String {
-    std::fs::read_to_string(path).expect("read fixture")
+use maimai_parsers::parse_player_data_html;
+use models::DifficultyCategory;
+
+fn fixture_path(name: &str) -> PathBuf {
+    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("examples/maimai/player_data")
+        .join(name)
 }
 
 #[test]
 fn parse_player_data_fixture() {
-    let html = read_fixture("examples/maimai/player_data/player_data.html");
+    let html = std::fs::read_to_string(fixture_path("player_data.html")).unwrap();
     let parsed = parse_player_data_html(&html).unwrap();
 
     assert!(!parsed.user_name.is_empty());
@@ -17,8 +22,6 @@ fn parse_player_data_fixture() {
 
 #[test]
 fn difficulty_category_numeric_values_are_stable() {
-    use maimai_bot::maimai::models::DifficultyCategory;
-
     assert_eq!(DifficultyCategory::Basic.as_u8(), 0);
     assert_eq!(DifficultyCategory::Advanced.as_u8(), 1);
     assert_eq!(DifficultyCategory::Expert.as_u8(), 2);

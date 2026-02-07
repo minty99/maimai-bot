@@ -1,13 +1,11 @@
 use std::path::PathBuf;
 
-use maimai_bot::maimai::models::DifficultyCategory;
-use maimai_bot::maimai::parse::song_detail::parse_song_detail_html;
+use maimai_parsers::parse_song_detail_html;
+use models::DifficultyCategory;
 
 fn fixture_path(name: &str) -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("examples")
-        .join("maimai")
-        .join("music_detail")
+        .join("examples/maimai/music_detail")
         .join(name)
 }
 
@@ -26,19 +24,15 @@ fn parse_song_detail_example1() {
             .collect::<Vec<_>>(),
         vec![DifficultyCategory::Expert, DifficultyCategory::Master]
     );
-    assert!(
-        parsed
-            .difficulties
-            .iter()
-            .all(|d| !d.level.trim().is_empty())
-    );
-    assert!(
-        parsed
-            .difficulties
-            .iter()
-            .filter(|d| d.dx_score.is_some())
-            .all(|d| d.dx_score_max.is_some())
-    );
+    assert!(parsed
+        .difficulties
+        .iter()
+        .all(|d| !d.level.trim().is_empty()));
+    assert!(parsed
+        .difficulties
+        .iter()
+        .filter(|d| d.dx_score.is_some())
+        .all(|d| d.dx_score_max.is_some()));
 
     println!(
         "title={:?} diffs={}",
@@ -81,19 +75,15 @@ fn parse_song_detail_example2() {
             DifficultyCategory::ReMaster,
         ]
     );
-    assert!(
-        parsed
-            .difficulties
-            .iter()
-            .all(|d| !d.level.trim().is_empty())
-    );
-    assert!(
-        parsed
-            .difficulties
-            .iter()
-            .filter(|d| d.dx_score.is_some())
-            .all(|d| d.dx_score_max.is_some())
-    );
+    assert!(parsed
+        .difficulties
+        .iter()
+        .all(|d| !d.level.trim().is_empty()));
+    assert!(parsed
+        .difficulties
+        .iter()
+        .filter(|d| d.dx_score.is_some())
+        .all(|d| d.dx_score_max.is_some()));
 
     println!(
         "title={:?} diffs={}",
