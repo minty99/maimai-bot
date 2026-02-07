@@ -39,14 +39,14 @@ RUN apt-get update && apt-get install -y \
 WORKDIR /app
 
 # Copy song info binary
-COPY --from=builder /app/target/release/maimai-song-info /usr/local/bin/maimai-song-info
+COPY --from=builder /app/target/release/song-info-server /usr/local/bin/song-info-server
 
 # Create data directory
 RUN mkdir -p /app/data
 
 EXPOSE 3001
 
-CMD ["maimai-song-info"]
+CMD ["song-info-server"]
 
 # ============================================
 # Target: maimai-record-collector-server
