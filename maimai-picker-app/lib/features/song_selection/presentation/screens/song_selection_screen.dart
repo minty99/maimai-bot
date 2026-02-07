@@ -311,33 +311,6 @@ class _SongSelectionScreenState extends State<SongSelectionScreen> {
                           context.read<LevelRangeCubit>().decrementGap(),
                       onGapIncrement: () =>
                           context.read<LevelRangeCubit>().incrementGap(),
-                      trailing: SizedBox(
-                        width: 42,
-                        height: 42,
-                        child: IconButton(
-                          style: IconButton.styleFrom(
-                            backgroundColor: AppColors.surfaceElevated,
-                            padding: EdgeInsets.zero,
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(12),
-                              side: BorderSide(
-                                color: AppColors.accentPrimary.withValues(
-                                  alpha: 0.3,
-                                ),
-                              ),
-                            ),
-                          ),
-                          onPressed: () => Navigator.pushNamed(
-                            context,
-                            SettingsScreen.routeName,
-                          ),
-                          icon: const Icon(
-                            Icons.settings_rounded,
-                            size: 18,
-                            color: AppColors.textSecondary,
-                          ),
-                        ),
-                      ),
                     );
                   },
                 ),
@@ -380,14 +353,48 @@ class _SongSelectionScreenState extends State<SongSelectionScreen> {
                 ),
                 const SizedBox(height: AppSpacing.sm),
 
-                // ── Bottom: Full-width RANDOM button ──
-                BlocBuilder<SongCubit, SongState>(
-                  builder: (context, songState) {
-                    return RandomButton(
-                      isLoading: songState is SongLoading,
-                      onPressed: _fetchRandomSong,
-                    );
-                  },
+                // ── Bottom: RANDOM button + settings gear ──
+                Row(
+                  children: [
+                    Expanded(
+                      child: BlocBuilder<SongCubit, SongState>(
+                        builder: (context, songState) {
+                          return RandomButton(
+                            isLoading: songState is SongLoading,
+                            onPressed: _fetchRandomSong,
+                          );
+                        },
+                      ),
+                    ),
+                    const SizedBox(width: AppSpacing.sm),
+                    SizedBox(
+                      width: 48,
+                      height: 48,
+                      child: IconButton(
+                        style: IconButton.styleFrom(
+                          backgroundColor: AppColors.surfaceElevated,
+                          padding: EdgeInsets.zero,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(14),
+                            side: BorderSide(
+                              color: AppColors.accentPrimary.withValues(
+                                alpha: 0.3,
+                              ),
+                            ),
+                          ),
+                        ),
+                        onPressed: () => Navigator.pushNamed(
+                          context,
+                          SettingsScreen.routeName,
+                        ),
+                        icon: const Icon(
+                          Icons.settings_rounded,
+                          size: 20,
+                          color: AppColors.textSecondary,
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
               ],
             ),

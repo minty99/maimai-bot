@@ -23,7 +23,6 @@ class LevelGapControls extends StatelessWidget {
     required this.onLevelIncrement,
     required this.onGapDecrement,
     required this.onGapIncrement,
-    this.trailing,
   });
 
   final String rangeStart;
@@ -34,22 +33,15 @@ class LevelGapControls extends StatelessWidget {
   final VoidCallback onGapDecrement;
   final VoidCallback onGapIncrement;
 
-  /// Optional widget placed at the right end of the range row
-  /// (e.g. a settings icon button).
-  final Widget? trailing;
-
   @override
   Widget build(BuildContext context) {
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
-        // ── Primary row: [ ◀ ]  12.5 ~ 13.0  [ ▶ ]  [trailing] ──
+        // ── Primary row: [ - ]  12.5 ~ 13.0  [ + ] ──
         Row(
           children: [
-            _LevelArrow(
-              icon: Icons.chevron_left_rounded,
-              onTap: onLevelDecrement,
-            ),
+            _LevelArrow(icon: Icons.remove_rounded, onTap: onLevelDecrement),
             Expanded(
               child: Center(
                 child: Text.rich(
@@ -81,14 +73,7 @@ class LevelGapControls extends StatelessWidget {
                 ),
               ),
             ),
-            _LevelArrow(
-              icon: Icons.chevron_right_rounded,
-              onTap: onLevelIncrement,
-            ),
-            if (trailing != null) ...[
-              const SizedBox(width: AppSpacing.sm),
-              trailing!,
-            ],
+            _LevelArrow(icon: Icons.add_rounded, onTap: onLevelIncrement),
           ],
         ),
         const SizedBox(height: AppSpacing.xs),
@@ -152,15 +137,6 @@ class _GapStepper extends StatelessWidget {
     return Row(
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
-        Text(
-          'GAP',
-          style: AppTypography.textTheme.labelSmall?.copyWith(
-            color: AppColors.textMuted,
-            fontSize: 10,
-            letterSpacing: 0.8,
-          ),
-        ),
-        const SizedBox(width: 6),
         _SmallButton(icon: Icons.remove_rounded, onTap: onDecrement),
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 10),
