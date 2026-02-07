@@ -21,12 +21,12 @@ pub(crate) fn embed_maintenance() -> CreateEmbed {
         .color(EMBED_COLOR_MAINTENANCE)
 }
 
-pub(crate) fn embed_backend_unavailable() -> CreateEmbed {
+pub(crate) fn embed_record_collector_unavailable() -> CreateEmbed {
     CreateEmbed::new()
-        .title("⚠️ Backend Starting Up")
+        .title("⚠️ Record Collector Starting Up")
         .description(
             "Bot started successfully! Couldn't fetch player data right now. \
-            I'll monitor for new plays once the backend is ready.",
+            I'll monitor for new plays once the record collector is ready.",
         )
         .color(EMBED_COLOR_WARNING)
 }

@@ -16,7 +16,6 @@ eyre = { workspace = true }
 maimai-db = { path = "../crates/maimai-db" }
 maimai-http-client = { path = "../crates/http-client" }
 maimai-parsers = { path = "../crates/maimai-parsers" }
-maimai-songdb = { path = "../crates/maimai-songdb" }
 models = { version = "0.1.0", path = "../crates/models" }
 rand = { workspace = true }
 reqwest = { workspace = true, features = ["json"] }

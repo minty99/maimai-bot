@@ -5,7 +5,7 @@ use serenity::builder::{CreateEmbed, CreateMessage};
 use tracing::{info, warn};
 
 use super::client::{PlayerDataResult, RecordCollectorClient};
-use super::embeds::{embed_backend_unavailable, embed_base, embed_maintenance};
+use super::embeds::{embed_base, embed_maintenance, embed_record_collector_unavailable};
 
 pub(crate) async fn send_startup_dm(
     http: &serenity::Http,
@@ -23,12 +23,12 @@ pub(crate) async fn send_startup_dm(
             embed_startup(&player_data)
         }
         PlayerDataResult::Maintenance => {
-            info!("Backend reported maintenance window");
+            info!("Record collector reported maintenance window");
             embed_maintenance()
         }
         PlayerDataResult::Unavailable(msg) => {
-            warn!("Backend unavailable: {msg}");
-            embed_backend_unavailable()
+            warn!("Record collector unavailable: {msg}");
+            embed_record_collector_unavailable()
         }
     };
 

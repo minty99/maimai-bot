@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 use tokio::time::{sleep, Duration};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct BackendErrorResponse {
+pub struct RecordCollectorErrorResponse {
     pub message: String,
     pub code: String,
     #[serde(default)]
@@ -90,7 +90,7 @@ impl RecordCollectorClient {
                 }
                 Ok(resp) => {
                     let status = resp.status();
-                    if let Ok(error_body) = resp.json::<BackendErrorResponse>().await {
+                    if let Ok(error_body) = resp.json::<RecordCollectorErrorResponse>().await {
                         if error_body.maintenance == Some(true) {
                             return PlayerDataResult::Maintenance;
                         }
@@ -161,7 +161,7 @@ impl RecordCollectorClient {
         loop {
             match self.client.get(&url).send().await {
                 Ok(resp) if resp.status().is_success() => {
-                    tracing::info!("Backend is ready");
+                    tracing::info!("Record collector is ready");
                     return Ok(());
                 }
                 Ok(resp) => {
@@ -169,7 +169,7 @@ impl RecordCollectorClient {
                     if attempt < MAX_RETRIES {
                         let wait_ms = 1000 * 2_u64.pow(attempt);
                         tracing::warn!(
-                            "Backend not ready (HTTP {}), retrying in {}ms (attempt {}/{})",
+                            "Record collector not ready (HTTP {}), retrying in {}ms (attempt {}/{})",
                             status,
                             wait_ms,
                             attempt + 1,
@@ -180,7 +180,7 @@ impl RecordCollectorClient {
                         continue;
                     }
                     return Err(eyre::eyre!(
-                        "Backend failed to become ready after {} retries (HTTP {})",
+                        "Record collector failed to become ready after {} retries (HTTP {})",
                         MAX_RETRIES,
                         status
                     ));
@@ -189,7 +189,7 @@ impl RecordCollectorClient {
                     if attempt < MAX_RETRIES {
                         let wait_ms = 1000 * 2_u64.pow(attempt);
                         tracing::warn!(
-                            "Backend connection failed: {}, retrying in {}ms (attempt {}/{})",
+                            "Record collector connection failed: {}, retrying in {}ms (attempt {}/{})",
                             e,
                             wait_ms,
                             attempt + 1,
@@ -200,7 +200,7 @@ impl RecordCollectorClient {
                         continue;
                     }
                     return Err(eyre::eyre!(
-                        "Backend failed to become ready after {} retries: {}",
+                        "Record collector failed to become ready after {} retries: {}",
                         MAX_RETRIES,
                         e
                     ));

@@ -10,12 +10,12 @@ use maimai_http_client::{is_maintenance_window_now, MaimaiClient};
 use maimai_parsers::{parse_player_data_html, parse_recent_html, parse_scores_html};
 use models::{config::AppConfig, ParsedPlayRecord, ParsedPlayerData};
 
-use crate::config::BackendConfig;
+use crate::config::RecordCollectorConfig;
 
 const STATE_KEY_TOTAL_PLAY_COUNT: &str = "player.total_play_count";
 const STATE_KEY_RATING: &str = "player.rating";
 
-pub async fn startup_sync(db_pool: &SqlitePool, config: &BackendConfig) -> Result<()> {
+pub async fn startup_sync(db_pool: &SqlitePool, config: &RecordCollectorConfig) -> Result<()> {
     info!("Starting startup sync...");
 
     if is_maintenance_window_now() {
@@ -23,7 +23,7 @@ pub async fn startup_sync(db_pool: &SqlitePool, config: &BackendConfig) -> Resul
         return Ok(());
     }
 
-    let app_config = backend_config_to_app_config(config);
+    let app_config = to_app_config(config);
     let mut client = MaimaiClient::new(&app_config).wrap_err("create HTTP client")?;
     client
         .ensure_logged_in()
@@ -99,7 +99,7 @@ pub async fn startup_sync(db_pool: &SqlitePool, config: &BackendConfig) -> Resul
     Ok(())
 }
 
-fn backend_config_to_app_config(config: &BackendConfig) -> AppConfig {
+fn to_app_config(config: &RecordCollectorConfig) -> AppConfig {
     use std::path::PathBuf;
 
     let data_dir = PathBuf::from(&config.data_dir);

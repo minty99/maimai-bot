@@ -49,7 +49,7 @@ async fn main() -> eyre::Result<()> {
         RecordCollectorClient::new(config.record_collector_server_url.clone())?;
     let song_info_client = SongInfoClient::new(config.song_info_server_url.clone())?;
 
-    info!("Waiting for backend to be ready...");
+    info!("Waiting for record collector server to be ready...");
     record_collector_client.health_check_with_retry().await?;
 
     let bot_data = BotData {
