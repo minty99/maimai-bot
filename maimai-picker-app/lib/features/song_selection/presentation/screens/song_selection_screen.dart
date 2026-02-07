@@ -580,6 +580,15 @@ class _LoadedState extends StatelessWidget {
     };
   }
 
+  String _formatInternalWithUserLevel() {
+    final internal = song.internalLevel?.toStringAsFixed(1) ?? '--';
+    final ul = song.userLevel;
+    if (ul != null && ul.isNotEmpty) {
+      return '$internal ($ul)';
+    }
+    return internal;
+  }
+
   String _formatAchievement() {
     if (song.achievementX10000 == null) return '--';
     final percent = song.achievementX10000! / 10000.0;
@@ -706,7 +715,7 @@ class _LoadedState extends StatelessWidget {
                         size: 18,
                       ),
                       Text(
-                        song.internalLevel?.toStringAsFixed(1) ?? '--',
+                        _formatInternalWithUserLevel(),
                         style: theme.textTheme.titleSmall?.copyWith(
                           color: colorScheme.primary,
                           fontWeight: FontWeight.bold,

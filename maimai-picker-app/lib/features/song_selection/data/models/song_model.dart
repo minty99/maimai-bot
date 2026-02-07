@@ -12,6 +12,7 @@ class SongModel extends Equatable {
     required this.diffCategory,
     required this.level,
     required this.imageUrl,
+    this.userLevel,
     this.achievementX10000,
     this.rank,
     this.fc,
@@ -39,6 +40,9 @@ class SongModel extends Equatable {
 
   /// Full jacket image URL
   final String imageUrl;
+
+  /// User-assigned level label (e.g., "12+", "13")
+  final String? userLevel;
 
   /// Achievement score as integer (percent * 10000)
   /// Null if not played yet
@@ -81,6 +85,7 @@ class SongModel extends Equatable {
     diffCategory,
     level,
     imageUrl,
+    userLevel,
     achievementX10000,
     rank,
     fc,

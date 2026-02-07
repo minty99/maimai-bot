@@ -115,6 +115,7 @@ class SongRepositoryImpl implements SongRepository {
     final diffCategory = selectedSheet['difficulty'] as String? ?? '';
     final level = selectedSheet['level'] as String? ?? '';
     final internalLevel = (selectedSheet['internal_level'] as num?)?.toDouble();
+    final userLevel = selectedSheet['user_level'] as String?;
 
     final imageUrl = (imageName != null && imageName.isNotEmpty)
         ? '$songInfoServerUrl/api/cover/$imageName'
@@ -136,6 +137,7 @@ class SongRepositoryImpl implements SongRepository {
       diffCategory: diffCategory,
       level: level,
       imageUrl: imageUrl,
+      userLevel: userLevel,
       internalLevel: internalLevel,
       version: version,
       // Personal data from record-collector-server (null if not available)
