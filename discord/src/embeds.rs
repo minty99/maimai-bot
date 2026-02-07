@@ -1,3 +1,4 @@
+use models::{ChartType, DifficultyCategory};
 use poise::serenity_prelude as serenity;
 use serenity::builder::CreateEmbed;
 
@@ -42,8 +43,8 @@ pub(crate) struct RecentRecordView {
     pub(crate) track: Option<i64>,
     pub(crate) played_at: Option<String>,
     pub(crate) title: String,
-    pub(crate) chart_type: String,
-    pub(crate) diff_category: Option<String>,
+    pub(crate) chart_type: ChartType,
+    pub(crate) diff_category: Option<DifficultyCategory>,
     pub(crate) level: Option<String>,
     pub(crate) internal_level: Option<f32>,
     pub(crate) rating_points: Option<u32>,
@@ -56,7 +57,7 @@ pub(crate) struct RecentRecordView {
 #[derive(Debug, Clone)]
 pub(crate) struct TodayDetailRowView {
     pub(crate) title: String,
-    pub(crate) chart_type: String,
+    pub(crate) chart_type: ChartType,
     pub(crate) achievement_percent: Option<f64>,
     pub(crate) rating_points: Option<u32>,
     pub(crate) achievement_new_record: bool,
@@ -123,7 +124,10 @@ pub(crate) fn build_mai_recent_embeds(
             .as_deref()
             .map(normalize_playlog_rank)
             .unwrap_or("N/A");
-        let diff = record.diff_category.as_deref().unwrap_or("Unknown");
+        let diff = record
+            .diff_category
+            .map(|d| d.as_str())
+            .unwrap_or("Unknown");
         let level = record.level.as_deref().unwrap_or("N/A");
         let level = format_level_with_internal(level, record.internal_level);
         let rating = format_rating_points_suffix(record.rating_points);

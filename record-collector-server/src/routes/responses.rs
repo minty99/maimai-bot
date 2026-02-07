@@ -1,14 +1,26 @@
-use crate::error::Result;
+use std::str::FromStr;
+
+use crate::error::{AppError, Result};
 use crate::song_info_client::{SongInfoClient, SongMetadata};
-use models::{PlayRecord, ScoreEntry};
+use models::{ChartType, DifficultyCategory, PlayRecord, ScoreEntry};
 pub use models::{PlayRecordResponse, ScoreResponse};
 
 pub async fn score_response_from_entry(
     entry: ScoreEntry,
     song_info_client: &SongInfoClient,
 ) -> Result<ScoreResponse> {
+    let chart_type = ChartType::from_str(&entry.chart_type).map_err(|e| {
+        AppError::InternalError(format!("invalid chart_type '{}': {}", entry.chart_type, e))
+    })?;
+    let diff_category = DifficultyCategory::from_str(&entry.diff_category).map_err(|e| {
+        AppError::InternalError(format!(
+            "invalid diff_category '{}': {}",
+            entry.diff_category, e
+        ))
+    })?;
+
     let metadata = song_info_client
-        .get_song_metadata(&entry.title, &entry.chart_type, &entry.diff_category)
+        .get_song_metadata(&entry.title, chart_type.as_str(), diff_category.as_str())
         .await?;
 
     let effective_internal = metadata
@@ -31,8 +43,8 @@ pub async fn score_response_from_entry(
 
     Ok(ScoreResponse {
         title: entry.title,
-        chart_type: entry.chart_type,
-        diff_category: entry.diff_category,
+        chart_type,
+        diff_category,
         level: entry.level,
         achievement_x10000: entry.achievement_x10000,
         rank: entry.rank,
@@ -53,12 +65,26 @@ pub async fn play_record_response_from_record(
     record: PlayRecord,
     song_info_client: &SongInfoClient,
 ) -> Result<PlayRecordResponse> {
-    let diff_category = record.diff_category.as_deref().unwrap_or("");
-    let metadata = if diff_category.is_empty() {
+    let chart_type = ChartType::from_str(&record.chart_type).map_err(|e| {
+        AppError::InternalError(format!("invalid chart_type '{}': {}", record.chart_type, e))
+    })?;
+    let diff_category = record
+        .diff_category
+        .as_deref()
+        .filter(|s| !s.is_empty())
+        .map(|s| {
+            DifficultyCategory::from_str(s).map_err(|e| {
+                AppError::InternalError(format!("invalid diff_category '{}': {}", s, e))
+            })
+        })
+        .transpose()?;
+
+    let diff_category_str = diff_category.map(|d| d.as_str()).unwrap_or("");
+    let metadata = if diff_category_str.is_empty() {
         SongMetadata::empty()
     } else {
         song_info_client
-            .get_song_metadata(&record.title, &record.chart_type, diff_category)
+            .get_song_metadata(&record.title, chart_type.as_str(), diff_category_str)
             .await?
     };
 
@@ -88,8 +114,8 @@ pub async fn play_record_response_from_record(
         played_at: record.played_at,
         track: record.track,
         title: record.title,
-        chart_type: record.chart_type,
-        diff_category: record.diff_category,
+        chart_type,
+        diff_category,
         level: record.level,
         achievement_x10000: record.achievement_x10000,
         score_rank: record.score_rank,

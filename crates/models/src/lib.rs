@@ -32,6 +32,13 @@ impl ChartType {
         self as u8
     }
 
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Std => "STD",
+            Self::Dx => "DX",
+        }
+    }
+
     /// Parse from lowercase songdb JSON value ("std", "dx").
     pub fn from_lowercase(s: &str) -> Option<Self> {
         match s.trim().to_ascii_lowercase().as_str() {
@@ -436,8 +443,8 @@ pub struct PlayRecord {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ScoreResponse {
     pub title: String,
-    pub chart_type: String,
-    pub diff_category: String,
+    pub chart_type: ChartType,
+    pub diff_category: DifficultyCategory,
     pub level: String,
     pub achievement_x10000: Option<i64>,
     pub rank: Option<String>,
@@ -459,8 +466,8 @@ pub struct PlayRecordResponse {
     pub played_at: Option<String>,
     pub track: Option<i32>,
     pub title: String,
-    pub chart_type: String,
-    pub diff_category: Option<String>,
+    pub chart_type: ChartType,
+    pub diff_category: Option<DifficultyCategory>,
     pub level: Option<String>,
     pub achievement_x10000: Option<i64>,
     pub score_rank: Option<String>,

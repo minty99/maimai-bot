@@ -2,6 +2,7 @@ use axum::{
     extract::{Path, Query, State},
     Json,
 };
+use models::{ChartType, DifficultyCategory};
 use serde::Serialize;
 use std::collections::HashMap;
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -11,8 +12,8 @@ use crate::state::AppState;
 
 #[derive(Serialize)]
 pub struct SongSheetResponse {
-    chart_type: String,
-    difficulty: String,
+    chart_type: ChartType,
+    difficulty: DifficultyCategory,
     level: String,
     internal_level: Option<f32>,
     user_level: Option<String>,
@@ -65,9 +66,16 @@ pub async fn random_song_by_level(
                 continue;
             }
 
+            let Some(chart_type) = ChartType::from_lowercase(&sheet.sheet_type) else {
+                continue;
+            };
+            let Some(difficulty) = DifficultyCategory::from_lowercase(&sheet.difficulty) else {
+                continue;
+            };
+
             sheets.push(SongSheetResponse {
-                chart_type: sheet.sheet_type.clone(),
-                difficulty: sheet.difficulty.clone(),
+                chart_type,
+                difficulty,
                 level: sheet.level.clone(),
                 internal_level,
                 user_level: sheet.user_level.clone(),

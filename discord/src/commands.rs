@@ -477,8 +477,8 @@ async fn build_mai_rating_embeds(
     struct RatedRow {
         bucket: String,
         title: String,
-        chart_type: String,
-        diff_category: String,
+        chart_type: models::ChartType,
+        diff_category: models::DifficultyCategory,
         level: String,
         internal_level: f32,
         achievement_percent: f64,
