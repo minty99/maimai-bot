@@ -7,6 +7,7 @@ pub struct BackendConfig {
     pub port: u16,
     pub database_url: String,
     pub data_dir: String,
+    pub song_info_server_url: String,
 }
 
 impl BackendConfig {
@@ -21,6 +22,8 @@ impl BackendConfig {
         let database_url =
             std::env::var("DATABASE_URL").wrap_err("missing env var: DATABASE_URL")?;
         let data_dir = std::env::var("DATA_DIR").unwrap_or_else(|_| "data".to_string());
+        let song_info_server_url = std::env::var("SONG_INFO_SERVER_URL")
+            .unwrap_or_else(|_| "http://localhost:3001".to_string());
 
         Ok(Self {
             sega_id,
@@ -28,6 +31,7 @@ impl BackendConfig {
             port,
             database_url,
             data_dir,
+            song_info_server_url,
         })
     }
 }

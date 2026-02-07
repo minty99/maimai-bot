@@ -10,7 +10,7 @@ path = "src/main.rs"
 [dependencies]
 dotenvy = { workspace = true }
 eyre = { workspace = true }
-models = { path = "../crates/models" }
+models = { version = "0.1.0", path = "../crates/models" }
 ordered-float = { workspace = true }
 poise = { workspace = true }
 reqwest = { workspace = true }

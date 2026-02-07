@@ -2,11 +2,13 @@ mod config;
 mod error;
 mod rating;
 mod routes;
+mod song_info_client;
 mod state;
 mod tasks;
 
 use eyre::WrapErr;
 use std::net::SocketAddr;
+use std::time::Duration;
 use tokio::net::TcpListener;
 use tracing_subscriber::EnvFilter;
 
@@ -40,6 +42,11 @@ async fn main() -> eyre::Result<()> {
         .await
         .wrap_err("Failed to run database migrations")?;
     tracing::info!("Database migrations completed successfully");
+
+    let http_client = reqwest::Client::builder()
+        .timeout(Duration::from_secs(30))
+        .build()
+        .wrap_err("Failed to build http client")?;
 
     // Attempt startup sync, but allow backend to start even if it fails
     // (useful for testing with invalid credentials)
@@ -79,6 +86,7 @@ async fn main() -> eyre::Result<()> {
     let app_state = state::AppState {
         db_pool,
         config: config.clone(),
+        http_client,
         song_data: std::sync::Arc::new(std::sync::RwLock::new(song_data)),
         song_data_base_path,
     };

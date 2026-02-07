@@ -1541,32 +1541,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c41e0c4fef86961ac6d6f8a82609f55f31b05e4fce149ac5710e439df7619ba4"
 
 [[package]]
-name = "maimai-backend"
-version = "0.1.0"
-dependencies = [
- "axum",
- "chrono",
- "chrono-tz",
- "dotenvy",
- "eyre",
- "maimai-db",
- "maimai-http-client",
- "maimai-parsers",
- "maimai-songdb",
- "models",
- "rand 0.8.5",
- "reqwest",
- "serde",
- "serde_json",
- "sqlx",
- "time",
- "tokio",
- "tower-http",
- "tracing",
- "tracing-subscriber",
-]
-
-[[package]]
 name = "maimai-db"
 version = "0.1.0"
 dependencies = [
@@ -2277,6 +2251,33 @@ dependencies = [
 ]
 
 [[package]]
+name = "record-collector-server"
+version = "0.1.0"
+dependencies = [
+ "axum",
+ "chrono",
+ "chrono-tz",
+ "dotenvy",
+ "eyre",
+ "maimai-db",
+ "maimai-http-client",
+ "maimai-parsers",
+ "maimai-songdb",
+ "models",
+ "rand 0.8.5",
+ "reqwest",
+ "serde",
+ "serde_json",
+ "sqlx",
+ "time",
+ "tokio",
+ "tower-http",
+ "tracing",
+ "tracing-subscriber",
+ "urlencoding",
+]
+
+[[package]]
 name = "redox_syscall"
 version = "0.5.18"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2846,6 +2847,24 @@ checksum = "86f4aa3ad99f2088c990dfa82d367e19cb29268ed67c574d10d0a4bfe71f07e0"
 dependencies = [
  "libc",
  "windows-sys 0.60.2",
+]
+
+[[package]]
+name = "song-info-server"
+version = "0.1.0"
+dependencies = [
+ "axum",
+ "dotenvy",
+ "eyre",
+ "maimai-songdb",
+ "models",
+ "serde",
+ "serde_json",
+ "tokio",
+ "tower-http",
+ "tracing",
+ "tracing-subscriber",
+ "urlencoding",
 ]
 
 [[package]]

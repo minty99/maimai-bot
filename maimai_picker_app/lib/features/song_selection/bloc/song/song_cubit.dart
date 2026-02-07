@@ -8,8 +8,8 @@ import 'song_state.dart';
 /// Handles fetching random songs from the repository and emitting
 /// appropriate states (Loading, Loaded, Error, NotFound).
 class SongCubit extends Cubit<SongState> {
-  SongCubit({required SongRepository repository})
-    : _repository = repository,
+  SongCubit({required String songInfoServerUrl})
+    : _repository = SongRepositoryImpl(songInfoServerUrl: songInfoServerUrl),
       super(const SongInitial());
 
   final SongRepository _repository;

@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../../settings/presentation/screens/settings_screen.dart';
+import '../../../settings/bloc/settings/settings_cubit.dart';
 import '../../bloc/hardware_input/hardware_input_cubit.dart';
 import '../../bloc/hardware_input/hardware_input_state.dart';
 import '../../bloc/level_range/level_range_cubit.dart';
@@ -589,6 +590,10 @@ class _LoadedState extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final diffColor = _getDifficultyColor();
+    final settingsState = context.watch<SettingsCubit>().state;
+    final showPersonalData = settingsState.recordCollectorServerUrl
+        .trim()
+        .isNotEmpty;
 
     return LayoutBuilder(
       builder: (context, constraints) {
@@ -724,7 +729,7 @@ class _LoadedState extends StatelessWidget {
                   const SizedBox(height: 8),
 
                   // Achievement + Rank + Badges (compact row)
-                  if (song.achievementX10000 != null) ...[
+                  if (showPersonalData && song.achievementX10000 != null) ...[
                     Row(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
@@ -751,7 +756,8 @@ class _LoadedState extends StatelessWidget {
                   ],
 
                   // FC/Sync Badges
-                  if (song.fc != null || song.sync != null)
+                  if (showPersonalData &&
+                      (song.fc != null || song.sync != null))
                     Wrap(
                       spacing: 8,
                       children: [

@@ -1,10 +1,31 @@
 services:
-  backend:
+  song-info-server:
     build:
       context: .
       dockerfile: Dockerfile
-      target: maimai-backend
-    container_name: maimai-backend
+      target: maimai-song-info
+    container_name: maimai-song-info
+    restart: unless-stopped
+    environment:
+      - SONG_INFO_PORT=3001
+      - SONG_DATA_PATH=/app/data/song_data/data.json
+    volumes:
+      - ./data:/app/data:ro
+    ports:
+      - "3001:3001"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3001/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+  record-collector-server:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: maimai-record-collector
+    container_name: maimai-record-collector
     restart: unless-stopped
     environment:
       - SEGA_ID=${SEGA_ID}
@@ -18,10 +39,11 @@ services:
       - MAIMAI_JP_SEGA_PASSWORD=${MAIMAI_JP_SEGA_PASSWORD}
       - USER_AGENT=${USER_AGENT}
       - GOOGLE_API_KEY=${GOOGLE_API_KEY}
+      - SONG_INFO_SERVER_URL=http://song-info-server:3001
       - RUST_LOG=${RUST_LOG:-info}
     volumes:
       - ./data:/app/data
-      - ./backend/migrations:/app/migrations
+      - ./record-collector-server/migrations:/app/migrations
     ports:
       - "3000:3000"
     healthcheck:
@@ -41,8 +63,11 @@ services:
     environment:
       - DISCORD_BOT_TOKEN=${DISCORD_BOT_TOKEN}
       - DISCORD_USER_ID=${DISCORD_USER_ID}
-      - BACKEND_URL=http://backend:3000
+      - SONG_INFO_SERVER_URL=http://song-info-server:3001
+      - RECORD_COLLECTOR_SERVER_URL=http://record-collector-server:3000
       - RUST_LOG=${RUST_LOG:-info}
     depends_on:
-      backend:
+      song-info-server:
+        condition: service_healthy
+      record-collector-server:
         condition: service_healthy

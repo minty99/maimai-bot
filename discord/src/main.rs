@@ -9,7 +9,7 @@ mod config;
 mod dm;
 mod embeds;
 
-use client::BackendClient;
+use client::{RecordCollectorClient, SongInfoClient};
 use config::DiscordConfig;
 
 #[derive(Debug)]
@@ -17,7 +17,8 @@ pub struct BotData {
     pub config: DiscordConfig,
     pub discord_user_id: serenity::UserId,
     pub discord_http: std::sync::Arc<serenity::Http>,
-    pub backend_client: BackendClient,
+    pub record_collector_client: RecordCollectorClient,
+    pub song_info_client: SongInfoClient,
 }
 
 #[tokio::main]
@@ -44,16 +45,19 @@ async fn main() -> eyre::Result<()> {
             .wrap_err("parse DISCORD_USER_ID")?,
     );
 
-    let backend_client = BackendClient::new(config.backend_url.clone())?;
+    let record_collector_client =
+        RecordCollectorClient::new(config.record_collector_server_url.clone())?;
+    let song_info_client = SongInfoClient::new(config.song_info_server_url.clone())?;
 
     info!("Waiting for backend to be ready...");
-    backend_client.health_check_with_retry().await?;
+    record_collector_client.health_check_with_retry().await?;
 
     let bot_data = BotData {
         config,
         discord_user_id,
         discord_http,
-        backend_client,
+        record_collector_client,
+        song_info_client,
     };
 
     let framework = poise::Framework::builder()
@@ -116,7 +120,7 @@ async fn main() -> eyre::Result<()> {
                 if let Err(e) = dm::send_startup_dm(
                     &bot_data.discord_http,
                     bot_data.discord_user_id,
-                    &bot_data.backend_client,
+                    &bot_data.record_collector_client,
                 )
                 .await
                 {

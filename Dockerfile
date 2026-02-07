@@ -18,16 +18,17 @@ RUN apt-get update && apt-get install -y \
 COPY Cargo.toml ./
 COPY Cargo.lock ./
 COPY crates/ ./crates/
-COPY backend/ ./backend/
+COPY record-collector-server/ ./record-collector-server/
+COPY song-info-server/ ./song-info-server/
 COPY discord/ ./discord/
 
 # Build entire workspace (both binaries)
 RUN cargo build --release
 
 # ============================================
-# Target: maimai-backend
+# Target: maimai-song-info
 # ============================================
-FROM ubuntu:noble as maimai-backend
+FROM ubuntu:noble as maimai-song-info
 
 RUN apt-get update && apt-get install -y \
     ca-certificates \
@@ -37,18 +38,41 @@ RUN apt-get update && apt-get install -y \
 
 WORKDIR /app
 
-# Copy backend binary
-COPY --from=builder /app/target/release/maimai-backend /usr/local/bin/maimai-backend
+# Copy song info binary
+COPY --from=builder /app/target/release/maimai-song-info /usr/local/bin/maimai-song-info
+
+# Create data directory
+RUN mkdir -p /app/data
+
+EXPOSE 3001
+
+CMD ["maimai-song-info"]
+
+# ============================================
+# Target: maimai-record-collector
+# ============================================
+FROM ubuntu:noble as maimai-record-collector
+
+RUN apt-get update && apt-get install -y \
+    ca-certificates \
+    libssl3 \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+# Copy record collector binary
+COPY --from=builder /app/target/release/maimai-record-collector /usr/local/bin/maimai-record-collector
 
 # Copy migrations
-COPY backend/migrations /app/migrations
+COPY record-collector-server/migrations /app/migrations
 
 # Create data directory
 RUN mkdir -p /app/data
 
 EXPOSE 3000
 
-CMD ["maimai-backend"]
+CMD ["maimai-record-collector"]
 
 # ============================================
 # Target: maimai-discord

@@ -1,6 +1,7 @@
 use crate::config::BackendConfig;
 use maimai_http_client::MaimaiClient;
 use models::SongDataIndex;
+use reqwest::Client;
 use sqlx::SqlitePool;
 use std::path::PathBuf;
 use std::sync::{Arc, RwLock};
@@ -9,6 +10,7 @@ use std::sync::{Arc, RwLock};
 pub struct AppState {
     pub db_pool: SqlitePool,
     pub config: BackendConfig,
+    pub http_client: Client,
     pub song_data: Arc<RwLock<Arc<SongDataIndex>>>,
     pub song_data_base_path: PathBuf,
 }

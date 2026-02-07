@@ -1,0 +1,18 @@
+[package]
+name = "song-info-server"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+axum.workspace = true
+tokio = { workspace = true, features = ["rt-multi-thread", "macros", "signal"] }
+tower-http = { workspace = true, features = ["trace", "cors"] }
+tracing.workspace = true
+tracing-subscriber = { workspace = true, features = ["env-filter"] }
+serde.workspace = true
+serde_json.workspace = true
+eyre.workspace = true
+dotenvy.workspace = true
+maimai-songdb = { path = "../crates/maimai-songdb" }
+models = { path = "../crates/models" }
+urlencoding.workspace = true
