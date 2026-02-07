@@ -143,8 +143,8 @@ cp .env.example .env
 ```
 
 **중요**: Docker Compose는 서비스 이름으로 통신합니다:
-- `SONG_INFO_SERVER_URL=http://song-info-server:3001`
-- `RECORD_COLLECTOR_SERVER_URL=http://record-collector-server:3000`
+- `SONG_INFO_SERVER_URL=http://maimai-song-info-server:3001`
+- `RECORD_COLLECTOR_SERVER_URL=http://maimai-record-collector-server:3000`
 
 #### Docker 빌드 최적화
 
@@ -156,9 +156,9 @@ cp .env.example .env
 
 개별 서비스 빌드:
 ```bash
-docker compose build song-info-server        # song-info-server만 빌드
-docker compose build record-collector-server # record-collector-server만 빌드
-docker compose build personal-discord-bot     # discord만 빌드
+docker compose build maimai-song-info-server         # song-info-server만 빌드
+docker compose build maimai-record-collector-server  # record-collector-server만 빌드
+docker compose build maimai-personal-discord-bot     # discord만 빌드
 docker compose build                         # 모든 서비스 빌드
 ```
 
@@ -171,9 +171,9 @@ docker compose up -d
 #### 로그 확인
 
 ```bash
-docker compose logs -f song-info-server
-docker compose logs -f record-collector-server
-docker compose logs -f personal-discord-bot
+docker compose logs -f maimai-song-info-server
+docker compose logs -f maimai-record-collector-server
+docker compose logs -f maimai-personal-discord-bot
 ```
 
 #### 종료

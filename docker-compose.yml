@@ -1,10 +1,10 @@
 services:
-  song-info-server:
+  maimai-song-info-server:
     build:
       context: .
       dockerfile: Dockerfile
       target: maimai-song-info
-    container_name: maimai-song-info
+    container_name: maimai-song-info-server
     restart: unless-stopped
     environment:
       - SONG_INFO_PORT=3001
@@ -26,12 +26,12 @@ services:
       retries: 3
       start_period: 10s
 
-  record-collector-server:
+  maimai-record-collector-server:
     build:
       context: .
       dockerfile: Dockerfile
       target: record-collector-server
-    container_name: record-collector-server
+    container_name: maimai-record-collector-server
     restart: unless-stopped
     environment:
       - SEGA_ID=${SEGA_ID}
@@ -39,7 +39,7 @@ services:
       - RECORD_COLLECTOR_PORT=3000
       - DATA_DIR=${DATA_DIR:-/app/data}
       - DATABASE_URL=sqlite:/app/data/maimai.sqlite3
-      - SONG_INFO_SERVER_URL=http://song-info-server:3001
+      - SONG_INFO_SERVER_URL=http://maimai-song-info-server:3001
       - RUST_LOG=${RUST_LOG:-info}
     volumes:
       - ./data:/app/data
@@ -53,21 +53,21 @@ services:
       retries: 3
       start_period: 10s
 
-  personal-discord-bot:
+  maimai-personal-discord-bot:
     build:
       context: .
       dockerfile: Dockerfile
       target: personal-discord-bot
-    container_name: personal-discord-bot
+    container_name: maimai-personal-discord-bot
     restart: unless-stopped
     environment:
       - DISCORD_BOT_TOKEN=${DISCORD_BOT_TOKEN}
       - DISCORD_USER_ID=${DISCORD_USER_ID}
-      - SONG_INFO_SERVER_URL=http://song-info-server:3001
-      - RECORD_COLLECTOR_SERVER_URL=http://record-collector-server:3000
+      - SONG_INFO_SERVER_URL=http://maimai-song-info-server:3001
+      - RECORD_COLLECTOR_SERVER_URL=http://maimai-record-collector-server:3000
       - RUST_LOG=${RUST_LOG:-info}
     depends_on:
-      song-info-server:
+      maimai-song-info-server:
         condition: service_healthy
-      record-collector-server:
+      maimai-record-collector-server:
         condition: service_healthy
