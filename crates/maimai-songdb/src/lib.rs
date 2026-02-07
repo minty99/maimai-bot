@@ -358,11 +358,6 @@ fn extract_song(raw_song: &RawSong) -> SongRow {
 
 fn extract_sheets(raw_song: &RawSong) -> Vec<SheetRow> {
     let song_id = derive_song_id(raw_song);
-    let utage_type = raw_song
-        .kanji
-        .as_deref()
-        .or(raw_song.utage_type.as_deref())
-        .unwrap_or("");
 
     let candidates = [
         ("dx", "basic", raw_song.dx_lev_bas.as_deref()),
@@ -375,22 +370,16 @@ fn extract_sheets(raw_song: &RawSong) -> Vec<SheetRow> {
         ("std", "expert", raw_song.lev_exp.as_deref()),
         ("std", "master", raw_song.lev_mas.as_deref()),
         ("std", "remaster", raw_song.lev_remas.as_deref()),
-        ("utage", "utage", raw_song.lev_utage.as_deref()),
     ];
 
     candidates
         .iter()
         .filter_map(|(sheet_type, difficulty, level)| {
             let level = normalize_level(*level)?;
-            let difficulty = if *sheet_type == "utage" {
-                format!("【{}】", utage_type)
-            } else {
-                difficulty.to_string()
-            };
             Some(SheetRow {
                 song_id: song_id.clone(),
                 sheet_type: sheet_type.to_string(),
-                difficulty,
+                difficulty: difficulty.to_string(),
                 level,
             })
         })
@@ -727,16 +716,12 @@ mod tests {
     }
 
     #[test]
-    fn extracts_sheets_with_utage_type() {
+    fn skips_utage_sheets() {
         let mut raw_song = raw_song_stub();
         raw_song.lev_utage = Some("14".to_string());
         raw_song.kanji = Some("協奏曲".to_string());
         let sheets = extract_sheets(&raw_song);
-        let utage_sheet = sheets.iter().find(|s| s.sheet_type == "utage");
-        assert!(utage_sheet.is_some());
-        let utage = utage_sheet.unwrap();
-        assert_eq!(utage.difficulty, "【協奏曲】");
-        assert_eq!(utage.level, "14");
+        assert!(sheets.is_empty());
     }
 
     #[test]
