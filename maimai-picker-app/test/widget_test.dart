@@ -1,9 +1,9 @@
-// Basic widget test for maimai randomizer app.
+// Basic widget test for maimai picker app.
 
-import 'package:flutter_maimai_randomizer/features/settings/bloc/settings/settings_cubit.dart';
+import 'package:maimai_picker_app/features/settings/bloc/settings/settings_cubit.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:flutter_maimai_randomizer/main.dart';
+import 'package:maimai_picker_app/main.dart';
 
 void main() {
   testWidgets('App starts and shows song selection screen', (
@@ -13,7 +13,7 @@ void main() {
     final settingsCubit = SettingsCubit();
 
     // Build our app and trigger a frame.
-    await tester.pumpWidget(MaimaiRandomizerApp(settingsCubit: settingsCubit));
+    await tester.pumpWidget(MaimaiPickerApp(settingsCubit: settingsCubit));
 
     // Verify that the app bar shows the correct title.
     expect(find.text('maimai picker'), findsOneWidget);

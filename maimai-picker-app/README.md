@@ -1,4 +1,4 @@
-# Maimai DX Song Randomizer
+# maimai picker
 
 Flutter app for randomly selecting maimai DX songs by internal level range. Designed for glove-friendly interaction with physical button controls.
 
@@ -28,7 +28,7 @@ Flutter app for randomly selecting maimai DX songs by internal level range. Desi
 
 1. Install dependencies:
 ```bash
-cd flutter_maimai_randomizer
+cd maimai-picker-app
 flutter pub get
 ```
 

@@ -17,12 +17,12 @@ void main() async {
   final settingsCubit = SettingsCubit();
   await settingsCubit.initialize();
 
-  runApp(MaimaiRandomizerApp(settingsCubit: settingsCubit));
+  runApp(MaimaiPickerApp(settingsCubit: settingsCubit));
 }
 
 /// Root application widget with BLoC providers.
-class MaimaiRandomizerApp extends StatelessWidget {
-  const MaimaiRandomizerApp({super.key, required this.settingsCubit});
+class MaimaiPickerApp extends StatelessWidget {
+  const MaimaiPickerApp({super.key, required this.settingsCubit});
 
   final SettingsCubit settingsCubit;
 
