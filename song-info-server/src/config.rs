@@ -12,8 +12,8 @@ impl Config {
             .unwrap_or_else(|_| "3001".to_string())
             .parse::<u16>()
             .wrap_err("SONG_INFO_PORT must be a valid u16")?;
-        let song_data_path = std::env::var("SONG_DATA_PATH")
-            .unwrap_or_else(|_| "data/song_data/data.json".to_string());
+        let song_data_path =
+            std::env::var("SONG_DATA_PATH").unwrap_or_else(|_| "data/song_data".to_string());
 
         Ok(Self {
             port,

@@ -1,5 +1,6 @@
 use axum::{extract::State, http::StatusCode, response::IntoResponse, Json};
 use serde::Serialize;
+use std::sync::atomic::Ordering;
 
 use crate::state::AppState;
 
@@ -21,7 +22,8 @@ pub async fn health() -> impl IntoResponse {
 }
 
 pub async fn ready(State(state): State<AppState>) -> impl IntoResponse {
-    let song_data_available = state.song_data.read().is_ok() && state.song_data_loaded;
+    let song_data_available =
+        state.song_data.read().is_ok() && state.song_data_loaded.load(Ordering::Relaxed);
 
     if song_data_available {
         (

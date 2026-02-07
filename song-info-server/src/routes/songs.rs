@@ -41,8 +41,12 @@ pub async fn random_song_by_level(
     let max_level = parse_level_param(&params, "max_level")?;
 
     let mut candidates = Vec::new();
+    let song_data_root = state
+        .song_data_root
+        .read()
+        .map_err(|_| AppError::IoError("Failed to read song data".to_string()))?;
 
-    for song in state.song_data_root.iter() {
+    for song in song_data_root.iter() {
         let mut sheets = Vec::new();
 
         for sheet in &song.sheets {
@@ -123,7 +127,12 @@ pub async fn get_song_metadata(
         .into_owned();
 
     // Search for matching song in song_data_root
-    for song in state.song_data_root.iter() {
+    let song_data_root = state
+        .song_data_root
+        .read()
+        .map_err(|_| AppError::IoError("Failed to read song data".to_string()))?;
+
+    for song in song_data_root.iter() {
         if song.title.eq_ignore_ascii_case(&title) {
             // Found matching song, now search for matching sheet
             for sheet in &song.sheets {
