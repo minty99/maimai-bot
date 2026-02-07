@@ -1,6 +1,7 @@
 use eyre::{ContextCompat, WrapErr};
 use image::imageops::FilterType;
 use image::{DynamicImage, GenericImageView};
+use models::{ChartType, DifficultyCategory, SongDataRoot};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::HashMap;
@@ -28,8 +29,8 @@ static USER_TIER_CONFIG: LazyLock<UserTierConfig> = LazyLock::new(|| {
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct UserTierKey {
     pub title: String,
-    pub chart_type: String,
-    pub difficulty: String,
+    pub chart_type: ChartType,
+    pub difficulty: DifficultyCategory,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -43,7 +44,9 @@ impl Display for UserTierKey {
         write!(
             f,
             "{} ({}, {})",
-            self.title, self.chart_type, self.difficulty
+            self.title,
+            self.chart_type,
+            self.difficulty.as_str()
         )
     }
 }
@@ -101,7 +104,7 @@ async fn fetch_user_tier_map_for_sheet(
     spreadsheet_id: &str,
     sheet_gid: i64,
     internal_level: &str,
-    song_data: &models::SongDataRoot,
+    song_data: &SongDataRoot,
     cover_fingerprints: &[CoverFingerprint],
 ) -> eyre::Result<HashMap<UserTierKey, String>> {
     let entries = fetch_sheet_entries(client, google_api_key, spreadsheet_id, sheet_gid).await?;
@@ -125,7 +128,7 @@ async fn fetch_user_tier_map_for_sheet(
 pub async fn fetch_user_tier_map_for_default_levels(
     client: &reqwest::Client,
     google_api_key: &str,
-    song_data: &models::SongDataRoot,
+    song_data: &SongDataRoot,
     cover_dir: &Path,
 ) -> eyre::Result<HashMap<UserTierKey, UserTierValue>> {
     let mut out = HashMap::new();
@@ -344,7 +347,7 @@ async fn download_image(client: &reqwest::Client, image_url: &str) -> eyre::Resu
 }
 
 fn build_cover_fingerprints(
-    song_data: &models::SongDataRoot,
+    song_data: &SongDataRoot,
     cover_dir: &Path,
 ) -> eyre::Result<Vec<CoverFingerprint>> {
     let mut out = Vec::new();
@@ -507,20 +510,20 @@ fn classify_border_hint(image_bytes: &[u8]) -> eyre::Result<BorderHint> {
 }
 
 fn resolve_key(
-    song_data: &models::SongDataRoot,
+    song_data: &SongDataRoot,
     matched_title: &str,
     border_hint: BorderHint,
     internal_level: &str,
 ) -> Option<UserTierKey> {
     let song = song_data.songs.iter().find(|s| s.title == matched_title)?;
 
-    let mut candidates: Vec<(&str, &str)> = song
+    let mut candidates: Vec<(ChartType, DifficultyCategory)> = song
         .sheets
         .iter()
         .filter(|sheet| sheet.internal_level.as_deref() == Some(internal_level))
         .filter_map(|sheet| {
-            let chart_type = normalize_chart_type(&sheet.sheet_type)?;
-            let difficulty = normalize_difficulty(&sheet.difficulty)?;
+            let chart_type = ChartType::from_lowercase(&sheet.sheet_type)?;
+            let difficulty = DifficultyCategory::from_lowercase(&sheet.difficulty)?;
             Some((chart_type, difficulty))
         })
         .collect();
@@ -530,10 +533,14 @@ fn resolve_key(
     }
 
     match border_hint {
-        BorderHint::Expert => candidates.retain(|(_, diff)| *diff == "EXPERT"),
-        BorderHint::ReMaster => candidates.retain(|(_, diff)| *diff == "Re:MASTER"),
-        BorderHint::Std => candidates.retain(|(chart, _)| *chart == "STD"),
-        BorderHint::Dx => candidates.retain(|(chart, _)| *chart == "DX"),
+        BorderHint::Expert => {
+            candidates.retain(|(_, diff)| *diff == DifficultyCategory::Expert);
+        }
+        BorderHint::ReMaster => {
+            candidates.retain(|(_, diff)| *diff == DifficultyCategory::ReMaster);
+        }
+        BorderHint::Std => candidates.retain(|(ct, _)| *ct == ChartType::Std),
+        BorderHint::Dx => candidates.retain(|(ct, _)| *ct == ChartType::Dx),
         _ => {}
     }
 
@@ -542,11 +549,14 @@ fn resolve_key(
     }
 
     if candidates.len() > 1 {
-        if let Some(master) = candidates.iter().find(|(_, diff)| *diff == "MASTER") {
+        if let Some(&(chart_type, difficulty)) = candidates
+            .iter()
+            .find(|(_, diff)| *diff == DifficultyCategory::Master)
+        {
             return Some(UserTierKey {
                 title: song.title.clone(),
-                chart_type: master.0.to_string(),
-                difficulty: master.1.to_string(),
+                chart_type,
+                difficulty,
             });
         }
     }
@@ -554,32 +564,16 @@ fn resolve_key(
     let (chart_type, difficulty) = candidates[0];
     Some(UserTierKey {
         title: song.title.clone(),
-        chart_type: chart_type.to_string(),
-        difficulty: difficulty.to_string(),
+        chart_type,
+        difficulty,
     })
-}
-
-fn normalize_chart_type(sheet_type: &str) -> Option<&'static str> {
-    match sheet_type.trim().to_ascii_lowercase().as_str() {
-        "std" => Some("STD"),
-        "dx" => Some("DX"),
-        _ => None,
-    }
-}
-
-fn normalize_difficulty(difficulty: &str) -> Option<&'static str> {
-    match difficulty.trim().to_ascii_lowercase().as_str() {
-        "expert" => Some("EXPERT"),
-        "master" => Some("MASTER"),
-        "remaster" => Some("Re:MASTER"),
-        _ => None,
-    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use image::{ImageBuffer, Rgb};
+    use models::{SongDataSheet, SongDataSong};
     use std::path::PathBuf;
 
     const LIVE_TEST_INTERNAL_LEVEL: &str = "13.0";
@@ -632,20 +626,20 @@ mod tests {
 
     #[test]
     fn resolve_key_prefers_hint_and_master() {
-        let root = models::SongDataRoot {
-            songs: vec![models::SongDataSong {
+        let root = SongDataRoot {
+            songs: vec![SongDataSong {
                 title: "Song A".to_string(),
                 version: None,
                 image_name: Some("a.png".to_string()),
                 sheets: vec![
-                    models::SongDataSheet {
+                    SongDataSheet {
                         sheet_type: "std".to_string(),
                         difficulty: "expert".to_string(),
                         level: "13".to_string(),
                         internal_level: Some("13.0".to_string()),
                         user_level: None,
                     },
-                    models::SongDataSheet {
+                    SongDataSheet {
                         sheet_type: "std".to_string(),
                         difficulty: "master".to_string(),
                         level: "13+".to_string(),
@@ -658,7 +652,7 @@ mod tests {
 
         let key_default =
             resolve_key(&root, "Song A", BorderHint::None, LIVE_TEST_INTERNAL_LEVEL).unwrap();
-        assert_eq!(key_default.difficulty, "MASTER");
+        assert_eq!(key_default.difficulty, DifficultyCategory::Master);
 
         let key_expert = resolve_key(
             &root,
@@ -667,7 +661,7 @@ mod tests {
             LIVE_TEST_INTERNAL_LEVEL,
         )
         .unwrap();
-        assert_eq!(key_expert.difficulty, "EXPERT");
+        assert_eq!(key_expert.difficulty, DifficultyCategory::Expert);
     }
 
     #[test]
@@ -699,7 +693,7 @@ mod tests {
 
         let song_data_bytes = std::fs::read(&song_data_json)
             .unwrap_or_else(|e| panic!("failed to read {song_data_json}: {e}"));
-        let song_data: models::SongDataRoot = serde_json::from_slice(&song_data_bytes)
+        let song_data: SongDataRoot = serde_json::from_slice(&song_data_bytes)
             .unwrap_or_else(|e| panic!("failed to parse {song_data_json}: {e}"));
         let cover_dir_path = PathBuf::from(cover_dir);
         let cover_fingerprints = build_cover_fingerprints(&song_data, &cover_dir_path).unwrap();

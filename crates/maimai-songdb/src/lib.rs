@@ -1,6 +1,9 @@
 #![allow(dead_code)]
 
 use eyre::{ContextCompat, WrapErr};
+use models::{
+    ChartType, DifficultyCategory, SongDataIndex, SongDataRoot, SongDataSheet, SongDataSong,
+};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::collections::HashMap;
@@ -9,6 +12,9 @@ use std::path::Path;
 
 pub mod internal_levels;
 pub mod user_tiers;
+
+use internal_levels::{InternalLevelKey, InternalLevelRow};
+use user_tiers::{UserTierKey, UserTierValue};
 
 pub const SONG_DATA_SUBDIR: &str = "song_data";
 const MAIMAI_SONGS_URL: &str = "https://maimai.sega.jp/data/maimai_songs.json";
@@ -77,11 +83,11 @@ pub struct SongRow {
     pub comment: Option<String>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone)]
 pub struct SheetRow {
     pub song_id: String,
-    pub sheet_type: String,
-    pub difficulty: String,
+    pub sheet_type: ChartType,
+    pub difficulty: DifficultyCategory,
     pub level: String,
 }
 
@@ -135,12 +141,12 @@ impl SongDbConfig {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone)]
 pub struct SongDatabase {
     pub songs: Vec<SongRow>,
     pub sheets: Vec<SheetRow>,
-    pub internal_levels: HashMap<(String, String, String), internal_levels::InternalLevelRow>,
-    pub user_tiers: HashMap<user_tiers::UserTierKey, user_tiers::UserTierValue>,
+    pub internal_levels: HashMap<InternalLevelKey, InternalLevelRow>,
+    pub user_tiers: HashMap<UserTierKey, UserTierValue>,
 }
 
 impl SongDatabase {
@@ -197,7 +203,7 @@ impl SongDatabase {
         })
     }
 
-    pub fn into_data_root(self) -> eyre::Result<models::SongDataRoot> {
+    pub fn into_data_root(self) -> eyre::Result<SongDataRoot> {
         Ok(build_data_root(
             &self.songs,
             &self.sheets,
@@ -206,26 +212,26 @@ impl SongDatabase {
         ))
     }
 
-    pub fn into_index(self) -> eyre::Result<models::SongDataIndex> {
+    pub fn into_index(self) -> eyre::Result<SongDataIndex> {
         let data_root = self.into_data_root()?;
-        Ok(models::SongDataIndex::from_root(data_root))
+        Ok(SongDataIndex::from_root(data_root))
     }
 }
 
 fn build_data_root(
     songs: &[SongRow],
     sheets: &[SheetRow],
-    internal_levels: &HashMap<(String, String, String), internal_levels::InternalLevelRow>,
-    user_tiers: Option<&HashMap<user_tiers::UserTierKey, user_tiers::UserTierValue>>,
-) -> models::SongDataRoot {
+    internal_levels: &HashMap<InternalLevelKey, InternalLevelRow>,
+    user_tiers: Option<&HashMap<UserTierKey, UserTierValue>>,
+) -> SongDataRoot {
     use std::collections::BTreeMap;
 
-    let mut song_map: BTreeMap<String, models::SongDataSong> = BTreeMap::new();
+    let mut song_map: BTreeMap<String, SongDataSong> = BTreeMap::new();
 
     for song in songs {
         song_map.insert(
             song.song_id.clone(),
-            models::SongDataSong {
+            SongDataSong {
                 title: song.title.clone(),
                 version: song.version.clone(),
                 image_name: Some(song.image_name.clone()),
@@ -240,20 +246,16 @@ fn build_data_root(
             None => continue,
         };
 
-        let key = (
-            sheet.song_id.clone(),
-            sheet.sheet_type.clone(),
-            sheet.difficulty.clone(),
-        );
+        let il_key: InternalLevelKey = (sheet.song_id.clone(), sheet.sheet_type, sheet.difficulty);
 
         let internal_level = internal_levels
-            .get(&key)
+            .get(&il_key)
             .map(|il| il.internal_level.trim().to_string());
 
-        let user_key = user_tiers.map(|_| user_tiers::UserTierKey {
+        let user_key = user_tiers.map(|_| UserTierKey {
             title: song.title.clone(),
-            chart_type: sheet.sheet_type.clone(),
-            difficulty: sheet.difficulty.clone(),
+            chart_type: sheet.sheet_type,
+            difficulty: sheet.difficulty,
         });
         let user_tier = user_key
             .as_ref()
@@ -264,7 +266,7 @@ fn build_data_root(
                 tracing::warn!(
                     title = %song.title,
                     chart_type = %sheet.sheet_type,
-                    difficulty = %sheet.difficulty,
+                    difficulty = %sheet.difficulty.as_str(),
                     chart_internal_level = %internal,
                     user_tier_internal_level = %user_tier_value.source_internal_level,
                     "user tier internal level mismatch"
@@ -272,16 +274,16 @@ fn build_data_root(
             }
         }
 
-        song.sheets.push(models::SongDataSheet {
-            sheet_type: sheet.sheet_type.clone(),
-            difficulty: sheet.difficulty.clone(),
+        song.sheets.push(SongDataSheet {
+            sheet_type: sheet.sheet_type.as_lowercase().to_string(),
+            difficulty: sheet.difficulty.as_lowercase().to_string(),
             level: sheet.level.clone(),
             internal_level,
             user_level: user_tier.map(|v| v.grade.clone()),
         });
     }
 
-    models::SongDataRoot {
+    SongDataRoot {
         songs: song_map.into_values().collect(),
     }
 }
@@ -359,27 +361,67 @@ fn extract_song(raw_song: &RawSong) -> SongRow {
 fn extract_sheets(raw_song: &RawSong) -> Vec<SheetRow> {
     let song_id = derive_song_id(raw_song);
 
-    let candidates = [
-        ("dx", "basic", raw_song.dx_lev_bas.as_deref()),
-        ("dx", "advanced", raw_song.dx_lev_adv.as_deref()),
-        ("dx", "expert", raw_song.dx_lev_exp.as_deref()),
-        ("dx", "master", raw_song.dx_lev_mas.as_deref()),
-        ("dx", "remaster", raw_song.dx_lev_remas.as_deref()),
-        ("std", "basic", raw_song.lev_bas.as_deref()),
-        ("std", "advanced", raw_song.lev_adv.as_deref()),
-        ("std", "expert", raw_song.lev_exp.as_deref()),
-        ("std", "master", raw_song.lev_mas.as_deref()),
-        ("std", "remaster", raw_song.lev_remas.as_deref()),
+    let candidates: [(ChartType, DifficultyCategory, Option<&str>); 10] = [
+        (
+            ChartType::Dx,
+            DifficultyCategory::Basic,
+            raw_song.dx_lev_bas.as_deref(),
+        ),
+        (
+            ChartType::Dx,
+            DifficultyCategory::Advanced,
+            raw_song.dx_lev_adv.as_deref(),
+        ),
+        (
+            ChartType::Dx,
+            DifficultyCategory::Expert,
+            raw_song.dx_lev_exp.as_deref(),
+        ),
+        (
+            ChartType::Dx,
+            DifficultyCategory::Master,
+            raw_song.dx_lev_mas.as_deref(),
+        ),
+        (
+            ChartType::Dx,
+            DifficultyCategory::ReMaster,
+            raw_song.dx_lev_remas.as_deref(),
+        ),
+        (
+            ChartType::Std,
+            DifficultyCategory::Basic,
+            raw_song.lev_bas.as_deref(),
+        ),
+        (
+            ChartType::Std,
+            DifficultyCategory::Advanced,
+            raw_song.lev_adv.as_deref(),
+        ),
+        (
+            ChartType::Std,
+            DifficultyCategory::Expert,
+            raw_song.lev_exp.as_deref(),
+        ),
+        (
+            ChartType::Std,
+            DifficultyCategory::Master,
+            raw_song.lev_mas.as_deref(),
+        ),
+        (
+            ChartType::Std,
+            DifficultyCategory::ReMaster,
+            raw_song.lev_remas.as_deref(),
+        ),
     ];
 
     candidates
-        .iter()
+        .into_iter()
         .filter_map(|(sheet_type, difficulty, level)| {
-            let level = normalize_level(*level)?;
+            let level = normalize_level(level)?;
             Some(SheetRow {
                 song_id: song_id.clone(),
-                sheet_type: sheet_type.to_string(),
-                difficulty: difficulty.to_string(),
+                sheet_type,
+                difficulty,
                 level,
             })
         })

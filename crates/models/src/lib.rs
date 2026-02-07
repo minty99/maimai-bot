@@ -498,8 +498,8 @@ pub struct SongDataIndex {
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
 struct SongKey {
     title_norm: String,
-    chart_type: String,
-    diff_category: String,
+    chart_type: ChartType,
+    diff_category: DifficultyCategory,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -572,13 +572,13 @@ impl SongDataIndex {
     pub fn internal_level(
         &self,
         title: &str,
-        chart_type: &str,
-        diff_category: &str,
+        chart_type: ChartType,
+        diff_category: DifficultyCategory,
     ) -> Option<f32> {
         let key = SongKey {
             title_norm: normalize_title(title),
-            chart_type: chart_type.to_string(),
-            diff_category: diff_category.to_string(),
+            chart_type,
+            diff_category,
         };
         self.map.get(&key).copied()
     }
@@ -638,18 +638,19 @@ impl SongDataIndex {
                     continue;
                 };
 
-                let Some(chart_type) = map_chart_type(&sheet.sheet_type) else {
+                let Some(chart_type) = ChartType::from_lowercase(&sheet.sheet_type) else {
                     continue;
                 };
-                let Some(diff_category) = map_diff_category(&sheet.difficulty) else {
+                let Some(diff_category) = DifficultyCategory::from_lowercase(&sheet.difficulty)
+                else {
                     continue;
                 };
 
                 map.insert(
                     SongKey {
                         title_norm: title_norm.clone(),
-                        chart_type: chart_type.to_string(),
-                        diff_category: diff_category.to_string(),
+                        chart_type,
+                        diff_category,
                     },
                     internal_value,
                 );
@@ -669,25 +670,6 @@ fn normalize_title(s: &str) -> String {
         .chars()
         .filter(|c| !c.is_whitespace())
         .collect::<String>()
-}
-
-fn map_chart_type(sheet_type: &str) -> Option<&'static str> {
-    match sheet_type.trim().to_ascii_lowercase().as_str() {
-        "std" => Some("STD"),
-        "dx" => Some("DX"),
-        _ => None,
-    }
-}
-
-fn map_diff_category(difficulty: &str) -> Option<&'static str> {
-    match difficulty.trim().to_ascii_lowercase().as_str() {
-        "basic" => Some("BASIC"),
-        "advanced" => Some("ADVANCED"),
-        "expert" => Some("EXPERT"),
-        "master" => Some("MASTER"),
-        "remaster" => Some("Re:MASTER"),
-        _ => None,
-    }
 }
 
 fn is_new_version(version: &str) -> bool {

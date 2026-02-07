@@ -1,6 +1,7 @@
 #![allow(dead_code)]
 
 use eyre::WrapErr;
+use models::{ChartType, DifficultyCategory};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::HashMap;
@@ -37,8 +38,8 @@ struct ValuesResponse {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct InternalLevelRow {
     pub song_id: String,
-    pub sheet_type: String,
-    pub difficulty: String,
+    pub sheet_type: ChartType,
+    pub difficulty: DifficultyCategory,
     pub internal_level: String,
     pub source_version: i64,
 }
@@ -159,11 +160,10 @@ fn extract_records_from_values(
             };
 
             let title = row.get(title_idx).and_then(parse_string);
-            let sheet_type = row.get(type_idx).and_then(parse_string);
-            let difficulty = row.get(diff_idx).and_then(parse_string);
+            let raw_type = row.get(type_idx).and_then(parse_string);
+            let raw_diff = row.get(diff_idx).and_then(parse_string);
 
-            let Some((song_id, sheet_type, difficulty)) =
-                map_row_keys(title, sheet_type, difficulty)
+            let Some((song_id, sheet_type, difficulty)) = map_row_keys(title, raw_type, raw_diff)
             else {
                 continue;
             };
@@ -185,7 +185,7 @@ fn map_row_keys(
     title: Option<&str>,
     sheet_type: Option<&str>,
     difficulty: Option<&str>,
-) -> Option<(String, String, String)> {
+) -> Option<(String, ChartType, DifficultyCategory)> {
     let title = title?.trim();
     if title.is_empty() {
         return None;
@@ -194,19 +194,14 @@ fn map_row_keys(
     let song_id = song_id_from_internal_level_title(title)?;
 
     let sheet_type = match sheet_type?.trim() {
-        "STD" => "std",
-        "DX" => "dx",
+        "STD" => ChartType::Std,
+        "DX" => ChartType::Dx,
         _ => return None,
     };
 
-    let difficulty = match difficulty?.trim() {
-        "EXP" => "expert",
-        "MAS" => "master",
-        "ReMAS" => "remaster",
-        _ => return None,
-    };
+    let difficulty = DifficultyCategory::from_sheet_abbreviation(difficulty?.trim())?;
 
-    Some((song_id, sheet_type.to_string(), difficulty.to_string()))
+    Some((song_id, sheet_type, difficulty))
 }
 
 fn parse_string(v: &Value) -> Option<&str> {
@@ -316,11 +311,13 @@ fn save_cached_rows(path: &Path, rows: &[InternalLevelRow]) -> eyre::Result<()> 
     Ok(())
 }
 
+pub type InternalLevelKey = (String, ChartType, DifficultyCategory);
+
 pub async fn fetch_internal_levels(
     client: &reqwest::Client,
     google_api_key: &str,
     cache_dir: &Path,
-) -> eyre::Result<HashMap<(String, String, String), InternalLevelRow>> {
+) -> eyre::Result<HashMap<InternalLevelKey, InternalLevelRow>> {
     std::fs::create_dir_all(cache_dir).wrap_err("create internal_level cache dir")?;
 
     let spreadsheets = &*SPREADSHEETS;
@@ -381,11 +378,7 @@ pub async fn fetch_internal_levels(
 
     let mut result = HashMap::new();
     for row in all_rows {
-        let key = (
-            row.song_id.clone(),
-            row.sheet_type.clone(),
-            row.difficulty.clone(),
-        );
+        let key: InternalLevelKey = (row.song_id.clone(), row.sheet_type, row.difficulty);
         result
             .entry(key)
             .and_modify(|existing: &mut InternalLevelRow| {
@@ -450,8 +443,8 @@ mod tests {
         let rows = extract_records_from_values(&values, &spec, 13);
         assert_eq!(rows.len(), 1);
         assert_eq!(rows[0].song_id, "Some Song");
-        assert_eq!(rows[0].sheet_type, "std");
-        assert_eq!(rows[0].difficulty, "master");
+        assert_eq!(rows[0].sheet_type, ChartType::Std);
+        assert_eq!(rows[0].difficulty, DifficultyCategory::Master);
         assert_eq!(rows[0].internal_level, "13.7");
         assert_eq!(rows[0].source_version, 13);
     }
