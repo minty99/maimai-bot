@@ -1,5 +1,5 @@
 use serde::{Deserialize, Serialize};
-use strum::{Display, EnumString};
+use strum::{Display, EnumIter, EnumString, IntoEnumIterator};
 
 pub mod config;
 
@@ -20,10 +20,10 @@ pub mod config;
 #[repr(u8)]
 pub enum ChartType {
     #[serde(rename = "STD")]
-    #[strum(serialize = "STD")]
+    #[strum(serialize = "STD", serialize = "std", ascii_case_insensitive)]
     Std = 0,
     #[serde(rename = "DX")]
-    #[strum(serialize = "DX")]
+    #[strum(serialize = "DX", serialize = "dx", ascii_case_insensitive)]
     Dx = 1,
 }
 
@@ -41,11 +41,7 @@ impl ChartType {
 
     /// Parse from lowercase songdb JSON value ("std", "dx").
     pub fn from_lowercase(s: &str) -> Option<Self> {
-        match s.trim().to_ascii_lowercase().as_str() {
-            "std" => Some(Self::Std),
-            "dx" => Some(Self::Dx),
-            _ => None,
-        }
+        s.trim().parse::<Self>().ok()
     }
 
     /// Return lowercase songdb JSON value ("std", "dx").
@@ -69,34 +65,46 @@ impl ChartType {
     Serialize,
     Deserialize,
     EnumString,
+    EnumIter,
     Display,
 )]
 #[repr(u8)]
 pub enum DifficultyCategory {
     #[serde(rename = "BASIC")]
-    #[strum(serialize = "BASIC")]
+    #[strum(serialize = "BASIC", serialize = "basic", ascii_case_insensitive)]
     Basic = 0,
 
     #[serde(rename = "ADVANCED")]
-    #[strum(serialize = "ADVANCED")]
+    #[strum(serialize = "ADVANCED", serialize = "advanced", ascii_case_insensitive)]
     Advanced = 1,
 
     #[serde(rename = "EXPERT")]
-    #[strum(serialize = "EXPERT")]
+    #[strum(serialize = "EXPERT", serialize = "expert", ascii_case_insensitive)]
     Expert = 2,
 
     #[serde(rename = "MASTER")]
-    #[strum(serialize = "MASTER")]
+    #[strum(serialize = "MASTER", serialize = "master", ascii_case_insensitive)]
     Master = 3,
 
     #[serde(rename = "Re:MASTER")]
-    #[strum(serialize = "Re:MASTER")]
+    #[strum(
+        serialize = "Re:MASTER",
+        serialize = "re:master",
+        serialize = "RE:MASTER",
+        serialize = "remaster",
+        serialize = "REMASTER",
+        ascii_case_insensitive
+    )]
     ReMaster = 4,
 }
 
 impl DifficultyCategory {
     pub fn as_u8(self) -> u8 {
         self as u8
+    }
+
+    pub fn from_index(index: u8) -> Option<Self> {
+        Self::iter().find(|difficulty| difficulty.as_u8() == index)
     }
 
     pub const fn as_str(self) -> &'static str {
@@ -111,14 +119,7 @@ impl DifficultyCategory {
 
     /// Parse from lowercase songdb JSON value ("basic", "advanced", "expert", "master", "remaster").
     pub fn from_lowercase(s: &str) -> Option<Self> {
-        match s.trim().to_ascii_lowercase().as_str() {
-            "basic" => Some(Self::Basic),
-            "advanced" => Some(Self::Advanced),
-            "expert" => Some(Self::Expert),
-            "master" => Some(Self::Master),
-            "remaster" => Some(Self::ReMaster),
-            _ => None,
-        }
+        s.trim().parse::<Self>().ok()
     }
 
     /// Return lowercase songdb JSON value ("basic", "advanced", "expert", "master", "remaster").
@@ -139,6 +140,109 @@ impl DifficultyCategory {
             "MAS" => Some(Self::Master),
             "ReMAS" => Some(Self::ReMaster),
             _ => None,
+        }
+    }
+}
+
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize, EnumIter,
+)]
+#[repr(u8)]
+pub enum MaimaiVersion {
+    Maimai = 0,
+    MaimaiPlus = 1,
+    Green = 2,
+    GreenPlus = 3,
+    Orange = 4,
+    OrangePlus = 5,
+    Pink = 6,
+    PinkPlus = 7,
+    Murasaki = 8,
+    MurasakiPlus = 9,
+    Milk = 10,
+    MilkPlus = 11,
+    Finale = 12,
+    Deluxe = 13,
+    DeluxePlus = 14,
+    Splash = 15,
+    SplashPlus = 16,
+    Universe = 17,
+    UniversePlus = 18,
+    Festival = 19,
+    FestivalPlus = 20,
+    Buddies = 21,
+    BuddiesPlus = 22,
+    Prism = 23,
+    PrismPlus = 24,
+    Circle = 25,
+}
+
+impl MaimaiVersion {
+    pub const fn as_index(self) -> u8 {
+        self as u8
+    }
+
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Maimai => "maimai",
+            Self::MaimaiPlus => "maimai PLUS",
+            Self::Green => "GreeN",
+            Self::GreenPlus => "GreeN PLUS",
+            Self::Orange => "ORANGE",
+            Self::OrangePlus => "ORANGE PLUS",
+            Self::Pink => "PiNK",
+            Self::PinkPlus => "PiNK PLUS",
+            Self::Murasaki => "MURASAKi",
+            Self::MurasakiPlus => "MURASAKi PLUS",
+            Self::Milk => "MiLK",
+            Self::MilkPlus => "MiLK PLUS",
+            Self::Finale => "FiNALE",
+            Self::Deluxe => "maimaiでらっくす",
+            Self::DeluxePlus => "maimaiでらっくす PLUS",
+            Self::Splash => "Splash",
+            Self::SplashPlus => "Splash PLUS",
+            Self::Universe => "UNiVERSE",
+            Self::UniversePlus => "UNiVERSE PLUS",
+            Self::Festival => "FESTiVAL",
+            Self::FestivalPlus => "FESTiVAL PLUS",
+            Self::Buddies => "BUDDiES",
+            Self::BuddiesPlus => "BUDDiES PLUS",
+            Self::Prism => "PRiSM",
+            Self::PrismPlus => "PRiSM PLUS",
+            Self::Circle => "CiRCLE",
+        }
+    }
+
+    pub fn from_index(index: u8) -> Option<Self> {
+        Self::iter().find(|version| version.as_index() == index)
+    }
+
+    pub fn from_name(name: &str) -> Option<Self> {
+        let normalized = name.trim();
+        Self::iter().find(|version| version.as_str() == normalized)
+    }
+}
+
+#[cfg(test)]
+mod maimai_version_tests {
+    use super::MaimaiVersion;
+    use strum::IntoEnumIterator;
+
+    #[test]
+    fn release_order_indices_are_stable() {
+        for (expected_index, version) in MaimaiVersion::iter().enumerate() {
+            assert_eq!(version.as_index() as usize, expected_index);
+            assert_eq!(
+                MaimaiVersion::from_index(expected_index as u8),
+                Some(version)
+            );
+        }
+    }
+
+    #[test]
+    fn version_name_roundtrip() {
+        for version in MaimaiVersion::iter() {
+            assert_eq!(MaimaiVersion::from_name(version.as_str()), Some(version));
         }
     }
 }
