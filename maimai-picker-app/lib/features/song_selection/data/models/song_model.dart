@@ -24,6 +24,8 @@ class SongModel extends Equatable {
     this.version,
     this.ratingPoints,
     this.bucket,
+    this.levelSongCount,
+    this.filteredSongCount,
   });
 
   /// Song title
@@ -78,6 +80,12 @@ class SongModel extends Equatable {
   /// "New" or "Old" (based on version)
   final String? bucket;
 
+  /// Candidate song count in selected level range before filters.
+  final int? levelSongCount;
+
+  /// Candidate song count after applying filters.
+  final int? filteredSongCount;
+
   @override
   List<Object?> get props => [
     title,
@@ -97,5 +105,7 @@ class SongModel extends Equatable {
     version,
     ratingPoints,
     bucket,
+    levelSongCount,
+    filteredSongCount,
   ];
 }

@@ -30,6 +30,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
   bool _isCheckingHealth = false;
   bool? _healthOk;
   String? _healthMessage;
+  bool _isLoadingVersions = false;
+  String? _versionsError;
+  List<_VersionOption> _versionOptions = const [];
 
   @override
   void initState() {
@@ -43,6 +46,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
     _songInfoUrlController.addListener(_onTextChanged);
     _recordCollectorUrlController.addListener(_onTextChanged);
+    _loadVersionOptions(baseUrl: state.songInfoServerUrl);
   }
 
   @override
@@ -83,6 +87,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     await cubit.updateSongInfoServerUrl(songInfoUrl);
     // Record Collector Server URL is optional - save even if empty
     await cubit.updateRecordCollectorServerUrl(recordCollectorUrl);
+    await _loadVersionOptions(baseUrl: songInfoUrl);
 
     if (mounted) {
       setState(() {
@@ -181,6 +186,152 @@ class _SettingsScreenState extends State<SettingsScreen> {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text(message), backgroundColor: backgroundColor),
     );
+
+    if (_healthOk == true) {
+      await _loadVersionOptions(baseUrl: baseUrl);
+    }
+  }
+
+  Future<void> _loadVersionOptions({String? baseUrl}) async {
+    final normalized = _normalizeBaseUrl(
+      baseUrl ?? _songInfoUrlController.text,
+    );
+    if (normalized.isEmpty) {
+      if (!mounted) return;
+      setState(() {
+        _versionOptions = const [];
+        _versionsError = 'Song Info Server URL is empty';
+      });
+      return;
+    }
+
+    setState(() {
+      _isLoadingVersions = true;
+      _versionsError = null;
+    });
+
+    final dio = Dio(
+      BaseOptions(
+        connectTimeout: const Duration(seconds: 5),
+        receiveTimeout: const Duration(seconds: 5),
+      ),
+    );
+
+    try {
+      final response = await dio.get<Map<String, dynamic>>(
+        '$normalized/api/songs/versions',
+      );
+      final rawVersions = response.data?['versions'] as List<dynamic>? ?? [];
+      final parsed =
+          rawVersions
+              .map(
+                (raw) => _VersionOption.fromJson(raw as Map<String, dynamic>),
+              )
+              .where((version) => version.versionIndex >= 0)
+              .toList()
+            ..sort((a, b) => a.versionIndex.compareTo(b.versionIndex));
+
+      if (!mounted) return;
+      setState(() {
+        _versionOptions = parsed;
+        _versionsError = null;
+      });
+    } on DioException catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _versionsError =
+            'Failed to load versions: ${e.message ?? "network error"}';
+        _versionOptions = const [];
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _versionsError = 'Failed to load versions: $e';
+        _versionOptions = const [];
+      });
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isLoadingVersions = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _toggleChartType(String chartType, bool selected) async {
+    final state = context.read<SettingsCubit>().state;
+    final next = {...state.enabledChartTypes};
+    if (selected) {
+      next.add(chartType);
+    } else {
+      if (next.length == 1 && next.contains(chartType)) {
+        _showSimpleSnackBar('At least one chart type must remain enabled');
+        return;
+      }
+      next.remove(chartType);
+    }
+
+    await context.read<SettingsCubit>().updateEnabledChartTypes(next);
+  }
+
+  Future<void> _toggleDifficulty(int difficultyIndex, bool selected) async {
+    final state = context.read<SettingsCubit>().state;
+    final next = {...state.enabledDifficultyIndices};
+    if (selected) {
+      next.add(difficultyIndex);
+    } else {
+      if (next.length == 1 && next.contains(difficultyIndex)) {
+        _showSimpleSnackBar('At least one difficulty must remain enabled');
+        return;
+      }
+      next.remove(difficultyIndex);
+    }
+
+    await context.read<SettingsCubit>().updateEnabledDifficulties(next);
+  }
+
+  Future<void> _selectAllVersions() async {
+    await context.read<SettingsCubit>().updateIncludeVersionIndices(null);
+  }
+
+  Future<void> _deselectAllVersions() async {
+    await context.read<SettingsCubit>().updateIncludeVersionIndices(<int>{});
+  }
+
+  Future<void> _toggleVersion(int versionIndex, bool selected) async {
+    final cubit = context.read<SettingsCubit>();
+    final state = cubit.state;
+    final allVersionIndices = _versionOptions
+        .map((version) => version.versionIndex)
+        .toSet();
+
+    if (allVersionIndices.isEmpty) {
+      return;
+    }
+
+    final current = state.includeVersionIndices;
+    if (selected) {
+      if (current == null) {
+        return;
+      }
+      final next = {...current, versionIndex};
+      if (next.length == allVersionIndices.length) {
+        await cubit.updateIncludeVersionIndices(null);
+      } else {
+        await cubit.updateIncludeVersionIndices(next);
+      }
+      return;
+    }
+
+    final base = current == null ? {...allVersionIndices} : {...current};
+    base.remove(versionIndex);
+    await cubit.updateIncludeVersionIndices(base);
+  }
+
+  void _showSimpleSnackBar(String message) {
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(message)));
   }
 
   @override
@@ -331,6 +482,205 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   ),
                 ),
               ],
+              const SizedBox(height: 32),
+
+              // ─────────────────────────────────────────────────────────────
+              // Random Filters Section
+              // ─────────────────────────────────────────────────────────────
+              Text(
+                'RANDOM FILTERS',
+                style: theme.textTheme.labelLarge?.copyWith(
+                  color: colorScheme.primary,
+                  letterSpacing: 2,
+                ),
+              ),
+              const SizedBox(height: 16),
+
+              Card(
+                elevation: 4,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(20),
+                  side: BorderSide(
+                    color: colorScheme.outline.withValues(alpha: 0.3),
+                    width: 1,
+                  ),
+                ),
+                child: Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Chart Type',
+                        style: theme.textTheme.titleMedium?.copyWith(
+                          color: colorScheme.onSurface,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      const SizedBox(height: 10),
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 8,
+                        children: AppConstants.defaultEnabledChartTypes.map((
+                          value,
+                        ) {
+                          return FilterChip(
+                            label: Text(value),
+                            selected: state.enabledChartTypes.contains(value),
+                            onSelected: (selected) {
+                              _toggleChartType(value, selected);
+                            },
+                          );
+                        }).toList(),
+                      ),
+                      const SizedBox(height: 16),
+                      Text(
+                        'Difficulty',
+                        style: theme.textTheme.titleMedium?.copyWith(
+                          color: colorScheme.onSurface,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      const SizedBox(height: 10),
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 8,
+                        children: AppConstants.difficultyLabelsByIndex.entries
+                            .map((entry) {
+                              final difficultyIndex = entry.key;
+                              final difficultyLabel = entry.value;
+                              return FilterChip(
+                                label: Text(difficultyLabel),
+                                selected: state.enabledDifficultyIndices
+                                    .contains(difficultyIndex),
+                                onSelected: (selected) {
+                                  _toggleDifficulty(difficultyIndex, selected);
+                                },
+                              );
+                            })
+                            .toList(),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(height: 16),
+
+              Card(
+                elevation: 4,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(20),
+                  side: BorderSide(
+                    color: colorScheme.outline.withValues(alpha: 0.3),
+                    width: 1,
+                  ),
+                ),
+                child: Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Text(
+                            'Versions',
+                            style: theme.textTheme.titleMedium?.copyWith(
+                              color: colorScheme.onSurface,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                          const Spacer(),
+                          TextButton(
+                            onPressed: _selectAllVersions,
+                            child: const Text('SELECT ALL'),
+                          ),
+                          TextButton(
+                            onPressed: _deselectAllVersions,
+                            child: const Text('SELECT NONE'),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 4),
+                      if (_isLoadingVersions)
+                        const Center(child: CircularProgressIndicator()),
+                      if (_versionsError != null) ...[
+                        Text(
+                          _versionsError!,
+                          style: theme.textTheme.bodyMedium?.copyWith(
+                            color: colorScheme.error,
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                      ],
+                      if (!_isLoadingVersions && _versionOptions.isEmpty)
+                        Text(
+                          'No version data loaded',
+                          style: theme.textTheme.bodyMedium?.copyWith(
+                            color: colorScheme.onSurfaceVariant,
+                          ),
+                        ),
+                      if (_versionOptions.isNotEmpty) ...[
+                        ..._versionOptions.map((version) {
+                          final selected = state.includeVersionIndices == null
+                              ? true
+                              : state.includeVersionIndices!.contains(
+                                  version.versionIndex,
+                                );
+                          return CheckboxListTile(
+                            dense: true,
+                            contentPadding: EdgeInsets.zero,
+                            value: selected,
+                            onChanged: (checked) {
+                              if (checked == null) return;
+                              _toggleVersion(version.versionIndex, checked);
+                            },
+                            title: Text(
+                              '#${version.versionIndex} ${version.versionName}',
+                            ),
+                            subtitle: Text('${version.songCount} songs'),
+                          );
+                        }),
+                      ],
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(height: 16),
+
+              Card(
+                elevation: 4,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(20),
+                  side: BorderSide(
+                    color: colorScheme.outline.withValues(alpha: 0.3),
+                    width: 1,
+                  ),
+                ),
+                child: Column(
+                  children: [
+                    SwitchListTile(
+                      title: const Text('Show Level'),
+                      subtitle: const Text('Display level text like 13+'),
+                      value: state.showLevel,
+                      onChanged: (value) {
+                        context.read<SettingsCubit>().updateShowLevel(value);
+                      },
+                    ),
+                    SwitchListTile(
+                      title: const Text('Show User Level'),
+                      subtitle: const Text('Display user level label like (A)'),
+                      value: state.showUserLevel,
+                      onChanged: state.showLevel
+                          ? (value) {
+                              context.read<SettingsCubit>().updateShowUserLevel(
+                                value,
+                              );
+                            }
+                          : null,
+                    ),
+                  ],
+                ),
+              ),
               const SizedBox(height: 32),
 
               // ─────────────────────────────────────────────────────────────
@@ -541,6 +891,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
                           AppConstants.defaultSongInfoServerUrl;
                       _recordCollectorUrlController.text =
                           AppConstants.defaultRecordCollectorServerUrl;
+                      await _loadVersionOptions(
+                        baseUrl: AppConstants.defaultSongInfoServerUrl,
+                      );
                       messenger.showSnackBar(
                         const SnackBar(
                           content: Text('Reset to default server URLs'),
@@ -667,6 +1020,26 @@ class _InfoItem extends StatelessWidget {
           ),
         ),
       ],
+    );
+  }
+}
+
+class _VersionOption {
+  const _VersionOption({
+    required this.versionIndex,
+    required this.versionName,
+    required this.songCount,
+  });
+
+  final int versionIndex;
+  final String versionName;
+  final int songCount;
+
+  factory _VersionOption.fromJson(Map<String, dynamic> json) {
+    return _VersionOption(
+      versionIndex: (json['version_index'] as num?)?.toInt() ?? -1,
+      versionName: json['version_name'] as String? ?? 'Unknown',
+      songCount: (json['song_count'] as num?)?.toInt() ?? 0,
     );
   }
 }

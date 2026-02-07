@@ -29,6 +29,9 @@ class SongCubit extends Cubit<SongState> {
   Future<void> fetchRandomSong({
     required double minLevel,
     required double maxLevel,
+    required Set<String> chartTypes,
+    required Set<int> difficultyIndices,
+    Set<int>? includeVersionIndices,
   }) async {
     emit(const SongLoading());
 
@@ -36,6 +39,9 @@ class SongCubit extends Cubit<SongState> {
       final song = await _repository.getRandomSong(
         minLevel: minLevel,
         maxLevel: maxLevel,
+        chartTypes: chartTypes,
+        difficultyIndices: difficultyIndices,
+        includeVersionIndices: includeVersionIndices,
       );
       emit(SongLoaded(song));
     } on NotFoundException {

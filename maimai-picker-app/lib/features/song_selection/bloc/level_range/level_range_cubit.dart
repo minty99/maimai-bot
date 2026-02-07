@@ -25,31 +25,33 @@ class LevelRangeCubit extends Cubit<LevelRangeState> {
 
     // Ensure end >= start
     final finalEnd = validEnd < validStart ? validStart : validEnd;
-    final gap = finalEnd - validStart;
+    final gap = _roundToTenth(finalEnd - validStart);
 
     emit(LevelRangeState(start: validStart, end: finalEnd, gap: gap));
   }
 
   /// Increment level by 0.1, maintaining gap.
   void incrementLevel() {
-    final newStart = state.start + AppConstants.defaultLevelStep;
-    final newEnd = newStart + state.gap;
+    final newStart = _roundToTenth(state.start + AppConstants.defaultLevelStep);
+    final newEnd = _roundToTenth(newStart + state.gap);
 
     final validStart = _clampLevel(newStart);
     final validEnd = _clampLevel(newEnd);
+    final effectiveGap = _roundToTenth(validEnd - validStart);
 
-    emit(state.copyWith(start: validStart, end: validEnd));
+    emit(state.copyWith(start: validStart, end: validEnd, gap: effectiveGap));
   }
 
   /// Decrement level by 0.1, maintaining gap.
   void decrementLevel() {
-    final newStart = state.start - AppConstants.defaultLevelStep;
-    final newEnd = newStart + state.gap;
+    final newStart = _roundToTenth(state.start - AppConstants.defaultLevelStep);
+    final newEnd = _roundToTenth(newStart + state.gap);
 
     final validStart = _clampLevel(newStart);
     final validEnd = _clampLevel(newEnd);
+    final effectiveGap = _roundToTenth(validEnd - validStart);
 
-    emit(state.copyWith(start: validStart, end: validEnd));
+    emit(state.copyWith(start: validStart, end: validEnd, gap: effectiveGap));
   }
 
   /// Increment start level by gap, adjust end to maintain gap.
@@ -83,16 +85,24 @@ class LevelRangeCubit extends Cubit<LevelRangeState> {
 
   /// Clamp a level value to the valid bounds.
   double _clampLevel(double level) {
-    return level.clamp(AppConstants.minLevelBound, AppConstants.maxLevelBound);
+    final clamped = level.clamp(
+      AppConstants.minLevelBound,
+      AppConstants.maxLevelBound,
+    );
+    return _roundToTenth(clamped.toDouble());
   }
 
   void _applyGap(double newGap) {
-    final maxGap = AppConstants.maxLevelBound - state.start;
-    final validGap = newGap.clamp(0.0, maxGap);
-    final newEnd = state.start + validGap;
+    final maxGap = _roundToTenth(AppConstants.maxLevelBound - state.start);
+    final validGap = _roundToTenth(newGap.clamp(0.0, maxGap).toDouble());
+    final newEnd = _roundToTenth(state.start + validGap);
     final validEnd = _clampLevel(newEnd);
-    final effectiveGap = validEnd - state.start;
+    final effectiveGap = _roundToTenth(validEnd - state.start);
 
     emit(state.copyWith(gap: effectiveGap, end: validEnd));
+  }
+
+  double _roundToTenth(double value) {
+    return (value * 10).roundToDouble() / 10.0;
   }
 }

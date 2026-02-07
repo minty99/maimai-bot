@@ -32,6 +32,31 @@ class AppConstants {
   static const double defaultLevelStep = 0.1;
 
   // ─────────────────────────────────────────────────────────────────────────
+  // Random Filter Defaults
+  // ─────────────────────────────────────────────────────────────────────────
+
+  /// All chart type filters enabled by default.
+  static const List<String> defaultEnabledChartTypes = ['STD', 'DX'];
+
+  /// All difficulty filters enabled by default (DifficultyCategory index).
+  static const List<int> defaultEnabledDifficultyIndices = [0, 1, 2, 3, 4];
+
+  /// Difficulty labels by DifficultyCategory index.
+  static const Map<int, String> difficultyLabelsByIndex = {
+    0: 'BASIC',
+    1: 'ADVANCED',
+    2: 'EXPERT',
+    3: 'MASTER',
+    4: 'Re:MASTER',
+  };
+
+  /// Show display level (e.g., "13+") by default.
+  static const bool defaultShowLevel = true;
+
+  /// Show user level label (e.g., "(A)") by default.
+  static const bool defaultShowUserLevel = true;
+
+  // ─────────────────────────────────────────────────────────────────────────
   // UI Configuration
   // ─────────────────────────────────────────────────────────────────────────
 

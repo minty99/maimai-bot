@@ -2,6 +2,8 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
+import '../../../settings/bloc/settings/settings_cubit.dart';
+import '../../../settings/bloc/settings/settings_state.dart';
 import '../../../settings/presentation/screens/settings_screen.dart';
 import '../../bloc/hardware_input/hardware_input_cubit.dart';
 import '../../bloc/hardware_input/hardware_input_state.dart';
@@ -62,6 +64,7 @@ class _SongSelectionScreenState extends State<SongSelectionScreen>
     final levelRangeCubit = context.read<LevelRangeCubit>();
     final songCubit = context.read<SongCubit>();
     final rangeState = levelRangeCubit.state;
+    final settingsState = context.read<SettingsCubit>().state;
 
     if (state is IncrementRangeState) {
       levelRangeCubit.incrementLevel();
@@ -71,6 +74,9 @@ class _SongSelectionScreenState extends State<SongSelectionScreen>
       songCubit.fetchRandomSong(
         minLevel: rangeState.start,
         maxLevel: rangeState.end,
+        chartTypes: settingsState.enabledChartTypes,
+        difficultyIndices: settingsState.enabledDifficultyIndices,
+        includeVersionIndices: settingsState.includeVersionIndices,
       );
     }
   }
@@ -182,6 +188,18 @@ class _SongSelectionScreenState extends State<SongSelectionScreen>
                                             .fetchRandomSong(
                                               minLevel: rangeState.start,
                                               maxLevel: rangeState.end,
+                                              chartTypes: context
+                                                  .read<SettingsCubit>()
+                                                  .state
+                                                  .enabledChartTypes,
+                                              difficultyIndices: context
+                                                  .read<SettingsCubit>()
+                                                  .state
+                                                  .enabledDifficultyIndices,
+                                              includeVersionIndices: context
+                                                  .read<SettingsCubit>()
+                                                  .state
+                                                  .includeVersionIndices,
                                             );
                                       },
                                 style: FilledButton.styleFrom(
@@ -239,9 +257,21 @@ class _SongSelectionScreenState extends State<SongSelectionScreen>
                 // ─────────────────────────────────────────────────────────────
                 Expanded(
                   child: Center(
-                    child: BlocBuilder<SongCubit, SongState>(
-                      builder: (context, state) {
-                        return _SongDisplaySection(state: state);
+                    child: BlocBuilder<SettingsCubit, SettingsState>(
+                      buildWhen: (previous, current) {
+                        return previous.showLevel != current.showLevel ||
+                            previous.showUserLevel != current.showUserLevel;
+                      },
+                      builder: (context, settingsState) {
+                        return BlocBuilder<SongCubit, SongState>(
+                          builder: (context, state) {
+                            return _SongDisplaySection(
+                              state: state,
+                              showLevel: settingsState.showLevel,
+                              showUserLevel: settingsState.showUserLevel,
+                            );
+                          },
+                        );
                       },
                     ),
                   ),
@@ -404,9 +434,15 @@ class _CompactAdjustRow extends StatelessWidget {
 // ═══════════════════════════════════════════════════════════════════════════════
 
 class _SongDisplaySection extends StatelessWidget {
-  const _SongDisplaySection({required this.state});
+  const _SongDisplaySection({
+    required this.state,
+    required this.showLevel,
+    required this.showUserLevel,
+  });
 
   final SongState state;
+  final bool showLevel;
+  final bool showUserLevel;
 
   @override
   Widget build(BuildContext context) {
@@ -428,6 +464,8 @@ class _SongDisplaySection extends StatelessWidget {
         song: song,
         theme: theme,
         colorScheme: colorScheme,
+        showLevel: showLevel,
+        showUserLevel: showUserLevel,
       ),
     };
   }
@@ -563,11 +601,15 @@ class _LoadedState extends StatelessWidget {
     required this.song,
     required this.theme,
     required this.colorScheme,
+    required this.showLevel,
+    required this.showUserLevel,
   });
 
   final SongModel song;
   final ThemeData theme;
   final ColorScheme colorScheme;
+  final bool showLevel;
+  final bool showUserLevel;
 
   Color _getDifficultyColor() {
     return switch (song.diffCategory.toUpperCase()) {
@@ -580,10 +622,10 @@ class _LoadedState extends StatelessWidget {
     };
   }
 
-  String _formatInternalWithUserLevel() {
+  String _formatInternal() {
     final internal = song.internalLevel?.toStringAsFixed(1) ?? '--';
     final ul = song.userLevel;
-    if (ul != null && ul.isNotEmpty) {
+    if (showUserLevel && ul != null && ul.isNotEmpty) {
       return '$internal ($ul)';
     }
     return internal;
@@ -686,43 +728,44 @@ class _LoadedState extends StatelessWidget {
                   ),
                   const SizedBox(height: 8),
 
-                  // Chart Info (type + difficulty + level) + Internal Level
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 12,
-                          vertical: 6,
-                        ),
-                        decoration: BoxDecoration(
-                          color: diffColor.withValues(alpha: 0.2),
-                          borderRadius: BorderRadius.circular(8),
-                          border: Border.all(color: diffColor, width: 1.5),
-                        ),
-                        child: Text(
-                          '${song.chartType} ${song.diffCategory} ${song.level}',
-                          style: theme.textTheme.titleSmall?.copyWith(
-                            color: diffColor,
-                            fontWeight: FontWeight.w600,
+                  // Chart/difficulty/internal row is fully hidden when level display is off.
+                  if (showLevel)
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 6,
+                          ),
+                          decoration: BoxDecoration(
+                            color: diffColor.withValues(alpha: 0.2),
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(color: diffColor, width: 1.5),
+                          ),
+                          child: Text(
+                            '${song.chartType} ${song.diffCategory} ${song.level}',
+                            style: theme.textTheme.titleSmall?.copyWith(
+                              color: diffColor,
+                              fontWeight: FontWeight.w600,
+                            ),
                           ),
                         ),
-                      ),
-                      const SizedBox(width: 8),
-                      Icon(
-                        Icons.bolt_rounded,
-                        color: colorScheme.primary,
-                        size: 18,
-                      ),
-                      Text(
-                        _formatInternalWithUserLevel(),
-                        style: theme.textTheme.titleSmall?.copyWith(
+                        const SizedBox(width: 8),
+                        Icon(
+                          Icons.bolt_rounded,
                           color: colorScheme.primary,
-                          fontWeight: FontWeight.bold,
+                          size: 18,
                         ),
-                      ),
-                    ],
-                  ),
+                        Text(
+                          _formatInternal(),
+                          style: theme.textTheme.titleSmall?.copyWith(
+                            color: colorScheme.primary,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ],
+                    ),
 
                   if (song.version != null) ...[
                     const SizedBox(height: 6),
@@ -732,6 +775,17 @@ class _LoadedState extends StatelessWidget {
                         color: colorScheme.primary,
                         fontWeight: FontWeight.w500,
                       ),
+                    ),
+                  ],
+                  if (song.filteredSongCount != null &&
+                      song.levelSongCount != null) ...[
+                    const SizedBox(height: 4),
+                    Text(
+                      'Picked from ${song.filteredSongCount} / ${song.levelSongCount} songs (filtered / level)',
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: colorScheme.onSurfaceVariant,
+                      ),
+                      textAlign: TextAlign.center,
                     ),
                   ],
                   const SizedBox(height: 8),

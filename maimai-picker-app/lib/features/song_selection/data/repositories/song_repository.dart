@@ -38,6 +38,9 @@ abstract class SongRepository {
   Future<SongModel> getRandomSong({
     required double minLevel,
     required double maxLevel,
+    required Set<String> chartTypes,
+    required Set<int> difficultyIndices,
+    Set<int>? includeVersionIndices,
   });
 }
 
@@ -82,11 +85,17 @@ class SongRepositoryImpl implements SongRepository {
   Future<SongModel> getRandomSong({
     required double minLevel,
     required double maxLevel,
+    required Set<String> chartTypes,
+    required Set<int> difficultyIndices,
+    Set<int>? includeVersionIndices,
   }) async {
     // 1. Fetch a random song from Song Info Server
     final songResponse = await _fetchRandomSongFromSongInfo(
       minLevel: minLevel,
       maxLevel: maxLevel,
+      chartTypes: chartTypes,
+      difficultyIndices: difficultyIndices,
+      includeVersionIndices: includeVersionIndices,
     );
 
     // Parse the nested response: pick one random sheet within the level range
@@ -94,6 +103,12 @@ class SongRepositoryImpl implements SongRepository {
     final version = songResponse['version'] as String?;
     final imageName = songResponse['image_name'] as String?;
     final sheets = songResponse['sheets'] as List<dynamic>? ?? [];
+    final selectionStats =
+        songResponse['selection_stats'] as Map<String, dynamic>?;
+    final levelSongCount = (selectionStats?['level_song_count'] as num?)
+        ?.toInt();
+    final filteredSongCount = (selectionStats?['filtered_song_count'] as num?)
+        ?.toInt();
 
     if (sheets.isEmpty) {
       throw const NotFoundException('No sheets found in the selected song');
@@ -150,6 +165,8 @@ class SongRepositoryImpl implements SongRepository {
       sourceIdx: personalScore?['source_idx'] as String?,
       ratingPoints: personalScore?['rating_points'] as int?,
       bucket: personalScore?['bucket'] as String?,
+      levelSongCount: levelSongCount,
+      filteredSongCount: filteredSongCount,
     );
   }
 
@@ -157,11 +174,36 @@ class SongRepositoryImpl implements SongRepository {
   Future<Map<String, dynamic>> _fetchRandomSongFromSongInfo({
     required double minLevel,
     required double maxLevel,
+    required Set<String> chartTypes,
+    required Set<int> difficultyIndices,
+    Set<int>? includeVersionIndices,
   }) async {
     try {
+      final queryParameters = <String, dynamic>{
+        'min_level': _toLevelQueryValue(minLevel),
+        'max_level': _toLevelQueryValue(maxLevel),
+      };
+
+      final sortedChartTypes = chartTypes.toList()..sort();
+      final sortedDifficultyIndices = difficultyIndices.toList()..sort();
+      if (sortedChartTypes.isNotEmpty) {
+        queryParameters['chart_types'] = sortedChartTypes.join(',');
+      }
+      if (sortedDifficultyIndices.isNotEmpty) {
+        queryParameters['include_difficulties'] = sortedDifficultyIndices.join(
+          ',',
+        );
+      }
+      if (includeVersionIndices != null) {
+        final sortedVersionIndices = includeVersionIndices.toList()..sort();
+        if (sortedVersionIndices.isNotEmpty) {
+          queryParameters['include_versions'] = sortedVersionIndices.join(',');
+        }
+      }
+
       final response = await _songInfoDio.get<Map<String, dynamic>>(
         '/api/songs/random',
-        queryParameters: {'min_level': minLevel, 'max_level': maxLevel},
+        queryParameters: queryParameters,
       );
 
       if (response.statusCode == 404) {
@@ -191,6 +233,12 @@ class SongRepositoryImpl implements SongRepository {
 
       throw NetworkException('Network error: ${e.message ?? "unknown error"}');
     }
+  }
+
+  String _toLevelQueryValue(double value) {
+    // Normalize to one decimal to avoid binary floating-point drift.
+    final normalized = (value * 10).roundToDouble() / 10.0;
+    return normalized.toStringAsFixed(1);
   }
 
   /// Optionally fetch personal score from Record Collector Server.
