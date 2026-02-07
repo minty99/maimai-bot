@@ -13,28 +13,41 @@ import 'features/song_selection/presentation/screens/song_selection_screen.dart'
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // Create and initialize settings cubit first (for persisted server URLs)
+  // Create and initialize cubits with persisted settings
   final settingsCubit = SettingsCubit();
-  await settingsCubit.initialize();
+  final levelRangeCubit = LevelRangeCubit();
 
-  runApp(MaimaiPickerApp(settingsCubit: settingsCubit));
+  await Future.wait([
+    settingsCubit.initialize(),
+    levelRangeCubit.initialize(),
+  ]);
+
+  runApp(MaimaiPickerApp(
+    settingsCubit: settingsCubit,
+    levelRangeCubit: levelRangeCubit,
+  ));
 }
 
 /// Root application widget with BLoC providers.
 class MaimaiPickerApp extends StatelessWidget {
-  const MaimaiPickerApp({super.key, required this.settingsCubit});
+  const MaimaiPickerApp({
+    super.key,
+    required this.settingsCubit,
+    required this.levelRangeCubit,
+  });
 
   final SettingsCubit settingsCubit;
+  final LevelRangeCubit levelRangeCubit;
 
   @override
   Widget build(BuildContext context) {
     return MultiBlocProvider(
       providers: [
-        // Settings Cubit (pre-initialized with persisted server URLs)
+        // Settings Cubit (pre-initialized with persisted settings)
         BlocProvider<SettingsCubit>.value(value: settingsCubit),
 
-        // Level Range Cubit
-        BlocProvider<LevelRangeCubit>(create: (_) => LevelRangeCubit()),
+        // Level Range Cubit (pre-initialized with persisted level/gap)
+        BlocProvider<LevelRangeCubit>.value(value: levelRangeCubit),
 
         // Hardware Input Cubit
         BlocProvider<HardwareInputCubit>(create: (_) => HardwareInputCubit()),
