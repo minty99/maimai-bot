@@ -143,35 +143,49 @@ impl DifficultyCategory {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, EnumString, Display)]
 pub enum ScoreRank {
     #[serde(rename = "SSS+")]
+    #[strum(serialize = "SSS+")]
     SssPlus,
     #[serde(rename = "SSS")]
+    #[strum(serialize = "SSS")]
     Sss,
     #[serde(rename = "SS+")]
+    #[strum(serialize = "SS+")]
     SsPlus,
     #[serde(rename = "SS")]
+    #[strum(serialize = "SS")]
     Ss,
     #[serde(rename = "S+")]
+    #[strum(serialize = "S+")]
     SPlus,
     #[serde(rename = "S")]
+    #[strum(serialize = "S")]
     S,
     #[serde(rename = "AAA")]
+    #[strum(serialize = "AAA")]
     Aaa,
     #[serde(rename = "AA")]
+    #[strum(serialize = "AA")]
     Aa,
     #[serde(rename = "A")]
+    #[strum(serialize = "A")]
     A,
     #[serde(rename = "BBB")]
+    #[strum(serialize = "BBB")]
     Bbb,
     #[serde(rename = "BB")]
+    #[strum(serialize = "BB")]
     Bb,
     #[serde(rename = "B")]
+    #[strum(serialize = "B")]
     B,
     #[serde(rename = "C")]
+    #[strum(serialize = "C")]
     C,
     #[serde(rename = "D")]
+    #[strum(serialize = "D")]
     D,
 }
 
@@ -237,15 +251,19 @@ impl ScoreRank {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, EnumString, Display)]
 pub enum FcStatus {
     #[serde(rename = "AP+")]
+    #[strum(serialize = "AP+")]
     ApPlus,
     #[serde(rename = "AP")]
+    #[strum(serialize = "AP")]
     Ap,
     #[serde(rename = "FC+")]
+    #[strum(serialize = "FC+")]
     FcPlus,
     #[serde(rename = "FC")]
+    #[strum(serialize = "FC")]
     Fc,
 }
 
@@ -281,17 +299,22 @@ impl FcStatus {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, EnumString, Display)]
 pub enum SyncStatus {
     #[serde(rename = "FDX+")]
+    #[strum(serialize = "FDX+")]
     FdxPlus,
     #[serde(rename = "FDX")]
+    #[strum(serialize = "FDX")]
     Fdx,
     #[serde(rename = "FS+")]
+    #[strum(serialize = "FS+")]
     FsPlus,
     #[serde(rename = "FS")]
+    #[strum(serialize = "FS")]
     Fs,
     #[serde(rename = "SYNC")]
+    #[strum(serialize = "SYNC")]
     Sync,
 }
 
@@ -447,9 +470,9 @@ pub struct ScoreResponse {
     pub diff_category: DifficultyCategory,
     pub level: String,
     pub achievement_x10000: Option<i64>,
-    pub rank: Option<String>,
-    pub fc: Option<String>,
-    pub sync: Option<String>,
+    pub rank: Option<ScoreRank>,
+    pub fc: Option<FcStatus>,
+    pub sync: Option<SyncStatus>,
     pub dx_score: Option<i32>,
     pub dx_score_max: Option<i32>,
     pub source_idx: Option<String>,
@@ -470,9 +493,9 @@ pub struct PlayRecordResponse {
     pub diff_category: Option<DifficultyCategory>,
     pub level: Option<String>,
     pub achievement_x10000: Option<i64>,
-    pub score_rank: Option<String>,
-    pub fc: Option<String>,
-    pub sync: Option<String>,
+    pub score_rank: Option<ScoreRank>,
+    pub fc: Option<FcStatus>,
+    pub sync: Option<SyncStatus>,
     pub dx_score: Option<i32>,
     pub dx_score_max: Option<i32>,
     pub credit_play_count: Option<i32>,

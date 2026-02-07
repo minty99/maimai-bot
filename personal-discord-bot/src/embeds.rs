@@ -1,4 +1,4 @@
-use models::{ChartType, DifficultyCategory};
+use models::{ChartType, DifficultyCategory, ScoreRank};
 use poise::serenity_prelude as serenity;
 use serenity::builder::CreateEmbed;
 
@@ -51,7 +51,7 @@ pub(crate) struct RecentRecordView {
     pub(crate) achievement_percent: Option<f64>,
     pub(crate) achievement_new_record: bool,
     pub(crate) first_play: bool,
-    pub(crate) rank: Option<String>,
+    pub(crate) rank: Option<ScoreRank>,
 }
 
 #[derive(Debug, Clone)]
@@ -119,11 +119,7 @@ pub(crate) fn build_mai_recent_embeds(
     embeds.extend(records.iter().map(|record| {
         let track = format_track_label(record.track);
         let achv = format_percent_f64(record.achievement_percent);
-        let rank = record
-            .rank
-            .as_deref()
-            .map(normalize_playlog_rank)
-            .unwrap_or("N/A");
+        let rank = record.rank.map(|r| r.as_str()).unwrap_or("N/A");
         let diff = record
             .diff_category
             .map(|d| d.as_str())
@@ -208,13 +204,4 @@ fn format_track_label(track: Option<i64>) -> String {
     track
         .map(|t| format!("TRACK {t:02}"))
         .unwrap_or_else(|| "TRACK ??".to_string())
-}
-
-fn normalize_playlog_rank(rank: &str) -> &str {
-    match rank {
-        "SSSPLUS" => "SSS+",
-        "SSPLUS" => "SS+",
-        "SPLUS" => "S+",
-        _ => rank,
-    }
 }

@@ -2,7 +2,9 @@ use std::str::FromStr;
 
 use crate::error::{AppError, Result};
 use crate::song_info_client::{SongInfoClient, SongMetadata};
-use models::{ChartType, DifficultyCategory, PlayRecord, ScoreEntry};
+use models::{
+    ChartType, DifficultyCategory, FcStatus, PlayRecord, ScoreEntry, ScoreRank, SyncStatus,
+};
 pub use models::{PlayRecordResponse, ScoreResponse};
 
 pub async fn score_response_from_entry(
@@ -41,15 +43,19 @@ pub async fn score_response_from_entry(
         None
     };
 
+    let rank = parse_optional::<ScoreRank>(&entry.rank);
+    let fc = parse_optional::<FcStatus>(&entry.fc);
+    let sync = parse_optional::<SyncStatus>(&entry.sync);
+
     Ok(ScoreResponse {
         title: entry.title,
         chart_type,
         diff_category,
         level: entry.level,
         achievement_x10000: entry.achievement_x10000,
-        rank: entry.rank,
-        fc: entry.fc,
-        sync: entry.sync,
+        rank,
+        fc,
+        sync,
         dx_score: entry.dx_score,
         dx_score_max: entry.dx_score_max,
         source_idx: entry.source_idx,
@@ -109,6 +115,10 @@ pub async fn play_record_response_from_record(
         None
     };
 
+    let score_rank = parse_optional::<ScoreRank>(&record.score_rank);
+    let fc = parse_optional::<FcStatus>(&record.fc);
+    let sync = parse_optional::<SyncStatus>(&record.sync);
+
     Ok(PlayRecordResponse {
         played_at_unixtime: record.played_at_unixtime,
         played_at: record.played_at,
@@ -118,9 +128,9 @@ pub async fn play_record_response_from_record(
         diff_category,
         level: record.level,
         achievement_x10000: record.achievement_x10000,
-        score_rank: record.score_rank,
-        fc: record.fc,
-        sync: record.sync,
+        score_rank,
+        fc,
+        sync,
         dx_score: record.dx_score,
         dx_score_max: record.dx_score_max,
         credit_play_count: record.credit_play_count,
@@ -130,4 +140,11 @@ pub async fn play_record_response_from_record(
         rating_points,
         bucket: metadata.bucket,
     })
+}
+
+fn parse_optional<T: FromStr>(value: &Option<String>) -> Option<T> {
+    value
+        .as_deref()
+        .filter(|s| !s.is_empty())
+        .and_then(|s| s.parse().ok())
 }

@@ -182,9 +182,9 @@ pub(crate) async fn mai_score(
             .map(|x| x as f64 / 10000.0)
             .unwrap_or(0.0);
         let level = format_level_with_internal(&score.level, score.internal_level);
-        let rank = score.rank.as_deref().unwrap_or("N/A");
-        let fc = score.fc.as_deref().unwrap_or("-");
-        let sync = score.sync.as_deref().unwrap_or("-");
+        let rank = score.rank.map(|r| r.as_str()).unwrap_or("N/A");
+        let fc = score.fc.map(|v| v.as_str()).unwrap_or("-");
+        let sync = score.sync.map(|v| v.as_str()).unwrap_or("-");
 
         let field_name = format!("[{}] {} {}", score.chart_type, score.diff_category, level);
 
@@ -482,7 +482,7 @@ async fn build_mai_rating_embeds(
         level: String,
         internal_level: f32,
         achievement_percent: f64,
-        rank: Option<String>,
+        rank: Option<models::ScoreRank>,
         rating_points: u32,
     }
 
@@ -549,7 +549,7 @@ async fn build_mai_rating_embeds(
     fn list_desc(rows: &[RatedRow]) -> String {
         let mut out = String::new();
         for (idx, r) in rows.iter().enumerate() {
-            let rank = r.rank.as_deref().unwrap_or("N/A");
+            let rank = r.rank.map(|r| r.as_str()).unwrap_or("N/A");
             let level = format_level_with_internal(&r.level, Some(r.internal_level));
             out.push_str(&format!(
                 "- [{}] `{:>3}pt` {} [{}] {} {} — {:.4}% • {}\n",
