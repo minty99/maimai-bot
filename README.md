@@ -6,11 +6,13 @@
 
 이 프로젝트는 **두 개의 독립적인 서버** + **Discord 봇** 구조로 분리되어 있습니다:
 
-- **Song Info Server** (`song-info-server/`): 공개 곡 정보 제공 (인증 불필요, stateless)
-  - maimai 곡 데이터(제목, 난이도, 내부 레벨 등)를 JSON 파일에서 로드하여 제공합니다.
+- **Song Info Server** (`song-info-server/`): 공개 곡 정보 제공 (stateful updater + API)
+  - 시작 시 곡 데이터가 없으면 `maimai-songdb`로 곡/내부레벨/재킷 정보를 가져와 `data/song_data/`에 저장합니다.
+  - 매일 07:30 KST에 곡 데이터를 다시 갱신하고 메모리에 리로드합니다.
+  - 저장된 JSON(`data/song_data/data.json`)을 로드해 API로 제공합니다.
   - 재킷 이미지를 정적 파일로 서빙합니다.
   - 포트: `3001` (기본값)
-  - 의존성: 없음 (독립 실행 가능)
+  - 의존성: SongDB fetch용 환경 변수 (`MAIMAI_*`, `GOOGLE_API_KEY`) 필요
   
 - **Record Collector Server** (`record-collector-server/`): 개인 기록 수집 및 관리 (인증 필요, stateful)
   - 쿠키를 `data/` 아래에 저장/재사용하고, 만료 시 재로그인해서 갱신합니다.
@@ -39,7 +41,7 @@
 - Rust (stable)
 - Discord Bot Token / 단일 수신자(User ID) (Discord 봇 사용 시)
 - SEGA ID 계정 (maimaidx-eng.com) (Record Collector Server 사용 시)
-- maimai 곡 데이터 JSON 파일 (Song Info Server용)
+- Song Info Server SongDB 갱신용 환경 변수 (`MAIMAI_*`, `GOOGLE_API_KEY`, `USER_AGENT`)
 
 ## 설정
 
@@ -52,7 +54,7 @@
 **1. Song Info Server 설정** (`song-info-server/.env`)
 ```bash
 cp song-info-server/.env.example song-info-server/.env
-# 편집: SONG_INFO_PORT, SONG_DATA_PATH 등 입력
+# 편집: SONG_INFO_PORT, SONG_DATA_PATH, MAIMAI_*, USER_AGENT, GOOGLE_API_KEY 등 입력
 ```
 
 **2. Record Collector Server 설정** (`record-collector-server/.env`)
@@ -84,8 +86,8 @@ cp .env.example .env
 ### 기본 런타임 경로
 
 - Song Info Server:
-  - 곡 데이터: `song-info-server/data/songs.json` (기본값)
-  - 재킷 이미지: `song-info-server/data/covers/`
+  - 곡 데이터: `data/song_data/data.json` (기본값)
+  - 재킷 이미지: `data/song_data/cover/`
 - Record Collector Server:
   - DB: `data/maimai.sqlite3`
   - 쿠키: `data/cookies.json`
@@ -183,8 +185,8 @@ docker compose down
 #### 데이터 영속성
 
 - Song Info Server:
-  - 곡 데이터: `./song-info-server/data/songs.json`
-  - 재킷 이미지: `./song-info-server/data/covers/`
+  - 곡 데이터: `./data/song_data/data.json`
+  - 재킷 이미지: `./data/song_data/cover/`
 - Record Collector Server:
   - SQLite 데이터베이스: `./data/maimai.sqlite3`
   - 쿠키: `./data/cookies.json`
