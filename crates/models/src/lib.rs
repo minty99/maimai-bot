@@ -4,7 +4,18 @@ use strum::{Display, EnumString};
 pub mod config;
 
 #[derive(
-    Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, EnumString, Display,
+    Debug,
+    Clone,
+    Copy,
+    PartialEq,
+    Eq,
+    PartialOrd,
+    Ord,
+    Hash,
+    Serialize,
+    Deserialize,
+    EnumString,
+    Display,
 )]
 #[repr(u8)]
 pub enum ChartType {
@@ -20,10 +31,38 @@ impl ChartType {
     pub fn as_u8(self) -> u8 {
         self as u8
     }
+
+    /// Parse from lowercase songdb JSON value ("std", "dx").
+    pub fn from_lowercase(s: &str) -> Option<Self> {
+        match s.trim().to_ascii_lowercase().as_str() {
+            "std" => Some(Self::Std),
+            "dx" => Some(Self::Dx),
+            _ => None,
+        }
+    }
+
+    /// Return lowercase songdb JSON value ("std", "dx").
+    pub const fn as_lowercase(&self) -> &'static str {
+        match self {
+            Self::Std => "std",
+            Self::Dx => "dx",
+        }
+    }
 }
 
 #[derive(
-    Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, EnumString, Display,
+    Debug,
+    Clone,
+    Copy,
+    PartialEq,
+    Eq,
+    PartialOrd,
+    Ord,
+    Hash,
+    Serialize,
+    Deserialize,
+    EnumString,
+    Display,
 )]
 #[repr(u8)]
 pub enum DifficultyCategory {
@@ -60,6 +99,39 @@ impl DifficultyCategory {
             Self::Expert => "EXPERT",
             Self::Master => "MASTER",
             Self::ReMaster => "Re:MASTER",
+        }
+    }
+
+    /// Parse from lowercase songdb JSON value ("basic", "advanced", "expert", "master", "remaster").
+    pub fn from_lowercase(s: &str) -> Option<Self> {
+        match s.trim().to_ascii_lowercase().as_str() {
+            "basic" => Some(Self::Basic),
+            "advanced" => Some(Self::Advanced),
+            "expert" => Some(Self::Expert),
+            "master" => Some(Self::Master),
+            "remaster" => Some(Self::ReMaster),
+            _ => None,
+        }
+    }
+
+    /// Return lowercase songdb JSON value ("basic", "advanced", "expert", "master", "remaster").
+    pub const fn as_lowercase(&self) -> &'static str {
+        match self {
+            Self::Basic => "basic",
+            Self::Advanced => "advanced",
+            Self::Expert => "expert",
+            Self::Master => "master",
+            Self::ReMaster => "remaster",
+        }
+    }
+
+    /// Parse from internal-level spreadsheet abbreviations ("EXP", "MAS", "ReMAS").
+    pub fn from_sheet_abbreviation(s: &str) -> Option<Self> {
+        match s.trim() {
+            "EXP" => Some(Self::Expert),
+            "MAS" => Some(Self::Master),
+            "ReMAS" => Some(Self::ReMaster),
+            _ => None,
         }
     }
 }
