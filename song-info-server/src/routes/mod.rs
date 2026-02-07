@@ -15,7 +15,7 @@ pub fn create_router(state: AppState) -> Router {
         .route("/health/ready", get(health::ready))
         .route("/api/songs/random", get(songs::random_song_by_level))
         .route(
-            "/api/songs/:title/:chart_type/:diff_category",
+            "/api/songs/{title}/{chart_type}/{diff_category}",
             get(songs::get_song_metadata),
         )
         .route("/api/cover/{image_name}", get(cover::get_cover))

@@ -1,18 +1,14 @@
-use crate::config::BackendConfig;
+use crate::config::RecordCollectorConfig;
 use maimai_http_client::MaimaiClient;
-use models::SongDataIndex;
 use reqwest::Client;
 use sqlx::SqlitePool;
 use std::path::PathBuf;
-use std::sync::{Arc, RwLock};
 
 #[derive(Clone)]
 pub struct AppState {
     pub db_pool: SqlitePool,
-    pub config: BackendConfig,
+    pub config: RecordCollectorConfig,
     pub http_client: Client,
-    pub song_data: Arc<RwLock<Arc<SongDataIndex>>>,
-    pub song_data_base_path: PathBuf,
 }
 
 impl AppState {
@@ -29,17 +25,5 @@ impl AppState {
             discord_user_id: None,
         };
         MaimaiClient::new(&app_config)
-    }
-
-    pub fn reload_song_data(&self) -> eyre::Result<()> {
-        let new_data = models::SongDataIndex::load_with_base_path(
-            &self.song_data_base_path.to_string_lossy(),
-        )?
-        .unwrap_or_else(SongDataIndex::empty);
-
-        let mut song_data = self.song_data.write().unwrap();
-        *song_data = Arc::new(new_data);
-
-        Ok(())
     }
 }

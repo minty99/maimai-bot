@@ -6,12 +6,14 @@
 
 이 프로젝트는 **두 개의 독립적인 서버** + **Discord 봇** 구조로 분리되어 있습니다:
 
-- **Song Info Server** (`song-info-server/`): 공개 곡 정보 제공 (인증 불필요, stateless)
-  - maimai 곡 데이터(제목, 난이도, 내부 레벨 등)를 JSON 파일에서 로드하여 제공합니다.
+- **Song Info Server** (`song-info-server/`): 공개 곡 정보 제공 (stateful updater + API)
+  - 시작 시 곡 데이터가 없으면 `maimai-songdb`로 곡/내부레벨/재킷 정보를 가져와 `data/song_data/`에 저장합니다.
+  - 매일 07:30 KST에 곡 데이터를 다시 갱신하고 메모리에 리로드합니다.
+  - 저장된 JSON(`data/song_data/data.json`)을 로드해 API로 제공합니다.
   - 재킷 이미지를 정적 파일로 서빙합니다.
   - 포트: `3001` (기본값)
-  - 의존성: 없음 (독립 실행 가능)
-  
+  - 의존성: SongDB fetch용 환경 변수 (`MAIMAI_*`, `GOOGLE_API_KEY`) 필요
+
 - **Record Collector Server** (`record-collector-server/`): 개인 기록 수집 및 관리 (인증 필요, stateful)
   - 쿠키를 `data/` 아래에 저장/재사용하고, 만료 시 재로그인해서 갱신합니다.
   - DB는 `sqlx::migrate!()`로 런타임에 마이그레이션을 실행합니다.
@@ -19,7 +21,7 @@
   - 이후 10분마다 `playerData`를 다시 크롤링해서 **total play count 변화가 있을 때만** recent를 크롤링합니다.
   - 포트: `3000` (기본값)
   - 의존성: Song Info Server (곡 정보 조회용)
-  
+
 - **Discord Bot** (`discord/`): 두 서버의 API를 호출하여 Discord 명령어 처리 및 DM 알림 전송
   - Record Collector Server의 `/health/ready` 엔드포인트를 폴링하여 서버가 준비될 때까지 대기합니다.
   - Record Collector Server에서 새 플레이가 감지되면 DM으로 알림을 보냅니다.
@@ -39,7 +41,7 @@
 - Rust (stable)
 - Discord Bot Token / 단일 수신자(User ID) (Discord 봇 사용 시)
 - SEGA ID 계정 (maimaidx-eng.com) (Record Collector Server 사용 시)
-- maimai 곡 데이터 JSON 파일 (Song Info Server용)
+- Song Info Server SongDB 갱신용 환경 변수 (`MAIMAI_*`, `GOOGLE_API_KEY`, `USER_AGENT`)
 
 ## 설정
 
@@ -52,7 +54,7 @@
 **1. Song Info Server 설정** (`song-info-server/.env`)
 ```bash
 cp song-info-server/.env.example song-info-server/.env
-# 편집: SONG_INFO_PORT, SONG_DATA_PATH 등 입력
+# 편집: SONG_INFO_PORT, SONG_DATA_PATH, MAIMAI_*, USER_AGENT, GOOGLE_API_KEY 등 입력
 ```
 
 **2. Record Collector Server 설정** (`record-collector-server/.env`)
@@ -76,7 +78,7 @@ cp .env.example .env
 # 편집: 모든 환경 변수 입력
 ```
 
-**주의**: 
+**주의**:
 - `.env` 파일은 절대 커밋하지 마세요 (`.gitignore`에 포함됨)
 - `dotenvy`가 상위 디렉토리를 자동 탐색하므로 어디서 실행하든 작동합니다
 - **보안**: 각 서비스는 필요한 환경 변수만 로드합니다 (Least Privilege 원칙)
@@ -84,8 +86,8 @@ cp .env.example .env
 ### 기본 런타임 경로
 
 - Song Info Server:
-  - 곡 데이터: `song-info-server/data/songs.json` (기본값)
-  - 재킷 이미지: `song-info-server/data/covers/`
+  - 곡 데이터: `data/song_data/data.json` (기본값)
+  - 재킷 이미지: `data/song_data/cover/`
 - Record Collector Server:
   - DB: `data/maimai.sqlite3`
   - 쿠키: `data/cookies.json`
@@ -112,7 +114,7 @@ cp .env.example .env
 
 3. **Record Collector Server 실행** (터미널 2):
    ```bash
-   cargo run --bin maimai-record-collector
+   cargo run --bin record-collector-server
    ```
    Record Collector Server는 `http://localhost:3000`에서 실행되며, `/health/ready` 엔드포인트를 제공합니다.
 
@@ -122,7 +124,7 @@ cp .env.example .env
    ```
    Discord 봇은 Record Collector Server의 `/health/ready`를 폴링하여 서버가 준비될 때까지 대기합니다.
 
-**참고**: 
+**참고**:
 - `dotenvy`가 현재 디렉토리와 상위 디렉토리를 탐색하므로 프로젝트 루트에서 실행해도 각 서비스의 `.env`를 자동으로 찾습니다.
 - 각 서비스는 자신의 `.env`만 로드하여 보안을 강화합니다.
 - Song Info Server는 독립적으로 실행 가능하며, Record Collector Server나 Discord 봇 없이도 사용할 수 있습니다.
@@ -149,7 +151,7 @@ cp .env.example .env
 이 프로젝트는 **단일 Dockerfile**을 사용하여 세 서비스를 모두 빌드합니다:
 
 - **빌더 스테이지**: 전체 워크스페이스를 한 번만 컴파일
-- **멀티 타겟**: `target` 옵션으로 각 서비스의 런타임 이미지 생성 (`maimai-song-info`, `maimai-record-collector`, `maimai-discord`)
+- **멀티 타겟**: `target` 옵션으로 각 서비스의 런타임 이미지 생성 (`maimai-song-info`, `record-collector-server`, `maimai-discord`)
 - **효율성**: 중복 빌드 없이 세 바이너리를 동시에 생성
 
 개별 서비스 빌드:
@@ -183,8 +185,8 @@ docker compose down
 #### 데이터 영속성
 
 - Song Info Server:
-  - 곡 데이터: `./song-info-server/data/songs.json`
-  - 재킷 이미지: `./song-info-server/data/covers/`
+  - 곡 데이터: `./data/song_data/data.json`
+  - 재킷 이미지: `./data/song_data/cover/`
 - Record Collector Server:
   - SQLite 데이터베이스: `./data/maimai.sqlite3`
   - 쿠키: `./data/cookies.json`
@@ -195,16 +197,16 @@ docker compose down
 Record Collector Server에서 제공하는 CLI 명령어들 (레거시, 참고용):
 
 쿠키 로그인/체크:
-- `cargo run --bin maimai-record-collector -- auth login`
-- `cargo run --bin maimai-record-collector -- auth check`
+- `cargo run --bin record-collector-server -- auth login`
+- `cargo run --bin record-collector-server -- auth check`
 
 HTML/raw fetch (로그인 필요):
-- `cargo run --bin maimai-record-collector -- fetch url --url https://maimaidx-eng.com/maimai-mobile/playerData/ --out data/out/player_data.html`
+- `cargo run --bin record-collector-server -- fetch url --url https://maimaidx-eng.com/maimai-mobile/playerData/ --out data/out/player_data.html`
 
 크롤링/파싱(JSON)만 수행 (DB 미사용):
-- `cargo run --bin maimai-record-collector -- crawl player-data --out data/out/player_data.json`
-- `cargo run --bin maimai-record-collector -- crawl recent --out data/out/recent.json`
-- `cargo run --bin maimai-record-collector -- crawl scores --out data/out/scores.json`
+- `cargo run --bin record-collector-server -- crawl player-data --out data/out/player_data.json`
+- `cargo run --bin record-collector-server -- crawl recent --out data/out/recent.json`
+- `cargo run --bin record-collector-server -- crawl scores --out data/out/scores.json`
 
 ## Discord 명령어
 

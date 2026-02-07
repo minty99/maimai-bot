@@ -2262,7 +2262,6 @@ dependencies = [
  "maimai-db",
  "maimai-http-client",
  "maimai-parsers",
- "maimai-songdb",
  "models",
  "rand 0.8.5",
  "reqwest",
@@ -2854,6 +2853,8 @@ name = "song-info-server"
 version = "0.1.0"
 dependencies = [
  "axum",
+ "chrono",
+ "chrono-tz",
  "dotenvy",
  "eyre",
  "maimai-songdb",

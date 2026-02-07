@@ -1,7 +1,6 @@
 /target
 .env
-backend/.env
-discord/.env
+**/.env
 /data
 *.sqlite3
 

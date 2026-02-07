@@ -41,7 +41,7 @@ async fn poll_and_sync_if_needed(app_state: &AppState) -> Result<bool> {
         return Ok(false);
     }
 
-    let app_config = backend_config_to_app_config(&app_state.config);
+    let app_config = to_app_config(&app_state.config);
     let mut client = MaimaiClient::new(&app_config).wrap_err("create HTTP client")?;
     client
         .ensure_logged_in()
@@ -207,9 +207,7 @@ fn format_chart_type(chart_type: models::ChartType) -> &'static str {
     }
 }
 
-fn backend_config_to_app_config(
-    config: &crate::config::BackendConfig,
-) -> models::config::AppConfig {
+fn to_app_config(config: &crate::config::RecordCollectorConfig) -> models::config::AppConfig {
     use std::path::PathBuf;
 
     let data_dir = PathBuf::from(&config.data_dir);

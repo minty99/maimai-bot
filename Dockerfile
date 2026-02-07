@@ -49,9 +49,9 @@ EXPOSE 3001
 CMD ["maimai-song-info"]
 
 # ============================================
-# Target: maimai-record-collector
+# Target: record-collector-server
 # ============================================
-FROM ubuntu:noble as maimai-record-collector
+FROM ubuntu:noble as record-collector-server
 
 RUN apt-get update && apt-get install -y \
     ca-certificates \
@@ -62,7 +62,7 @@ RUN apt-get update && apt-get install -y \
 WORKDIR /app
 
 # Copy record collector binary
-COPY --from=builder /app/target/release/maimai-record-collector /usr/local/bin/maimai-record-collector
+COPY --from=builder /app/target/release/record-collector-server /usr/local/bin/record-collector-server
 
 # Copy migrations
 COPY record-collector-server/migrations /app/migrations
@@ -72,7 +72,7 @@ RUN mkdir -p /app/data
 
 EXPOSE 3000
 
-CMD ["maimai-record-collector"]
+CMD ["record-collector-server"]
 
 # ============================================
 # Target: maimai-discord

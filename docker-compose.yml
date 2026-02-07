@@ -8,9 +8,15 @@ services:
     restart: unless-stopped
     environment:
       - SONG_INFO_PORT=3001
-      - SONG_DATA_PATH=/app/data/song_data/data.json
+      - SONG_DATA_PATH=/app/data/song_data
+      - MAIMAI_INTL_SEGA_ID=${MAIMAI_INTL_SEGA_ID}
+      - MAIMAI_INTL_SEGA_PASSWORD=${MAIMAI_INTL_SEGA_PASSWORD}
+      - MAIMAI_JP_SEGA_ID=${MAIMAI_JP_SEGA_ID}
+      - MAIMAI_JP_SEGA_PASSWORD=${MAIMAI_JP_SEGA_PASSWORD}
+      - USER_AGENT=${USER_AGENT}
+      - GOOGLE_API_KEY=${GOOGLE_API_KEY}
     volumes:
-      - ./data:/app/data:ro
+      - ./data:/app/data
     ports:
       - "3001:3001"
     healthcheck:
@@ -24,21 +30,15 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-      target: maimai-record-collector
-    container_name: maimai-record-collector
+      target: record-collector-server
+    container_name: record-collector-server
     restart: unless-stopped
     environment:
       - SEGA_ID=${SEGA_ID}
       - SEGA_PASSWORD=${SEGA_PASSWORD}
-      - BACKEND_PORT=3000
+      - RECORD_COLLECTOR_PORT=3000
       - DATA_DIR=${DATA_DIR:-/app/data}
       - DATABASE_URL=sqlite:/app/data/maimai.sqlite3
-      - MAIMAI_INTL_SEGA_ID=${MAIMAI_INTL_SEGA_ID}
-      - MAIMAI_INTL_SEGA_PASSWORD=${MAIMAI_INTL_SEGA_PASSWORD}
-      - MAIMAI_JP_SEGA_ID=${MAIMAI_JP_SEGA_ID}
-      - MAIMAI_JP_SEGA_PASSWORD=${MAIMAI_JP_SEGA_PASSWORD}
-      - USER_AGENT=${USER_AGENT}
-      - GOOGLE_API_KEY=${GOOGLE_API_KEY}
       - SONG_INFO_SERVER_URL=http://song-info-server:3001
       - RUST_LOG=${RUST_LOG:-info}
     volumes:
