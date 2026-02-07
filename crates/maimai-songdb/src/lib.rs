@@ -300,7 +300,24 @@ async fn fetch_maimai_songs(client: &reqwest::Client) -> eyre::Result<Vec<RawSon
         .json::<Vec<RawSong>>()
         .await
         .wrap_err("parse maimai songs json")?;
-    Ok(raw_songs)
+    let (filtered, dropped_count) = filter_out_utage_entries(raw_songs);
+    if dropped_count > 0 {
+        tracing::info!(
+            "Skipped {} utage entries from official songs JSON",
+            dropped_count
+        );
+    }
+    Ok(filtered)
+}
+
+fn filter_out_utage_entries(raw_songs: Vec<RawSong>) -> (Vec<RawSong>, usize) {
+    let before = raw_songs.len();
+    let filtered = raw_songs
+        .into_iter()
+        .filter(|song| song.lev_utage.is_none())
+        .collect::<Vec<_>>();
+    let dropped_count = before.saturating_sub(filtered.len());
+    (filtered, dropped_count)
 }
 
 fn ensure_unique_song_ids(raw_songs: &[RawSong]) -> eyre::Result<()> {
@@ -764,6 +781,19 @@ mod tests {
         raw_song.kanji = Some("協奏曲".to_string());
         let sheets = extract_sheets(&raw_song);
         assert!(sheets.is_empty());
+    }
+
+    #[test]
+    fn filters_out_utage_entries() {
+        let normal_song = raw_song_stub();
+        let mut utage_song = raw_song_stub();
+        utage_song.title = "Utage Song".to_string();
+        utage_song.lev_utage = Some("14".to_string());
+
+        let (filtered, dropped_count) = filter_out_utage_entries(vec![normal_song, utage_song]);
+        assert_eq!(dropped_count, 1);
+        assert_eq!(filtered.len(), 1);
+        assert_eq!(filtered[0].title, "Stub");
     }
 
     #[test]
