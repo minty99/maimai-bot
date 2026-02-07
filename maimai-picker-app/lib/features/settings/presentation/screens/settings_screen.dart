@@ -2,18 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:dio/dio.dart';
 
-import '../../../../core/constants/app_constants.dart';
 import '../../bloc/settings/settings_cubit.dart';
 import '../../bloc/settings/settings_state.dart';
 
 /// Settings screen for app configuration.
-///
-/// Features:
-/// - Song Info Server URL configuration with TextField
-/// - Record Collector Server URL configuration with TextField
-/// - Save button with SnackBar feedback
-/// - Info card with setup instructions
-/// - Large touch targets for glove-friendly interaction
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
 
@@ -24,15 +16,22 @@ class SettingsScreen extends StatefulWidget {
 }
 
 class _SettingsScreenState extends State<SettingsScreen> {
+  static const _defaultSongInfoServerUrl = 'http://localhost:3001';
+  static const _defaultRecordCollectorServerUrl = 'http://localhost:3000';
+
   late TextEditingController _songInfoUrlController;
   late TextEditingController _recordCollectorUrlController;
   bool _hasChanges = false;
-  bool _isCheckingHealth = false;
-  bool? _healthOk;
-  String? _healthMessage;
-  bool _isLoadingVersions = false;
-  String? _versionsError;
-  List<_VersionOption> _versionOptions = const [];
+
+  // Song Info Server health check state
+  bool _isCheckingSongInfoHealth = false;
+  bool? _songInfoHealthOk;
+  String? _songInfoHealthMessage;
+
+  // Record Collector Server health check state
+  bool _isCheckingRecordCollectorHealth = false;
+  bool? _recordCollectorHealthOk;
+  String? _recordCollectorHealthMessage;
 
   @override
   void initState() {
@@ -46,7 +45,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
     _songInfoUrlController.addListener(_onTextChanged);
     _recordCollectorUrlController.addListener(_onTextChanged);
-    _loadVersionOptions(baseUrl: state.songInfoServerUrl);
   }
 
   @override
@@ -64,8 +62,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
       _hasChanges =
           _songInfoUrlController.text != state.songInfoServerUrl ||
           _recordCollectorUrlController.text != state.recordCollectorServerUrl;
-      _healthMessage = null;
-      _healthOk = null;
+      // Reset health status when URL changes
+      _songInfoHealthMessage = null;
+      _songInfoHealthOk = null;
+      _recordCollectorHealthMessage = null;
+      _recordCollectorHealthOk = null;
     });
   }
 
@@ -85,9 +86,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
     final cubit = context.read<SettingsCubit>();
     await cubit.updateSongInfoServerUrl(songInfoUrl);
-    // Record Collector Server URL is optional - save even if empty
     await cubit.updateRecordCollectorServerUrl(recordCollectorUrl);
-    await _loadVersionOptions(baseUrl: songInfoUrl);
 
     if (mounted) {
       setState(() {
@@ -111,14 +110,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
     return trimmed;
   }
 
-  Future<void> _checkHealth() async {
-    final rawUrl = _songInfoUrlController.text;
-    final baseUrl = _normalizeBaseUrl(rawUrl);
+  Future<void> _checkSongInfoHealth() async {
+    final baseUrl = _normalizeBaseUrl(_songInfoUrlController.text);
 
     if (baseUrl.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('URL cannot be empty'),
+          content: Text('Song Info Server URL cannot be empty'),
           backgroundColor: Colors.red,
         ),
       );
@@ -126,11 +124,92 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
 
     setState(() {
-      _isCheckingHealth = true;
-      _healthOk = null;
-      _healthMessage = null;
+      _isCheckingSongInfoHealth = true;
+      _songInfoHealthOk = null;
+      _songInfoHealthMessage = null;
     });
 
+    await _performHealthCheck(
+      baseUrl: baseUrl,
+      onSuccess: (message) {
+        if (mounted) {
+          setState(() {
+            _songInfoHealthOk = true;
+            _songInfoHealthMessage = message;
+          });
+        }
+      },
+      onError: (message) {
+        if (mounted) {
+          setState(() {
+            _songInfoHealthOk = false;
+            _songInfoHealthMessage = message;
+          });
+        }
+      },
+      onComplete: () {
+        if (mounted) {
+          setState(() {
+            _isCheckingSongInfoHealth = false;
+          });
+        }
+      },
+    );
+  }
+
+  Future<void> _checkRecordCollectorHealth() async {
+    final baseUrl = _normalizeBaseUrl(_recordCollectorUrlController.text);
+
+    if (baseUrl.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Record Collector Server URL is empty'),
+          backgroundColor: Colors.orange,
+        ),
+      );
+      return;
+    }
+
+    setState(() {
+      _isCheckingRecordCollectorHealth = true;
+      _recordCollectorHealthOk = null;
+      _recordCollectorHealthMessage = null;
+    });
+
+    await _performHealthCheck(
+      baseUrl: baseUrl,
+      onSuccess: (message) {
+        if (mounted) {
+          setState(() {
+            _recordCollectorHealthOk = true;
+            _recordCollectorHealthMessage = message;
+          });
+        }
+      },
+      onError: (message) {
+        if (mounted) {
+          setState(() {
+            _recordCollectorHealthOk = false;
+            _recordCollectorHealthMessage = message;
+          });
+        }
+      },
+      onComplete: () {
+        if (mounted) {
+          setState(() {
+            _isCheckingRecordCollectorHealth = false;
+          });
+        }
+      },
+    );
+  }
+
+  Future<void> _performHealthCheck({
+    required String baseUrl,
+    required void Function(String message) onSuccess,
+    required void Function(String message) onError,
+    required void Function() onComplete,
+  }) async {
     final dio = Dio(
       BaseOptions(
         connectTimeout: const Duration(seconds: 5),
@@ -145,193 +224,17 @@ class _SettingsScreenState extends State<SettingsScreen> {
       final status = response.data?['status']?.toString();
 
       if (statusCode == 200 && status == 'ok') {
-        if (!mounted) return;
-        setState(() {
-          _healthOk = true;
-          _healthMessage = 'Healthy (HTTP 200)';
-        });
+        onSuccess('Healthy (HTTP 200)');
       } else {
-        if (!mounted) return;
-        setState(() {
-          _healthOk = false;
-          _healthMessage = 'Unexpected response (HTTP $statusCode)';
-        });
+        onError('Unexpected response (HTTP $statusCode)');
       }
     } on DioException catch (e) {
-      if (!mounted) return;
-      setState(() {
-        _healthOk = false;
-        _healthMessage = 'Connection failed: ${e.message ?? 'unknown error'}';
-      });
+      onError('Connection failed: ${e.message ?? 'unknown error'}');
     } catch (e) {
-      if (!mounted) return;
-      setState(() {
-        _healthOk = false;
-        _healthMessage = 'Unexpected error: $e';
-      });
+      onError('Unexpected error: $e');
     } finally {
-      if (mounted) {
-        setState(() {
-          _isCheckingHealth = false;
-        });
-      }
+      onComplete();
     }
-
-    if (!mounted) return;
-    final message = _healthMessage ?? 'Health check completed';
-    final backgroundColor = _healthOk == true
-        ? Theme.of(context).colorScheme.primary
-        : Theme.of(context).colorScheme.error;
-
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(message), backgroundColor: backgroundColor),
-    );
-
-    if (_healthOk == true) {
-      await _loadVersionOptions(baseUrl: baseUrl);
-    }
-  }
-
-  Future<void> _loadVersionOptions({String? baseUrl}) async {
-    final normalized = _normalizeBaseUrl(
-      baseUrl ?? _songInfoUrlController.text,
-    );
-    if (normalized.isEmpty) {
-      if (!mounted) return;
-      setState(() {
-        _versionOptions = const [];
-        _versionsError = 'Song Info Server URL is empty';
-      });
-      return;
-    }
-
-    setState(() {
-      _isLoadingVersions = true;
-      _versionsError = null;
-    });
-
-    final dio = Dio(
-      BaseOptions(
-        connectTimeout: const Duration(seconds: 5),
-        receiveTimeout: const Duration(seconds: 5),
-      ),
-    );
-
-    try {
-      final response = await dio.get<Map<String, dynamic>>(
-        '$normalized/api/songs/versions',
-      );
-      final rawVersions = response.data?['versions'] as List<dynamic>? ?? [];
-      final parsed =
-          rawVersions
-              .map(
-                (raw) => _VersionOption.fromJson(raw as Map<String, dynamic>),
-              )
-              .where((version) => version.versionIndex >= 0)
-              .toList()
-            ..sort((a, b) => a.versionIndex.compareTo(b.versionIndex));
-
-      if (!mounted) return;
-      setState(() {
-        _versionOptions = parsed;
-        _versionsError = null;
-      });
-    } on DioException catch (e) {
-      if (!mounted) return;
-      setState(() {
-        _versionsError =
-            'Failed to load versions: ${e.message ?? "network error"}';
-        _versionOptions = const [];
-      });
-    } catch (e) {
-      if (!mounted) return;
-      setState(() {
-        _versionsError = 'Failed to load versions: $e';
-        _versionOptions = const [];
-      });
-    } finally {
-      if (mounted) {
-        setState(() {
-          _isLoadingVersions = false;
-        });
-      }
-    }
-  }
-
-  Future<void> _toggleChartType(String chartType, bool selected) async {
-    final state = context.read<SettingsCubit>().state;
-    final next = {...state.enabledChartTypes};
-    if (selected) {
-      next.add(chartType);
-    } else {
-      if (next.length == 1 && next.contains(chartType)) {
-        _showSimpleSnackBar('At least one chart type must remain enabled');
-        return;
-      }
-      next.remove(chartType);
-    }
-
-    await context.read<SettingsCubit>().updateEnabledChartTypes(next);
-  }
-
-  Future<void> _toggleDifficulty(int difficultyIndex, bool selected) async {
-    final state = context.read<SettingsCubit>().state;
-    final next = {...state.enabledDifficultyIndices};
-    if (selected) {
-      next.add(difficultyIndex);
-    } else {
-      if (next.length == 1 && next.contains(difficultyIndex)) {
-        _showSimpleSnackBar('At least one difficulty must remain enabled');
-        return;
-      }
-      next.remove(difficultyIndex);
-    }
-
-    await context.read<SettingsCubit>().updateEnabledDifficulties(next);
-  }
-
-  Future<void> _selectAllVersions() async {
-    await context.read<SettingsCubit>().updateIncludeVersionIndices(null);
-  }
-
-  Future<void> _deselectAllVersions() async {
-    await context.read<SettingsCubit>().updateIncludeVersionIndices(<int>{});
-  }
-
-  Future<void> _toggleVersion(int versionIndex, bool selected) async {
-    final cubit = context.read<SettingsCubit>();
-    final state = cubit.state;
-    final allVersionIndices = _versionOptions
-        .map((version) => version.versionIndex)
-        .toSet();
-
-    if (allVersionIndices.isEmpty) {
-      return;
-    }
-
-    final current = state.includeVersionIndices;
-    if (selected) {
-      if (current == null) {
-        return;
-      }
-      final next = {...current, versionIndex};
-      if (next.length == allVersionIndices.length) {
-        await cubit.updateIncludeVersionIndices(null);
-      } else {
-        await cubit.updateIncludeVersionIndices(next);
-      }
-      return;
-    }
-
-    final base = current == null ? {...allVersionIndices} : {...current};
-    base.remove(versionIndex);
-    await cubit.updateIncludeVersionIndices(base);
-  }
-
-  void _showSimpleSnackBar(String message) {
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(SnackBar(content: Text(message)));
   }
 
   @override
@@ -369,17 +272,39 @@ class _SettingsScreenState extends State<SettingsScreen> {
               _buildUrlTextField(
                 controller: _songInfoUrlController,
                 labelText: 'Song Info Server URL',
-                hintText: AppConstants.defaultSongInfoServerUrl,
+                hintText: _defaultSongInfoServerUrl,
                 theme: theme,
                 colorScheme: colorScheme,
               ),
-              const SizedBox(height: 16),
+              const SizedBox(height: 8),
+
+              // Song Info Health Check Button
+              _buildHealthCheckButton(
+                isChecking: _isCheckingSongInfoHealth,
+                onPressed: _checkSongInfoHealth,
+                healthOk: _songInfoHealthOk,
+                healthMessage: _songInfoHealthMessage,
+                theme: theme,
+                colorScheme: colorScheme,
+              ),
+              const SizedBox(height: 20),
 
               // Record Collector Server URL TextField (optional)
               _buildUrlTextField(
                 controller: _recordCollectorUrlController,
                 labelText: 'Record Collector Server URL (optional)',
-                hintText: AppConstants.defaultRecordCollectorServerUrl,
+                hintText: _defaultRecordCollectorServerUrl,
+                theme: theme,
+                colorScheme: colorScheme,
+              ),
+              const SizedBox(height: 8),
+
+              // Record Collector Health Check Button
+              _buildHealthCheckButton(
+                isChecking: _isCheckingRecordCollectorHealth,
+                onPressed: _checkRecordCollectorHealth,
+                healthOk: _recordCollectorHealthOk,
+                healthMessage: _recordCollectorHealthMessage,
                 theme: theme,
                 colorScheme: colorScheme,
               ),
@@ -416,233 +341,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   ),
                 ),
               ),
-              const SizedBox(height: 16),
-
-              // Health Check Button
-              SizedBox(
-                width: double.infinity,
-                height: 52,
-                child: FilledButton(
-                  onPressed: _isCheckingHealth ? null : _checkHealth,
-                  style: FilledButton.styleFrom(
-                    backgroundColor: colorScheme.secondary,
-                    foregroundColor: colorScheme.onSecondary,
-                    disabledBackgroundColor: colorScheme.secondary.withValues(
-                      alpha: 0.3,
-                    ),
-                    disabledForegroundColor: colorScheme.onSecondary.withValues(
-                      alpha: 0.5,
-                    ),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(16),
-                    ),
-                  ),
-                  child: _isCheckingHealth
-                      ? Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            SizedBox(
-                              width: 20,
-                              height: 20,
-                              child: CircularProgressIndicator(
-                                strokeWidth: 2,
-                                color: colorScheme.onSecondary,
-                              ),
-                            ),
-                            const SizedBox(width: 12),
-                            Text(
-                              'CHECKING...',
-                              style: theme.textTheme.labelLarge?.copyWith(
-                                color: colorScheme.onSecondary,
-                                letterSpacing: 1,
-                              ),
-                            ),
-                          ],
-                        )
-                      : Text(
-                          'HEALTH CHECK',
-                          style: theme.textTheme.labelLarge?.copyWith(
-                            color: colorScheme.onSecondary,
-                            letterSpacing: 1,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                ),
-              ),
-              if (_healthMessage != null) ...[
-                const SizedBox(height: 12),
-                Text(
-                  _healthMessage!,
-                  textAlign: TextAlign.center,
-                  style: theme.textTheme.bodyMedium?.copyWith(
-                    color: _healthOk == true
-                        ? colorScheme.primary
-                        : colorScheme.error,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ],
               const SizedBox(height: 32),
 
               // ─────────────────────────────────────────────────────────────
-              // Random Filters Section
+              // Display Settings
               // ─────────────────────────────────────────────────────────────
               Text(
-                'RANDOM FILTERS',
+                'DISPLAY',
                 style: theme.textTheme.labelLarge?.copyWith(
                   color: colorScheme.primary,
                   letterSpacing: 2,
-                ),
-              ),
-              const SizedBox(height: 16),
-
-              Card(
-                elevation: 4,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(20),
-                  side: BorderSide(
-                    color: colorScheme.outline.withValues(alpha: 0.3),
-                    width: 1,
-                  ),
-                ),
-                child: Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Chart Type',
-                        style: theme.textTheme.titleMedium?.copyWith(
-                          color: colorScheme.onSurface,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                      const SizedBox(height: 10),
-                      Wrap(
-                        spacing: 8,
-                        runSpacing: 8,
-                        children: AppConstants.defaultEnabledChartTypes.map((
-                          value,
-                        ) {
-                          return FilterChip(
-                            label: Text(value),
-                            selected: state.enabledChartTypes.contains(value),
-                            onSelected: (selected) {
-                              _toggleChartType(value, selected);
-                            },
-                          );
-                        }).toList(),
-                      ),
-                      const SizedBox(height: 16),
-                      Text(
-                        'Difficulty',
-                        style: theme.textTheme.titleMedium?.copyWith(
-                          color: colorScheme.onSurface,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                      const SizedBox(height: 10),
-                      Wrap(
-                        spacing: 8,
-                        runSpacing: 8,
-                        children: AppConstants.difficultyLabelsByIndex.entries
-                            .map((entry) {
-                              final difficultyIndex = entry.key;
-                              final difficultyLabel = entry.value;
-                              return FilterChip(
-                                label: Text(difficultyLabel),
-                                selected: state.enabledDifficultyIndices
-                                    .contains(difficultyIndex),
-                                onSelected: (selected) {
-                                  _toggleDifficulty(difficultyIndex, selected);
-                                },
-                              );
-                            })
-                            .toList(),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-              const SizedBox(height: 16),
-
-              Card(
-                elevation: 4,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(20),
-                  side: BorderSide(
-                    color: colorScheme.outline.withValues(alpha: 0.3),
-                    width: 1,
-                  ),
-                ),
-                child: Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: [
-                          Text(
-                            'Versions',
-                            style: theme.textTheme.titleMedium?.copyWith(
-                              color: colorScheme.onSurface,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                          const Spacer(),
-                          TextButton(
-                            onPressed: _selectAllVersions,
-                            child: const Text('SELECT ALL'),
-                          ),
-                          TextButton(
-                            onPressed: _deselectAllVersions,
-                            child: const Text('SELECT NONE'),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 4),
-                      if (_isLoadingVersions)
-                        const Center(child: CircularProgressIndicator()),
-                      if (_versionsError != null) ...[
-                        Text(
-                          _versionsError!,
-                          style: theme.textTheme.bodyMedium?.copyWith(
-                            color: colorScheme.error,
-                          ),
-                        ),
-                        const SizedBox(height: 8),
-                      ],
-                      if (!_isLoadingVersions && _versionOptions.isEmpty)
-                        Text(
-                          'No version data loaded',
-                          style: theme.textTheme.bodyMedium?.copyWith(
-                            color: colorScheme.onSurfaceVariant,
-                          ),
-                        ),
-                      if (_versionOptions.isNotEmpty) ...[
-                        ..._versionOptions.map((version) {
-                          final selected = state.includeVersionIndices == null
-                              ? true
-                              : state.includeVersionIndices!.contains(
-                                  version.versionIndex,
-                                );
-                          return CheckboxListTile(
-                            dense: true,
-                            contentPadding: EdgeInsets.zero,
-                            value: selected,
-                            onChanged: (checked) {
-                              if (checked == null) return;
-                              _toggleVersion(version.versionIndex, checked);
-                            },
-                            title: Text(
-                              '#${version.versionIndex} ${version.versionName}',
-                            ),
-                            subtitle: Text('${version.songCount} songs'),
-                          );
-                        }),
-                      ],
-                    ],
-                  ),
                 ),
               ),
               const SizedBox(height: 16),
@@ -684,129 +392,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
               const SizedBox(height: 32),
 
               // ─────────────────────────────────────────────────────────────
-              // Info Card
-              // ─────────────────────────────────────────────────────────────
-              Card(
-                elevation: 4,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(20),
-                  side: BorderSide(
-                    color: colorScheme.outline.withValues(alpha: 0.3),
-                    width: 1,
-                  ),
-                ),
-                child: Padding(
-                  padding: const EdgeInsets.all(20),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: [
-                          Icon(
-                            Icons.info_outline_rounded,
-                            color: colorScheme.primary,
-                            size: 28,
-                          ),
-                          const SizedBox(width: 12),
-                          Text(
-                            'Setup Instructions',
-                            style: theme.textTheme.titleLarge?.copyWith(
-                              color: colorScheme.onSurface,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 16),
-                      _InfoItem(
-                        icon: Icons.computer_rounded,
-                        text:
-                            'Start Song Info Server (required) and optionally Record Collector Server',
-                        theme: theme,
-                        colorScheme: colorScheme,
-                      ),
-                      const SizedBox(height: 12),
-                      _InfoItem(
-                        icon: Icons.wifi_rounded,
-                        text: 'Ensure phone is on the same network',
-                        theme: theme,
-                        colorScheme: colorScheme,
-                      ),
-                      const SizedBox(height: 12),
-                      _InfoItem(
-                        icon: Icons.link_rounded,
-                        text: 'Enter your computer\'s local IP address',
-                        theme: theme,
-                        colorScheme: colorScheme,
-                      ),
-                      const SizedBox(height: 20),
-                      Container(
-                        width: double.infinity,
-                        padding: const EdgeInsets.all(16),
-                        decoration: BoxDecoration(
-                          color: colorScheme.surfaceContainerHighest,
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              'Song Info Server (default):',
-                              style: theme.textTheme.bodyMedium?.copyWith(
-                                color: colorScheme.onSurfaceVariant,
-                              ),
-                            ),
-                            const SizedBox(height: 4),
-                            Text(
-                              AppConstants.defaultSongInfoServerUrl,
-                              style: theme.textTheme.bodyLarge?.copyWith(
-                                color: colorScheme.primary,
-                                fontFamily: 'monospace',
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                            const SizedBox(height: 12),
-                            Text(
-                              'Record Collector Server (optional, default):',
-                              style: theme.textTheme.bodyMedium?.copyWith(
-                                color: colorScheme.onSurfaceVariant,
-                              ),
-                            ),
-                            const SizedBox(height: 4),
-                            Text(
-                              AppConstants.defaultRecordCollectorServerUrl,
-                              style: theme.textTheme.bodyLarge?.copyWith(
-                                color: colorScheme.primary,
-                                fontFamily: 'monospace',
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                            const SizedBox(height: 12),
-                            Text(
-                              'Example (local network):',
-                              style: theme.textTheme.bodyMedium?.copyWith(
-                                color: colorScheme.onSurfaceVariant,
-                              ),
-                            ),
-                            const SizedBox(height: 4),
-                            Text(
-                              'http://192.168.1.100:3001',
-                              style: theme.textTheme.bodyLarge?.copyWith(
-                                color: colorScheme.secondary,
-                                fontFamily: 'monospace',
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-              const SizedBox(height: 24),
-
-              // ─────────────────────────────────────────────────────────────
               // User Level Guide
               // ─────────────────────────────────────────────────────────────
               Card(
@@ -842,7 +427,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       ),
                       const SizedBox(height: 12),
                       Text(
-                        'Shown next to internal level as ⚡ 13.7 (A).\n'
+                        'Shown next to internal level as \u26a1 13.7 (A).\n'
                         'Ranks from highest to lowest:',
                         style: theme.textTheme.bodyMedium?.copyWith(
                           color: colorScheme.onSurfaceVariant,
@@ -887,13 +472,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     final messenger = ScaffoldMessenger.of(context);
                     await context.read<SettingsCubit>().resetServerUrls();
                     if (mounted) {
-                      _songInfoUrlController.text =
-                          AppConstants.defaultSongInfoServerUrl;
+                      _songInfoUrlController.text = _defaultSongInfoServerUrl;
                       _recordCollectorUrlController.text =
-                          AppConstants.defaultRecordCollectorServerUrl;
-                      await _loadVersionOptions(
-                        baseUrl: AppConstants.defaultSongInfoServerUrl,
-                      );
+                          _defaultRecordCollectorServerUrl;
+                      setState(() {
+                        _hasChanges = false;
+                        _songInfoHealthOk = null;
+                        _songInfoHealthMessage = null;
+                        _recordCollectorHealthOk = null;
+                        _recordCollectorHealthMessage = null;
+                      });
                       messenger.showSnackBar(
                         const SnackBar(
                           content: Text('Reset to default server URLs'),
@@ -989,57 +577,98 @@ class _SettingsScreenState extends State<SettingsScreen> {
       autocorrect: false,
     );
   }
-}
 
-class _InfoItem extends StatelessWidget {
-  const _InfoItem({
-    required this.icon,
-    required this.text,
-    required this.theme,
-    required this.colorScheme,
-  });
-
-  final IconData icon;
-  final String text;
-  final ThemeData theme;
-  final ColorScheme colorScheme;
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
+  Widget _buildHealthCheckButton({
+    required bool isChecking,
+    required VoidCallback onPressed,
+    required bool? healthOk,
+    required String? healthMessage,
+    required ThemeData theme,
+    required ColorScheme colorScheme,
+  }) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Icon(icon, size: 22, color: colorScheme.onSurfaceVariant),
-        const SizedBox(width: 12),
-        Expanded(
-          child: Text(
-            text,
-            style: theme.textTheme.bodyLarge?.copyWith(
-              color: colorScheme.onSurface,
+        SizedBox(
+          height: 40,
+          child: OutlinedButton(
+            onPressed: isChecking ? null : onPressed,
+            style: OutlinedButton.styleFrom(
+              foregroundColor: colorScheme.secondary,
+              side: BorderSide(color: colorScheme.secondary, width: 1.5),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+              padding: const EdgeInsets.symmetric(horizontal: 16),
             ),
+            child: isChecking
+                ? Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: colorScheme.secondary,
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Text(
+                        'Checking...',
+                        style: theme.textTheme.labelMedium?.copyWith(
+                          color: colorScheme.secondary,
+                        ),
+                      ),
+                    ],
+                  )
+                : Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        Icons.network_check,
+                        size: 18,
+                        color: colorScheme.secondary,
+                      ),
+                      const SizedBox(width: 6),
+                      Text(
+                        'Health Check',
+                        style: theme.textTheme.labelMedium?.copyWith(
+                          color: colorScheme.secondary,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ],
+                  ),
           ),
         ),
+        if (healthMessage != null) ...[
+          const SizedBox(height: 6),
+          Row(
+            children: [
+              Icon(
+                healthOk == true ? Icons.check_circle : Icons.error,
+                size: 16,
+                color: healthOk == true ? colorScheme.primary : colorScheme.error,
+              ),
+              const SizedBox(width: 6),
+              Expanded(
+                child: Text(
+                  healthMessage,
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: healthOk == true
+                        ? colorScheme.primary
+                        : colorScheme.error,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ],
       ],
-    );
-  }
-}
-
-class _VersionOption {
-  const _VersionOption({
-    required this.versionIndex,
-    required this.versionName,
-    required this.songCount,
-  });
-
-  final int versionIndex;
-  final String versionName;
-  final int songCount;
-
-  factory _VersionOption.fromJson(Map<String, dynamic> json) {
-    return _VersionOption(
-      versionIndex: (json['version_index'] as num?)?.toInt() ?? -1,
-      versionName: json['version_name'] as String? ?? 'Unknown',
-      songCount: (json['song_count'] as num?)?.toInt() ?? 0,
     );
   }
 }

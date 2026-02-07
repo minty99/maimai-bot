@@ -1,7 +1,9 @@
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
+import '../../../../core/constants/app_constants.dart';
 import '../../../settings/bloc/settings/settings_cubit.dart';
 import '../../../settings/bloc/settings/settings_state.dart';
 import '../../../settings/presentation/screens/settings_screen.dart';
@@ -35,6 +37,8 @@ class _SongSelectionScreenState extends State<SongSelectionScreen>
   late AnimationController _rangeAnimController;
   late Animation<double> _rangeScaleAnimation;
   LevelRangeState? _previousRangeState;
+  List<_VersionOption> _versionOptions = const [];
+  bool _isLoadingVersions = false;
 
   @override
   void initState() {
@@ -42,6 +46,7 @@ class _SongSelectionScreenState extends State<SongSelectionScreen>
     // Initialize hardware input cubit
     WidgetsBinding.instance.addPostFrameCallback((_) {
       context.read<HardwareInputCubit>().initialize();
+      _loadVersionOptions();
     });
 
     // Animation for range change feedback
@@ -58,6 +63,282 @@ class _SongSelectionScreenState extends State<SongSelectionScreen>
   void dispose() {
     _rangeAnimController.dispose();
     super.dispose();
+  }
+
+  Future<void> _loadVersionOptions() async {
+    final state = context.read<SettingsCubit>().state;
+    var baseUrl = state.songInfoServerUrl.trim();
+    if (baseUrl.endsWith('/')) {
+      baseUrl = baseUrl.substring(0, baseUrl.length - 1);
+    }
+    if (baseUrl.isEmpty) return;
+
+    setState(() => _isLoadingVersions = true);
+
+    final dio = Dio(
+      BaseOptions(
+        connectTimeout: const Duration(seconds: 5),
+        receiveTimeout: const Duration(seconds: 5),
+      ),
+    );
+
+    try {
+      final response = await dio.get<Map<String, dynamic>>(
+        '$baseUrl/api/songs/versions',
+      );
+      final rawVersions = response.data?['versions'] as List<dynamic>? ?? [];
+      final parsed = rawVersions
+          .map((raw) => _VersionOption.fromJson(raw as Map<String, dynamic>))
+          .where((v) => v.versionIndex >= 0)
+          .toList()
+        ..sort((a, b) => a.versionIndex.compareTo(b.versionIndex));
+      if (mounted) setState(() => _versionOptions = parsed);
+    } catch (_) {
+      // Silently fail - versions will be empty
+    } finally {
+      if (mounted) setState(() => _isLoadingVersions = false);
+    }
+  }
+
+  Future<void> _toggleChartType(String chartType, bool selected) async {
+    final cubit = context.read<SettingsCubit>();
+    final next = {...cubit.state.enabledChartTypes};
+    if (selected) {
+      next.add(chartType);
+    } else {
+      if (next.length == 1) return; // At least one must remain
+      next.remove(chartType);
+    }
+    await cubit.updateEnabledChartTypes(next);
+  }
+
+  Future<void> _toggleDifficulty(int index, bool selected) async {
+    final cubit = context.read<SettingsCubit>();
+    final next = {...cubit.state.enabledDifficultyIndices};
+    if (selected) {
+      next.add(index);
+    } else {
+      if (next.length == 1) return; // At least one must remain
+      next.remove(index);
+    }
+    await cubit.updateEnabledDifficulties(next);
+  }
+
+  Future<void> _toggleVersion(int versionIndex, bool selected) async {
+    final cubit = context.read<SettingsCubit>();
+    final state = cubit.state;
+    final allIndices = _versionOptions.map((v) => v.versionIndex).toSet();
+    if (allIndices.isEmpty) return;
+
+    final current = state.includeVersionIndices;
+    if (selected) {
+      if (current == null) return; // Already all selected
+      final next = {...current, versionIndex};
+      if (next.length == allIndices.length) {
+        await cubit.updateIncludeVersionIndices(null);
+      } else {
+        await cubit.updateIncludeVersionIndices(next);
+      }
+    } else {
+      final base = current == null ? {...allIndices} : {...current};
+      base.remove(versionIndex);
+      await cubit.updateIncludeVersionIndices(base);
+    }
+  }
+
+  String _buildChartTypeLabel(SettingsState state) {
+    final enabled = state.enabledChartTypes;
+    if (enabled.length == AppConstants.defaultEnabledChartTypes.length) {
+      return 'ALL';
+    }
+    return enabled.join('/');
+  }
+
+  String _buildDifficultyLabel(SettingsState state) {
+    final enabled = state.enabledDifficultyIndices;
+    if (enabled.length == AppConstants.defaultEnabledDifficultyIndices.length) {
+      return 'ALL';
+    }
+    // Show abbreviated difficulty names
+    final names = enabled.map((i) {
+      return switch (i) {
+        0 => 'B',
+        1 => 'A',
+        2 => 'E',
+        3 => 'M',
+        4 => 'R',
+        _ => '?',
+      };
+    }).toList()
+      ..sort();
+    return names.join('');
+  }
+
+  String _buildVersionLabel(SettingsState state) {
+    final included = state.includeVersionIndices;
+    if (included == null) return 'ALL';
+    if (included.isEmpty) return 'NONE';
+    if (_versionOptions.isNotEmpty &&
+        included.length == _versionOptions.length) {
+      return 'ALL';
+    }
+    return '${included.length}';
+  }
+
+  void _showChartTypePopup(BuildContext context, SettingsState state) {
+    final colorScheme = Theme.of(context).colorScheme;
+    showDialog(
+      context: context,
+      builder: (ctx) => BlocBuilder<SettingsCubit, SettingsState>(
+        builder: (context, currentState) {
+          return AlertDialog(
+            title: const Text('Chart Type'),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: AppConstants.defaultEnabledChartTypes.map((type) {
+                final selected = currentState.enabledChartTypes.contains(type);
+                return CheckboxListTile(
+                  dense: true,
+                  title: Text(type),
+                  value: selected,
+                  onChanged: (checked) {
+                    _toggleChartType(type, checked ?? false);
+                  },
+                );
+              }).toList(),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx),
+                child:
+                    Text('CLOSE', style: TextStyle(color: colorScheme.primary)),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+
+  void _showDifficultyPopup(BuildContext context, SettingsState state) {
+    final colorScheme = Theme.of(context).colorScheme;
+    showDialog(
+      context: context,
+      builder: (ctx) => BlocBuilder<SettingsCubit, SettingsState>(
+        builder: (context, currentState) {
+          return AlertDialog(
+            title: const Text('Difficulty'),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              children:
+                  AppConstants.difficultyLabelsByIndex.entries.map((entry) {
+                final selected =
+                    currentState.enabledDifficultyIndices.contains(entry.key);
+                return CheckboxListTile(
+                  dense: true,
+                  title: Text(entry.value),
+                  value: selected,
+                  onChanged: (checked) {
+                    _toggleDifficulty(entry.key, checked ?? false);
+                  },
+                );
+              }).toList(),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx),
+                child:
+                    Text('CLOSE', style: TextStyle(color: colorScheme.primary)),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+
+  void _showVersionPopup(BuildContext context, SettingsState state) {
+    final colorScheme = Theme.of(context).colorScheme;
+    final theme = Theme.of(context);
+
+    if (_isLoadingVersions) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Loading versions...')),
+      );
+      return;
+    }
+
+    if (_versionOptions.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('No version data available')),
+      );
+      return;
+    }
+
+    showDialog(
+      context: context,
+      builder: (ctx) => BlocBuilder<SettingsCubit, SettingsState>(
+        builder: (context, currentState) {
+          return AlertDialog(
+            title: Row(
+              children: [
+                const Expanded(child: Text('Versions')),
+                TextButton(
+                  onPressed: () {
+                    context
+                        .read<SettingsCubit>()
+                        .updateIncludeVersionIndices(null);
+                  },
+                  child: const Text('ALL'),
+                ),
+                TextButton(
+                  onPressed: () {
+                    context
+                        .read<SettingsCubit>()
+                        .updateIncludeVersionIndices(<int>{});
+                  },
+                  child: const Text('NONE'),
+                ),
+              ],
+            ),
+            content: SizedBox(
+              width: double.maxFinite,
+              height: 300,
+              child: ListView.builder(
+                shrinkWrap: true,
+                itemCount: _versionOptions.length,
+                itemBuilder: (_, index) {
+                  final version = _versionOptions[index];
+                  final selected =
+                      currentState.includeVersionIndices == null ||
+                          currentState.includeVersionIndices!
+                              .contains(version.versionIndex);
+                  return CheckboxListTile(
+                    dense: true,
+                    value: selected,
+                    onChanged: (checked) {
+                      _toggleVersion(version.versionIndex, checked ?? false);
+                    },
+                    title: Text(version.versionName),
+                    subtitle: Text(
+                      '${version.songCount} songs',
+                      style: theme.textTheme.bodySmall,
+                    ),
+                  );
+                },
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx),
+                child:
+                    Text('CLOSE', style: TextStyle(color: colorScheme.primary)),
+              ),
+            ],
+          );
+        },
+      ),
+    );
   }
 
   void _onHardwareInput(BuildContext context, HardwareInputState state) {
@@ -234,23 +515,68 @@ class _SongSelectionScreenState extends State<SongSelectionScreen>
                     );
                   },
                 ),
-                const SizedBox(height: 8),
+                const SizedBox(height: 6),
 
                 // ─────────────────────────────────────────────────────────────
-                // Range Display (horizontal, below buttons)
+                // Filter Buttons Row
+                // ─────────────────────────────────────────────────────────────
+                BlocBuilder<SettingsCubit, SettingsState>(
+                  builder: (context, settingsState) {
+                    return Row(
+                      children: [
+                        Expanded(
+                          child: _FilterButton(
+                            icon: Icons.library_music_outlined,
+                            label: _buildChartTypeLabel(settingsState),
+                            onTap: () => _showChartTypePopup(
+                              context,
+                              settingsState,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 6),
+                        Expanded(
+                          child: _FilterButton(
+                            icon: Icons.star_outline,
+                            label: _buildDifficultyLabel(settingsState),
+                            onTap: () => _showDifficultyPopup(
+                              context,
+                              settingsState,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 6),
+                        Expanded(
+                          child: _FilterButton(
+                            icon: Icons.history,
+                            label: _buildVersionLabel(settingsState),
+                            onTap: () => _showVersionPopup(
+                              context,
+                              settingsState,
+                            ),
+                          ),
+                        ),
+                      ],
+                    );
+                  },
+                ),
+                const SizedBox(height: 6),
+
+                // ─────────────────────────────────────────────────────────────
+                // Range Display
                 // ─────────────────────────────────────────────────────────────
                 BlocBuilder<LevelRangeCubit, LevelRangeState>(
                   builder: (context, rangeState) {
                     return ScaleTransition(
                       scale: _rangeScaleAnimation,
-                      child: _HorizontalRangeDisplay(
+                      child: _CompactRangeDisplay(
                         start: rangeState.start,
                         end: rangeState.end,
                       ),
                     );
                   },
                 ),
-                const SizedBox(height: 8),
+                const SizedBox(height: 6),
 
                 // ─────────────────────────────────────────────────────────────
                 // Song Display Section (fills remaining space)
@@ -289,8 +615,8 @@ class _SongSelectionScreenState extends State<SongSelectionScreen>
 // Control Widgets
 // ═══════════════════════════════════════════════════════════════════════════════
 
-class _HorizontalRangeDisplay extends StatelessWidget {
-  const _HorizontalRangeDisplay({required this.start, required this.end});
+class _CompactRangeDisplay extends StatelessWidget {
+  const _CompactRangeDisplay({required this.start, required this.end});
 
   final double start;
   final double end;
@@ -301,51 +627,91 @@ class _HorizontalRangeDisplay extends StatelessWidget {
     final colorScheme = theme.colorScheme;
 
     return Container(
-      padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 16),
+      padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 10),
       decoration: BoxDecoration(
         color: colorScheme.primaryContainer,
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(10),
         border: Border.all(
           color: colorScheme.primary.withValues(alpha: 0.5),
-          width: 2,
+          width: 1.5,
         ),
       ),
       child: Row(
+        mainAxisSize: MainAxisSize.min,
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
           Text(
-            'RANGE',
-            style: theme.textTheme.labelMedium?.copyWith(
-              color: colorScheme.onPrimaryContainer,
-              letterSpacing: 1.5,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-          const SizedBox(width: 16),
-          Text(
             start.toStringAsFixed(1),
-            style: theme.textTheme.headlineSmall?.copyWith(
+            style: theme.textTheme.titleMedium?.copyWith(
               color: colorScheme.onPrimaryContainer,
               fontWeight: FontWeight.bold,
             ),
           ),
           Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 12),
+            padding: const EdgeInsets.symmetric(horizontal: 6),
             child: Text(
               '~',
-              style: theme.textTheme.titleLarge?.copyWith(
+              style: theme.textTheme.titleMedium?.copyWith(
                 color: colorScheme.onPrimaryContainer.withValues(alpha: 0.7),
               ),
             ),
           ),
           Text(
             end.toStringAsFixed(1),
-            style: theme.textTheme.headlineSmall?.copyWith(
+            style: theme.textTheme.titleMedium?.copyWith(
               color: colorScheme.onPrimaryContainer,
               fontWeight: FontWeight.bold,
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _FilterButton extends StatelessWidget {
+  const _FilterButton({
+    required this.icon,
+    required this.label,
+    required this.onTap,
+  });
+
+  final IconData icon;
+  final String label;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+
+    return Material(
+      color: colorScheme.secondaryContainer,
+      borderRadius: BorderRadius.circular(8),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(8),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(
+                icon,
+                size: 16,
+                color: colorScheme.onSecondaryContainer,
+              ),
+              const SizedBox(width: 4),
+              Text(
+                label,
+                style: theme.textTheme.labelSmall?.copyWith(
+                  color: colorScheme.onSecondaryContainer,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -878,6 +1244,26 @@ class _Badge extends StatelessWidget {
           fontSize: 13,
         ),
       ),
+    );
+  }
+}
+
+class _VersionOption {
+  const _VersionOption({
+    required this.versionIndex,
+    required this.versionName,
+    required this.songCount,
+  });
+
+  final int versionIndex;
+  final String versionName;
+  final int songCount;
+
+  factory _VersionOption.fromJson(Map<String, dynamic> json) {
+    return _VersionOption(
+      versionIndex: (json['version_index'] as num?)?.toInt() ?? -1,
+      versionName: json['version_name'] as String? ?? 'Unknown',
+      songCount: (json['song_count'] as num?)?.toInt() ?? 0,
     );
   }
 }
