@@ -5,9 +5,9 @@ use crate::song_info_client::{SongInfoClient, SongMetadata};
 use models::{
     ChartType, DifficultyCategory, FcStatus, PlayRecord, ScoreEntry, ScoreRank, SyncStatus,
 };
-pub use models::{PlayRecordResponse, ScoreResponse};
+pub(crate) use models::{PlayRecordResponse, ScoreResponse};
 
-pub async fn score_response_from_entry(
+pub(crate) async fn score_response_from_entry(
     entry: ScoreEntry,
     song_info_client: &SongInfoClient,
 ) -> Result<ScoreResponse> {
@@ -67,7 +67,7 @@ pub async fn score_response_from_entry(
     })
 }
 
-pub async fn play_record_response_from_record(
+pub(crate) async fn play_record_response_from_record(
     record: PlayRecord,
     song_info_client: &SongInfoClient,
 ) -> Result<PlayRecordResponse> {

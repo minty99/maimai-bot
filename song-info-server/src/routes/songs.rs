@@ -11,7 +11,7 @@ use crate::error::{AppError, Result};
 use crate::state::AppState;
 
 #[derive(Serialize)]
-pub struct SongSheetResponse {
+pub(crate) struct SongSheetResponse {
     chart_type: ChartType,
     difficulty: DifficultyCategory,
     level: String,
@@ -20,7 +20,7 @@ pub struct SongSheetResponse {
 }
 
 #[derive(Serialize)]
-pub struct SongMetadataResponse {
+pub(crate) struct SongMetadataResponse {
     internal_level: Option<f32>,
     user_level: Option<String>,
     image_name: Option<String>,
@@ -29,14 +29,14 @@ pub struct SongMetadataResponse {
 }
 
 #[derive(Serialize)]
-pub struct SongResponse {
+pub(crate) struct SongResponse {
     title: String,
     version: Option<String>,
     image_name: Option<String>,
     sheets: Vec<SongSheetResponse>,
 }
 
-pub async fn random_song_by_level(
+pub(crate) async fn random_song_by_level(
     State(state): State<AppState>,
     Query(params): Query<HashMap<String, String>>,
 ) -> Result<Json<SongResponse>> {
@@ -122,7 +122,7 @@ fn select_random_index(len: usize) -> usize {
     (nanos % len as u128) as usize
 }
 
-pub async fn get_song_metadata(
+pub(crate) async fn get_song_metadata(
     State(state): State<AppState>,
     Path((title, chart_type, diff_category)): Path<(String, String, String)>,
 ) -> Result<Json<SongMetadataResponse>> {

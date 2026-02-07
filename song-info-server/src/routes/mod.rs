@@ -1,6 +1,6 @@
-pub mod cover;
-pub mod health;
-pub mod songs;
+mod cover;
+mod health;
+mod songs;
 
 use axum::{routing::get, Router};
 use tower_http::cors::CorsLayer;
@@ -9,7 +9,7 @@ use tower_http::LatencyUnit;
 
 use crate::state::AppState;
 
-pub fn create_router(state: AppState) -> Router {
+pub(crate) fn create_router(state: AppState) -> Router {
     Router::new()
         .route("/health", get(health::health))
         .route("/health/ready", get(health::ready))

@@ -14,7 +14,7 @@ use crate::state::AppState;
 const STATE_KEY_TOTAL_PLAY_COUNT: &str = "player.total_play_count";
 const STATE_KEY_RATING: &str = "player.rating";
 
-pub fn start_background_polling(app_state: AppState) {
+pub(crate) fn start_background_polling(app_state: AppState) {
     tokio::spawn(async move {
         let mut timer = interval(Duration::from_secs(600));
         timer.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);

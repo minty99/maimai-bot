@@ -1,8 +1,8 @@
-pub fn is_ap_like(fc: Option<&str>) -> bool {
+pub(crate) fn is_ap_like(fc: Option<&str>) -> bool {
     matches!(fc, Some("AP") | Some("AP+"))
 }
 
-pub fn coefficient_for_achievement(achievement_percent: f64) -> f64 {
+pub(crate) fn coefficient_for_achievement(achievement_percent: f64) -> f64 {
     const ACHIEVEMENT_CAP: f64 = 100.5;
     let a = achievement_percent.min(ACHIEVEMENT_CAP);
 
@@ -55,7 +55,11 @@ pub fn coefficient_for_achievement(achievement_percent: f64) -> f64 {
     }
 }
 
-pub fn chart_rating_points(internal_level: f64, achievement_percent: f64, ap_bonus: bool) -> u32 {
+pub(crate) fn chart_rating_points(
+    internal_level: f64,
+    achievement_percent: f64,
+    ap_bonus: bool,
+) -> u32 {
     const ACHIEVEMENT_CAP: f64 = 100.5;
     let coef = coefficient_for_achievement(achievement_percent);
     let ach = achievement_percent.min(ACHIEVEMENT_CAP);
@@ -77,7 +81,7 @@ pub fn chart_rating_points(internal_level: f64, achievement_percent: f64, ap_bon
 /// - If level ends with "+": numeric part + 0.6 (e.g., "13+" → 13.6)
 /// - Otherwise: numeric part + 0.0 (e.g., "13" → 13.0)
 /// - Returns None for invalid or empty strings
-pub fn fallback_internal_level(level: &str) -> Option<f32> {
+pub(crate) fn fallback_internal_level(level: &str) -> Option<f32> {
     let level = level.trim();
     if level.is_empty() || level == "N/A" {
         return None;

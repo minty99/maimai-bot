@@ -8,7 +8,7 @@ use tokio::sync::Mutex;
 
 use crate::state::AppState;
 
-pub fn start_songdb_tasks(app_state: AppState) {
+pub(crate) fn start_songdb_tasks(app_state: AppState) {
     let songdb_config = match maimai_songdb::SongDbConfig::from_env() {
         Ok(v) => v,
         Err(e) => {

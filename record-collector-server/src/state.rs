@@ -5,14 +5,14 @@ use sqlx::SqlitePool;
 use std::path::PathBuf;
 
 #[derive(Clone)]
-pub struct AppState {
-    pub db_pool: SqlitePool,
-    pub config: RecordCollectorConfig,
-    pub http_client: Client,
+pub(crate) struct AppState {
+    pub(crate) db_pool: SqlitePool,
+    pub(crate) config: RecordCollectorConfig,
+    pub(crate) http_client: Client,
 }
 
 impl AppState {
-    pub fn maimai_client(&self) -> eyre::Result<MaimaiClient> {
+    pub(crate) fn maimai_client(&self) -> eyre::Result<MaimaiClient> {
         let data_dir = PathBuf::from(&self.config.data_dir);
         let cookie_path = data_dir.join("cookies.json");
 

@@ -2,7 +2,7 @@ use axum::{http::StatusCode, response::IntoResponse, Json};
 use serde::Serialize;
 
 #[derive(Debug)]
-pub enum AppError {
+pub(crate) enum AppError {
     DatabaseError(String),
     HttpClientError(String),
     NotFound(String),
@@ -70,4 +70,4 @@ impl From<eyre::Error> for AppError {
     }
 }
 
-pub type Result<T> = std::result::Result<T, AppError>;
+pub(crate) type Result<T> = std::result::Result<T, AppError>;

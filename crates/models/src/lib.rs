@@ -508,9 +508,6 @@ pub struct PlayRecordResponse {
 
 // Song data index for rating calculations
 use std::collections::HashMap;
-use std::fs::File;
-use std::io::BufReader;
-use std::path::{Path, PathBuf};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SongBucket {
@@ -566,37 +563,6 @@ impl SongDataIndex {
             song_version: HashMap::new(),
             song_image_name: HashMap::new(),
         }
-    }
-
-    pub fn load_from_default_locations() -> eyre::Result<Option<Self>> {
-        let data_dir = std::env::var("DATA_DIR").unwrap_or_else(|_| "data".to_string());
-        let base = std::path::PathBuf::from(data_dir)
-            .join("song_data")
-            .join("maimai");
-        Self::load_with_base_path(&base.to_string_lossy())
-    }
-
-    pub fn load_with_base_path(base_path: &str) -> eyre::Result<Option<Self>> {
-        let mut path = PathBuf::from(base_path);
-        path.push("data.json");
-
-        if let Some(idx) = Self::load_from_path(&path)? {
-            return Ok(Some(idx));
-        }
-
-        Ok(None)
-    }
-
-    pub fn load_from_path(path: &Path) -> eyre::Result<Option<Self>> {
-        if !path.exists() {
-            return Ok(None);
-        }
-
-        let file = File::open(path).map_err(|e| eyre::eyre!("open song data: {}", e))?;
-        let reader = BufReader::new(file);
-        let root: SongDataRoot =
-            serde_json::from_reader(reader).map_err(|e| eyre::eyre!("parse song data: {}", e))?;
-        Ok(Some(Self::from_root(root)))
     }
 
     pub fn internal_level(

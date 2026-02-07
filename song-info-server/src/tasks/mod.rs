@@ -1,1 +1,1 @@
-pub mod songdb;
+pub(crate) mod songdb;

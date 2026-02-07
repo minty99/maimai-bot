@@ -36,12 +36,12 @@ struct ValuesResponse {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct InternalLevelRow {
-    pub song_id: String,
-    pub sheet_type: ChartType,
-    pub difficulty: DifficultyCategory,
-    pub internal_level: String,
-    pub source_version: i64,
+pub(crate) struct InternalLevelRow {
+    pub(crate) song_id: String,
+    pub(crate) sheet_type: ChartType,
+    pub(crate) difficulty: DifficultyCategory,
+    pub(crate) internal_level: String,
+    pub(crate) source_version: i64,
 }
 
 static SPREADSHEETS: LazyLock<Vec<SpreadsheetSpec>> = LazyLock::new(|| {
@@ -219,7 +219,7 @@ fn parse_number(v: &Value) -> Option<f64> {
     }
 }
 
-pub fn col_idx_to_a1(mut idx: usize) -> String {
+fn col_idx_to_a1(mut idx: usize) -> String {
     let mut out = Vec::new();
     loop {
         let rem = idx % 26;
@@ -311,9 +311,9 @@ fn save_cached_rows(path: &Path, rows: &[InternalLevelRow]) -> eyre::Result<()> 
     Ok(())
 }
 
-pub type InternalLevelKey = (String, ChartType, DifficultyCategory);
+pub(crate) type InternalLevelKey = (String, ChartType, DifficultyCategory);
 
-pub async fn fetch_internal_levels(
+pub(crate) async fn fetch_internal_levels(
     client: &reqwest::Client,
     google_api_key: &str,
     cache_dir: &Path,

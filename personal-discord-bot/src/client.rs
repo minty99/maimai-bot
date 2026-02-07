@@ -5,14 +5,14 @@ use serde::{Deserialize, Serialize};
 use tokio::time::{sleep, Duration};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct RecordCollectorErrorResponse {
-    pub message: String,
-    pub code: String,
+struct RecordCollectorErrorResponse {
+    message: String,
+    code: String,
     #[serde(default)]
-    pub maintenance: Option<bool>,
+    maintenance: Option<bool>,
 }
 
-pub enum PlayerDataResult {
+pub(crate) enum PlayerDataResult {
     Ok(ParsedPlayerData),
     Maintenance,
     Unavailable(String),
@@ -69,7 +69,7 @@ impl RecordCollectorClient {
         Ok(Self { client, base_url })
     }
 
-    pub async fn get_player(&self) -> PlayerDataResult {
+    pub(crate) async fn get_player(&self) -> PlayerDataResult {
         let url = format!("{}/api/player", self.base_url);
         for attempt in 0..3 {
             match self.client.get(&url).send().await {

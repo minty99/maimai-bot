@@ -1,9 +1,9 @@
-pub mod health;
-pub mod player;
-pub mod recent;
-pub mod responses;
-pub mod scores;
-pub mod today;
+mod health;
+mod player;
+mod recent;
+mod responses;
+mod scores;
+mod today;
 
 use axum::{routing::get, Router};
 use tower_http::trace::{DefaultMakeSpan, DefaultOnResponse, TraceLayer};
@@ -11,7 +11,7 @@ use tower_http::LatencyUnit;
 
 use crate::state::AppState;
 
-pub fn create_routes(state: AppState) -> Router {
+pub(crate) fn create_routes(state: AppState) -> Router {
     Router::new()
         .route("/health", get(health::health))
         .route("/health/ready", get(health::ready))

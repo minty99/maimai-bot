@@ -14,14 +14,14 @@ const MAIMAI_MOBILE_ROOT: &str = "https://maimaidx-eng.com/maimai-mobile/";
 const RECORD_URL: &str = "https://maimaidx-eng.com/maimai-mobile/record/";
 
 #[derive(Debug, Clone)]
-pub struct MaimaiClient {
+pub(crate) struct MaimaiClient {
     config: AppConfig,
     cookie_store: Arc<CookieStoreMutex>,
     client: Arc<reqwest::Client>,
 }
 
 impl MaimaiClient {
-    pub fn new(config: &AppConfig) -> eyre::Result<Self> {
+    pub(crate) fn new(config: &AppConfig) -> eyre::Result<Self> {
         let cookie_store = load_cookie_store(&config.cookie_path).wrap_err("load cookie store")?;
         let cookie_store = Arc::new(CookieStoreMutex::new(cookie_store));
 
@@ -41,7 +41,7 @@ impl MaimaiClient {
         })
     }
 
-    pub async fn check_logged_in(&mut self) -> eyre::Result<bool> {
+    pub(crate) async fn check_logged_in(&mut self) -> eyre::Result<bool> {
         ensure_not_maintenance_now()?;
         let resp = self
             .client
@@ -55,7 +55,7 @@ impl MaimaiClient {
         Ok(!looks_like_login_or_expired(&final_url, &body))
     }
 
-    pub async fn ensure_logged_in(&mut self) -> eyre::Result<()> {
+    pub(crate) async fn ensure_logged_in(&mut self) -> eyre::Result<()> {
         ensure_not_maintenance_now()?;
         if self.check_logged_in().await? {
             return Ok(());
@@ -67,7 +67,7 @@ impl MaimaiClient {
         Ok(())
     }
 
-    pub async fn login(&mut self) -> eyre::Result<()> {
+    pub(crate) async fn login(&mut self) -> eyre::Result<()> {
         ensure_not_maintenance_now()?;
         let login_page = self
             .client
@@ -125,7 +125,7 @@ impl MaimaiClient {
         Ok(())
     }
 
-    pub async fn get_bytes(&self, url: &Url) -> eyre::Result<Vec<u8>> {
+    pub(crate) async fn get_bytes(&self, url: &Url) -> eyre::Result<Vec<u8>> {
         ensure_not_maintenance_now()?;
         let resp = self
             .client
@@ -149,7 +149,7 @@ impl MaimaiClient {
     }
 }
 
-pub fn is_maintenance_window_now() -> bool {
+pub(crate) fn is_maintenance_window_now() -> bool {
     let now = OffsetDateTime::now_local().unwrap_or_else(|_| OffsetDateTime::now_utc());
     is_maintenance_window_hour(now.hour())
 }

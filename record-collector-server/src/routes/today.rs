@@ -14,11 +14,11 @@ use crate::{
 use models::PlayRecord;
 
 #[derive(Deserialize)]
-pub struct TodayQuery {
+pub(crate) struct TodayQuery {
     day: Option<String>,
 }
 
-pub async fn get_today(
+pub(crate) async fn get_today(
     State(state): State<AppState>,
     Query(params): Query<TodayQuery>,
 ) -> Result<Json<Vec<PlayRecordResponse>>> {

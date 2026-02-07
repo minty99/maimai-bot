@@ -13,7 +13,7 @@ use crate::{
 use models::PlayRecord;
 
 #[derive(Deserialize)]
-pub struct RecentQuery {
+pub(crate) struct RecentQuery {
     #[serde(default = "default_limit")]
     limit: i64,
 }
@@ -22,7 +22,7 @@ fn default_limit() -> i64 {
     50
 }
 
-pub async fn get_recent(
+pub(crate) async fn get_recent(
     State(state): State<AppState>,
     Query(params): Query<RecentQuery>,
 ) -> Result<Json<Vec<PlayRecordResponse>>> {

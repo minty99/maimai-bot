@@ -7,15 +7,15 @@ use eyre::WrapErr;
 use models::{SongDataIndex, SongDataRoot, SongDataSong};
 
 #[derive(Clone)]
-pub struct AppState {
-    pub song_data: Arc<RwLock<SongDataIndex>>,
-    pub song_data_root: Arc<RwLock<Vec<SongDataSong>>>,
-    pub song_data_base_path: PathBuf,
-    pub song_data_loaded: Arc<AtomicBool>,
+pub(crate) struct AppState {
+    pub(crate) song_data: Arc<RwLock<SongDataIndex>>,
+    pub(crate) song_data_root: Arc<RwLock<Vec<SongDataSong>>>,
+    pub(crate) song_data_base_path: PathBuf,
+    pub(crate) song_data_loaded: Arc<AtomicBool>,
 }
 
 impl AppState {
-    pub fn reload_song_data(&self) -> eyre::Result<()> {
+    pub(crate) fn reload_song_data(&self) -> eyre::Result<()> {
         let data_path = self.song_data_base_path.join("data.json");
         let (root, index, loaded) = load_song_data(&data_path)?;
 
@@ -35,7 +35,7 @@ impl AppState {
     }
 }
 
-pub fn load_song_data(path: &Path) -> eyre::Result<(SongDataRoot, SongDataIndex, bool)> {
+pub(crate) fn load_song_data(path: &Path) -> eyre::Result<(SongDataRoot, SongDataIndex, bool)> {
     if !path.exists() {
         return Ok((
             SongDataRoot { songs: Vec::new() },

@@ -15,13 +15,13 @@ struct ReadyResponse {
     song_data: String,
 }
 
-pub async fn health() -> impl IntoResponse {
+pub(crate) async fn health() -> impl IntoResponse {
     Json(HealthResponse {
         status: "ok".to_string(),
     })
 }
 
-pub async fn ready(State(state): State<AppState>) -> impl IntoResponse {
+pub(crate) async fn ready(State(state): State<AppState>) -> impl IntoResponse {
     let song_data_available =
         state.song_data.read().is_ok() && state.song_data_loaded.load(Ordering::Relaxed);
 

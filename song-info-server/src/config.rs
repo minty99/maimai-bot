@@ -1,13 +1,13 @@
 use eyre::WrapErr;
 
 #[derive(Debug, Clone)]
-pub struct Config {
-    pub port: u16,
-    pub song_data_path: String,
+pub(crate) struct Config {
+    pub(crate) port: u16,
+    pub(crate) song_data_path: String,
 }
 
 impl Config {
-    pub fn from_env() -> eyre::Result<Self> {
+    pub(crate) fn from_env() -> eyre::Result<Self> {
         let port = std::env::var("SONG_INFO_PORT")
             .unwrap_or_else(|_| "3001".to_string())
             .parse::<u16>()

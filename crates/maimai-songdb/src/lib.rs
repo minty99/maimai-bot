@@ -10,8 +10,8 @@ use std::collections::HashMap;
 use std::fmt;
 use std::path::Path;
 
-pub mod internal_levels;
-pub mod user_tiers;
+mod internal_levels;
+mod user_tiers;
 
 use internal_levels::{InternalLevelKey, InternalLevelRow};
 use user_tiers::{UserTierKey, UserTierValue};
@@ -68,27 +68,27 @@ struct RawSong {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct SongRow {
-    pub song_id: String,
-    pub category: Option<String>,
-    pub title: String,
-    pub artist: Option<String>,
-    pub image_name: String,
-    pub image_url: String,
-    pub version: Option<String>,
-    pub release_date: Option<String>,
-    pub sort_order: Option<i64>,
-    pub is_new: bool,
-    pub is_locked: bool,
-    pub comment: Option<String>,
+struct SongRow {
+    song_id: String,
+    category: Option<String>,
+    title: String,
+    artist: Option<String>,
+    image_name: String,
+    image_url: String,
+    version: Option<String>,
+    release_date: Option<String>,
+    sort_order: Option<i64>,
+    is_new: bool,
+    is_locked: bool,
+    comment: Option<String>,
 }
 
 #[derive(Debug, Clone)]
-pub struct SheetRow {
-    pub song_id: String,
-    pub sheet_type: ChartType,
-    pub difficulty: DifficultyCategory,
-    pub level: String,
+struct SheetRow {
+    song_id: String,
+    sheet_type: ChartType,
+    difficulty: DifficultyCategory,
+    level: String,
 }
 
 #[derive(Clone)]
@@ -143,10 +143,10 @@ impl SongDbConfig {
 
 #[derive(Debug, Clone)]
 pub struct SongDatabase {
-    pub songs: Vec<SongRow>,
-    pub sheets: Vec<SheetRow>,
-    pub internal_levels: HashMap<InternalLevelKey, InternalLevelRow>,
-    pub user_tiers: HashMap<UserTierKey, UserTierValue>,
+    songs: Vec<SongRow>,
+    sheets: Vec<SheetRow>,
+    internal_levels: HashMap<InternalLevelKey, InternalLevelRow>,
+    user_tiers: HashMap<UserTierKey, UserTierValue>,
 }
 
 impl SongDatabase {

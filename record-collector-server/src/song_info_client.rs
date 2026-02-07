@@ -3,15 +3,15 @@ use reqwest::Client;
 use serde::Deserialize;
 
 #[derive(Debug, Clone, Deserialize)]
-pub struct SongMetadata {
-    pub internal_level: Option<f32>,
-    pub image_name: Option<String>,
-    pub version: Option<String>,
-    pub bucket: Option<String>,
+pub(crate) struct SongMetadata {
+    pub(crate) internal_level: Option<f32>,
+    pub(crate) image_name: Option<String>,
+    pub(crate) version: Option<String>,
+    pub(crate) bucket: Option<String>,
 }
 
 impl SongMetadata {
-    pub fn empty() -> Self {
+    pub(crate) fn empty() -> Self {
         Self {
             internal_level: None,
             image_name: None,
@@ -22,18 +22,18 @@ impl SongMetadata {
 }
 
 #[derive(Debug, Clone)]
-pub struct SongInfoClient {
-    pub base_url: String,
-    pub client: Client,
+pub(crate) struct SongInfoClient {
+    base_url: String,
+    client: Client,
 }
 
 impl SongInfoClient {
-    pub fn new(base_url: String, client: Client) -> Self {
+    pub(crate) fn new(base_url: String, client: Client) -> Self {
         let base_url = base_url.trim_end_matches('/').to_string();
         Self { base_url, client }
     }
 
-    pub async fn get_song_metadata(
+    pub(crate) async fn get_song_metadata(
         &self,
         title: &str,
         chart_type: &str,

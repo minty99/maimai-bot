@@ -8,7 +8,7 @@ use tokio::fs;
 use crate::error::{AppError, Result};
 use crate::state::AppState;
 
-pub async fn get_cover(
+pub(crate) async fn get_cover(
     State(state): State<AppState>,
     Path(image_name): Path<String>,
 ) -> Result<Response> {

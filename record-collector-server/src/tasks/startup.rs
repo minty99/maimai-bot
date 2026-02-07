@@ -15,7 +15,10 @@ use crate::config::RecordCollectorConfig;
 const STATE_KEY_TOTAL_PLAY_COUNT: &str = "player.total_play_count";
 const STATE_KEY_RATING: &str = "player.rating";
 
-pub async fn startup_sync(db_pool: &SqlitePool, config: &RecordCollectorConfig) -> Result<()> {
+pub(crate) async fn startup_sync(
+    db_pool: &SqlitePool,
+    config: &RecordCollectorConfig,
+) -> Result<()> {
     info!("Starting startup sync...");
 
     if is_maintenance_window_now() {

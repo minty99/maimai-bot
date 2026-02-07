@@ -27,16 +27,16 @@ static USER_TIER_CONFIG: LazyLock<UserTierConfig> = LazyLock::new(|| {
 });
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
-pub struct UserTierKey {
-    pub title: String,
-    pub chart_type: ChartType,
-    pub difficulty: DifficultyCategory,
+pub(crate) struct UserTierKey {
+    pub(crate) title: String,
+    pub(crate) chart_type: ChartType,
+    pub(crate) difficulty: DifficultyCategory,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct UserTierValue {
-    pub grade: String,
-    pub source_internal_level: String,
+pub(crate) struct UserTierValue {
+    pub(crate) grade: String,
+    pub(crate) source_internal_level: String,
 }
 
 impl Display for UserTierKey {
@@ -125,7 +125,7 @@ async fn fetch_user_tier_map_for_sheet(
     Ok(map)
 }
 
-pub async fn fetch_user_tier_map_for_default_levels(
+pub(crate) async fn fetch_user_tier_map_for_default_levels(
     client: &reqwest::Client,
     google_api_key: &str,
     song_data: &SongDataRoot,

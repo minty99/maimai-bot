@@ -12,7 +12,7 @@ use crate::state::AppState;
 
 /// GET /api/player
 /// Fetches and parses the player data from maimaidx-eng.com
-pub async fn get_player(
+pub(crate) async fn get_player(
     State(state): State<AppState>,
 ) -> Result<(StatusCode, Json<ParsedPlayerData>)> {
     debug!("GET /api/player: fetching player data");

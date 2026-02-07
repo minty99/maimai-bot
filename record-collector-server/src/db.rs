@@ -6,9 +6,9 @@ use sqlx::{Pool, Sqlite};
 
 use models::{ChartType, ParsedPlayRecord, ParsedScoreEntry};
 
-pub type SqlitePool = Pool<Sqlite>;
+pub(crate) type SqlitePool = Pool<Sqlite>;
 
-pub async fn connect(database_url: &str) -> eyre::Result<SqlitePool> {
+pub(crate) async fn connect(database_url: &str) -> eyre::Result<SqlitePool> {
     let options = SqliteConnectOptions::from_str(database_url)
         .wrap_err("parse database url")?
         .create_if_missing(true)
@@ -23,7 +23,7 @@ pub async fn connect(database_url: &str) -> eyre::Result<SqlitePool> {
         .wrap_err("connect sqlite")
 }
 
-pub async fn migrate(pool: &SqlitePool) -> eyre::Result<()> {
+pub(crate) async fn migrate(pool: &SqlitePool) -> eyre::Result<()> {
     sqlx::migrate!("./migrations")
         .run(pool)
         .await
@@ -31,7 +31,7 @@ pub async fn migrate(pool: &SqlitePool) -> eyre::Result<()> {
     Ok(())
 }
 
-pub async fn upsert_scores(
+pub(crate) async fn upsert_scores(
     pool: &SqlitePool,
     scraped_at: i64,
     entries: &[ParsedScoreEntry],
@@ -46,7 +46,7 @@ pub async fn upsert_scores(
     Ok(())
 }
 
-pub async fn upsert_playlogs(
+pub(crate) async fn upsert_playlogs(
     pool: &SqlitePool,
     scraped_at: i64,
     entries: &[ParsedPlayRecord],
@@ -64,7 +64,7 @@ pub async fn upsert_playlogs(
     Ok(())
 }
 
-pub async fn clear_scores(pool: &SqlitePool) -> eyre::Result<()> {
+pub(crate) async fn clear_scores(pool: &SqlitePool) -> eyre::Result<()> {
     sqlx::query("DELETE FROM scores")
         .execute(pool)
         .await
@@ -72,7 +72,7 @@ pub async fn clear_scores(pool: &SqlitePool) -> eyre::Result<()> {
     Ok(())
 }
 
-pub async fn get_app_state_u32(pool: &SqlitePool, key: &str) -> eyre::Result<Option<u32>> {
+pub(crate) async fn get_app_state_u32(pool: &SqlitePool, key: &str) -> eyre::Result<Option<u32>> {
     let value: Option<String> =
         sqlx::query_scalar::<_, Option<String>>("SELECT value FROM app_state WHERE key = ?")
             .bind(key)
@@ -86,7 +86,7 @@ pub async fn get_app_state_u32(pool: &SqlitePool, key: &str) -> eyre::Result<Opt
     Ok(Some(parsed))
 }
 
-pub async fn set_app_state_u32(
+pub(crate) async fn set_app_state_u32(
     pool: &SqlitePool,
     key: &str,
     value: u32,

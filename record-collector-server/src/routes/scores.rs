@@ -13,11 +13,11 @@ use crate::{
 use models::ScoreEntry;
 
 #[derive(Deserialize)]
-pub struct SearchQuery {
+pub(crate) struct SearchQuery {
     q: String,
 }
 
-pub async fn search_scores(
+pub(crate) async fn search_scores(
     State(state): State<AppState>,
     Query(params): Query<SearchQuery>,
 ) -> Result<Json<Vec<ScoreResponse>>> {
@@ -47,7 +47,7 @@ pub async fn search_scores(
     Ok(Json(responses))
 }
 
-pub async fn get_score(
+pub(crate) async fn get_score(
     State(state): State<AppState>,
     Path((title, chart_type, diff_category)): Path<(String, String, String)>,
 ) -> Result<Json<ScoreResponse>> {
@@ -78,7 +78,7 @@ pub async fn get_score(
     )))
 }
 
-pub async fn get_all_rated_scores(
+pub(crate) async fn get_all_rated_scores(
     State(state): State<AppState>,
 ) -> Result<Json<Vec<ScoreResponse>>> {
     let rows = sqlx::query_as::<_, ScoreEntry>(
