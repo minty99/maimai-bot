@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 
 import '../constants/app_constants.dart';
+import 'app_colors.dart';
+import 'app_spacing.dart';
+import 'app_typography.dart';
 
 /// Application theme configuration with Material 3 design.
 ///
@@ -12,104 +15,94 @@ class AppTheme {
   AppTheme._();
 
   // ─────────────────────────────────────────────────────────────────────────
-  // Color Configuration
-  // ─────────────────────────────────────────────────────────────────────────
-
-  /// Primary seed color - maimai signature pink/magenta.
-  static const Color _seedColor = Color(0xFFE91E63);
-
-  /// Dark background for arcade-like ambiance.
-  static const Color _darkBackground = Color(0xFF0D0D0D);
-
-  /// Surface color with subtle contrast.
-  static const Color _darkSurface = Color(0xFF1A1A1A);
-
-  // ─────────────────────────────────────────────────────────────────────────
   // Theme Data
   // ─────────────────────────────────────────────────────────────────────────
 
   /// Dark theme - primary theme for arcade environment.
   static ThemeData get darkTheme {
-    final colorScheme = ColorScheme.fromSeed(
-      seedColor: _seedColor,
+    const colorScheme = ColorScheme(
       brightness: Brightness.dark,
-      surface: _darkSurface,
+      primary: AppColors.accentPrimary,
+      onPrimary: Color(0xFF00131A),
+      secondary: AppColors.accentSecondary,
+      onSecondary: Color(0xFF2E0012),
+      tertiary: AppColors.accentTertiary,
+      onTertiary: Color(0xFF112B00),
+      error: AppColors.error,
+      onError: Color(0xFF2A0006),
+      surface: AppColors.surface,
+      onSurface: AppColors.textPrimary,
+      onSurfaceVariant: AppColors.textSecondary,
+      outline: Color(0x6652C3D8),
+      outlineVariant: Color(0x3346A3B9),
+      shadow: Colors.black,
+      scrim: Colors.black,
+      inverseSurface: Color(0xFFF3F7FF),
+      onInverseSurface: Color(0xFF101521),
+      inversePrimary: Color(0xFF005B66),
+      surfaceContainerHighest: AppColors.surfaceElevated,
     );
 
     return ThemeData(
       useMaterial3: true,
       colorScheme: colorScheme,
-      scaffoldBackgroundColor: _darkBackground,
+      scaffoldBackgroundColor: AppColors.background,
+      textTheme: AppTypography.textTheme,
 
-      // ─────────────────────────────────────────────────────────────────────
-      // Typography - Large, readable text for arcade visibility
-      // ─────────────────────────────────────────────────────────────────────
-      textTheme: const TextTheme(
-        displayLarge: TextStyle(
-          fontSize: 48,
-          fontWeight: FontWeight.bold,
-          letterSpacing: -1.5,
-        ),
-        displayMedium: TextStyle(
-          fontSize: 36,
-          fontWeight: FontWeight.bold,
-          letterSpacing: -0.5,
-        ),
-        headlineLarge: TextStyle(fontSize: 28, fontWeight: FontWeight.w600),
-        headlineMedium: TextStyle(fontSize: 24, fontWeight: FontWeight.w600),
-        titleLarge: TextStyle(fontSize: 20, fontWeight: FontWeight.w500),
-        bodyLarge: TextStyle(fontSize: 18, fontWeight: FontWeight.normal),
-        bodyMedium: TextStyle(fontSize: 16, fontWeight: FontWeight.normal),
-        labelLarge: TextStyle(
-          fontSize: 16,
-          fontWeight: FontWeight.w600,
-          letterSpacing: 0.5,
-        ),
-      ),
-
-      // ─────────────────────────────────────────────────────────────────────
-      // Button Themes - Large touch targets for gloved hands
-      // ─────────────────────────────────────────────────────────────────────
       elevatedButtonTheme: ElevatedButtonThemeData(
         style: ElevatedButton.styleFrom(
-          minimumSize: Size(
+          backgroundColor: AppColors.accentPrimary,
+          foregroundColor: colorScheme.onPrimary,
+          minimumSize: const Size(
             AppConstants.minTouchTargetSize,
             AppConstants.largeButtonHeight,
           ),
-          padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
-          textStyle: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
+          padding: const EdgeInsets.symmetric(
+            horizontal: AppSpacing.xl,
+            vertical: AppSpacing.lg,
+          ),
+          textStyle: AppTypography.textTheme.labelLarge,
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(16),
+            borderRadius: BorderRadius.circular(14),
           ),
         ),
       ),
 
       filledButtonTheme: FilledButtonThemeData(
         style: FilledButton.styleFrom(
-          minimumSize: Size(
+          backgroundColor: AppColors.accentPrimary,
+          foregroundColor: colorScheme.onPrimary,
+          minimumSize: const Size(
             AppConstants.minTouchTargetSize,
             AppConstants.largeButtonHeight,
           ),
-          padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
-          textStyle: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
+          padding: const EdgeInsets.symmetric(
+            horizontal: AppSpacing.xl,
+            vertical: AppSpacing.lg,
+          ),
+          textStyle: AppTypography.textTheme.labelLarge,
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(16),
+            borderRadius: BorderRadius.circular(14),
           ),
         ),
       ),
 
       outlinedButtonTheme: OutlinedButtonThemeData(
         style: OutlinedButton.styleFrom(
-          minimumSize: Size(
+          minimumSize: const Size(
             AppConstants.minTouchTargetSize,
             AppConstants.largeButtonHeight,
           ),
-          padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
-          textStyle: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(16),
+          foregroundColor: AppColors.textPrimary,
+          padding: const EdgeInsets.symmetric(
+            horizontal: AppSpacing.xl,
+            vertical: AppSpacing.lg,
           ),
-          side: BorderSide(color: colorScheme.outline, width: 2),
+          textStyle: AppTypography.textTheme.labelLarge,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(14),
+          ),
+          side: const BorderSide(color: AppColors.accentPrimary, width: 1.4),
         ),
       ),
 
@@ -119,62 +112,53 @@ class AppTheme {
             AppConstants.minTouchTargetSize,
             AppConstants.minTouchTargetSize,
           ),
-          iconSize: 32,
+          foregroundColor: AppColors.textPrimary,
+          iconSize: 28,
         ),
       ),
 
-      // ─────────────────────────────────────────────────────────────────────
-      // Card & Surface styling
-      // ─────────────────────────────────────────────────────────────────────
       cardTheme: CardThemeData(
-        elevation: 4,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        color: _darkSurface,
+        elevation: 0,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+        color: AppColors.surfaceElevated,
       ),
 
-      // ─────────────────────────────────────────────────────────────────────
-      // AppBar
-      // ─────────────────────────────────────────────────────────────────────
       appBarTheme: AppBarTheme(
-        backgroundColor: _darkBackground,
+        backgroundColor: AppColors.background,
         elevation: 0,
         centerTitle: true,
-        titleTextStyle: TextStyle(
-          color: colorScheme.onSurface,
-          fontSize: 22,
-          fontWeight: FontWeight.w600,
-        ),
+        titleTextStyle: AppTypography.textTheme.titleLarge,
       ),
 
-      // ─────────────────────────────────────────────────────────────────────
-      // Slider - For level range selection
-      // ─────────────────────────────────────────────────────────────────────
       sliderTheme: SliderThemeData(
-        thumbShape: const RoundSliderThumbShape(
-          enabledThumbRadius: 16, // Large thumb for gloved interaction
-        ),
+        thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 16),
         overlayShape: const RoundSliderOverlayShape(overlayRadius: 28),
         trackHeight: 8,
-        activeTrackColor: colorScheme.primary,
-        inactiveTrackColor: colorScheme.surfaceContainerHighest,
-        thumbColor: colorScheme.primary,
-        overlayColor: colorScheme.primary.withValues(alpha: 0.2),
+        activeTrackColor: AppColors.accentPrimary,
+        inactiveTrackColor: AppColors.surfaceElevated,
+        thumbColor: AppColors.accentSecondary,
+        overlayColor: AppColors.accentPrimary.withValues(alpha: 0.22),
+      ),
+
+      chipTheme: ChipThemeData(
+        backgroundColor: AppColors.surface,
+        selectedColor: AppColors.surfaceElevated,
+        disabledColor: AppColors.surface,
+        deleteIconColor: AppColors.textSecondary,
+        labelStyle: AppTypography.textTheme.labelMedium!,
+        secondaryLabelStyle: AppTypography.textTheme.labelMedium!,
+        brightness: Brightness.dark,
+        side: const BorderSide(color: AppColors.accentPrimary, width: 1),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
       ),
     );
   }
 
   /// Light theme - alternative for bright environments.
   static ThemeData get lightTheme {
-    final colorScheme = ColorScheme.fromSeed(
-      seedColor: _seedColor,
-      brightness: Brightness.light,
-    );
-
     return ThemeData(
       useMaterial3: true,
-      colorScheme: colorScheme,
-      // Most apps will use dark theme; light theme follows same patterns
-      // with Material 3 defaults for now.
+      colorScheme: const ColorScheme.light(),
     );
   }
 }
