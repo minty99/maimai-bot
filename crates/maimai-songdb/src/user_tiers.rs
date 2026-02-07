@@ -6,81 +6,24 @@ use serde_json::Value;
 use std::collections::HashMap;
 use std::fmt::Display;
 use std::path::Path;
+use std::sync::LazyLock;
 
-pub const USER_TIER_SPREADSHEET_ID: &str = "19jn6ZFmg_aMRXKK90y58IUQE-4P32wUC7XkwwnEs7Oo";
-
-#[derive(Debug, Clone, Copy)]
-pub struct UserTierSheetSpec {
-    pub internal_level: &'static str,
-    pub sheet_gid: i64,
+#[derive(Debug, Clone, Deserialize)]
+struct UserTierSheetSpec {
+    internal_level: String,
+    sheet_gid: i64,
 }
 
-pub const USER_TIER_SHEET_SPECS: &[UserTierSheetSpec] = &[
-    UserTierSheetSpec {
-        internal_level: "13.0",
-        sheet_gid: 1_749_298_731,
-    },
-    UserTierSheetSpec {
-        internal_level: "13.1",
-        sheet_gid: 1_154_334_538,
-    },
-    UserTierSheetSpec {
-        internal_level: "13.2",
-        sheet_gid: 1_829_611_377,
-    },
-    UserTierSheetSpec {
-        internal_level: "13.3",
-        sheet_gid: 906_051_633,
-    },
-    UserTierSheetSpec {
-        internal_level: "13.4",
-        sheet_gid: 273_610_954,
-    },
-    UserTierSheetSpec {
-        internal_level: "13.5",
-        sheet_gid: 2_135_528_050,
-    },
-    UserTierSheetSpec {
-        internal_level: "13.6",
-        sheet_gid: 1_968_583_985,
-    },
-    UserTierSheetSpec {
-        internal_level: "13.7",
-        sheet_gid: 1_402_010_493,
-    },
-    UserTierSheetSpec {
-        internal_level: "13.8",
-        sheet_gid: 1_532_312_671,
-    },
-    UserTierSheetSpec {
-        internal_level: "13.9",
-        sheet_gid: 1_340_012_092,
-    },
-    UserTierSheetSpec {
-        internal_level: "14.0",
-        sheet_gid: 1_964_782_792,
-    },
-    UserTierSheetSpec {
-        internal_level: "14.1",
-        sheet_gid: 1_313_771_404,
-    },
-    UserTierSheetSpec {
-        internal_level: "14.2",
-        sheet_gid: 478_233_232,
-    },
-    UserTierSheetSpec {
-        internal_level: "14.3",
-        sheet_gid: 1_133_176_592,
-    },
-    UserTierSheetSpec {
-        internal_level: "14.4",
-        sheet_gid: 540_430_720,
-    },
-    UserTierSheetSpec {
-        internal_level: "14.5",
-        sheet_gid: 740_029_659,
-    },
-];
+#[derive(Debug, Clone, Deserialize)]
+struct UserTierConfig {
+    spreadsheet_id: String,
+    sheets: Vec<UserTierSheetSpec>,
+}
+
+static USER_TIER_CONFIG: LazyLock<UserTierConfig> = LazyLock::new(|| {
+    serde_json::from_str(include_str!("data/user_tier_sheets.json"))
+        .expect("failed to parse embedded user_tier_sheets.json")
+});
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct UserTierKey {
@@ -152,24 +95,23 @@ struct SpreadsheetMetaProperties {
     title: Option<String>,
 }
 
-pub async fn fetch_user_tier_map_for_sheet(
+async fn fetch_user_tier_map_for_sheet(
     client: &reqwest::Client,
     google_api_key: &str,
     spreadsheet_id: &str,
     sheet_gid: i64,
     internal_level: &str,
     song_data: &models::SongDataRoot,
-    cover_dir: &Path,
+    cover_fingerprints: &[CoverFingerprint],
 ) -> eyre::Result<HashMap<UserTierKey, String>> {
     let entries = fetch_sheet_entries(client, google_api_key, spreadsheet_id, sheet_gid).await?;
-    let covers = build_cover_fingerprints(song_data, cover_dir)?;
 
     let mut map = HashMap::new();
     for entry in entries {
         let image_bytes = download_image(client, &entry.image_url)
             .await
             .wrap_err_with(|| format!("download user-tier image: {}", entry.image_url))?;
-        let matched_title = match_cover_title(&image_bytes, &covers)?;
+        let matched_title = match_cover_title(&image_bytes, cover_fingerprints)?;
 
         if let Some(key) = resolve_key(song_data, matched_title, entry.border_hint, internal_level)
         {
@@ -188,15 +130,16 @@ pub async fn fetch_user_tier_map_for_default_levels(
 ) -> eyre::Result<HashMap<UserTierKey, UserTierValue>> {
     let mut out = HashMap::new();
 
-    for spec in USER_TIER_SHEET_SPECS {
+    let cover_fingerprints = build_cover_fingerprints(song_data, cover_dir)?;
+    for spec in &USER_TIER_CONFIG.sheets {
         let map = fetch_user_tier_map_for_sheet(
             client,
             google_api_key,
-            USER_TIER_SPREADSHEET_ID,
+            &USER_TIER_CONFIG.spreadsheet_id,
             spec.sheet_gid,
-            spec.internal_level,
+            &spec.internal_level,
             song_data,
-            cover_dir,
+            &cover_fingerprints,
         )
         .await
         .wrap_err_with(|| {
@@ -211,11 +154,13 @@ pub async fn fetch_user_tier_map_for_default_levels(
                 key,
                 UserTierValue {
                     grade,
-                    source_internal_level: spec.internal_level.to_string(),
+                    source_internal_level: spec.internal_level.clone(),
                 },
             );
         }
     }
+
+    tracing::info!("built {} user tier entries", out.len());
 
     Ok(out)
 }
@@ -410,6 +355,7 @@ fn build_cover_fingerprints(
         };
         let path = cover_dir.join(image_name);
         if !path.exists() {
+            tracing::warn!("Cover image not found: {}", path.display());
             continue;
         }
 
@@ -428,13 +374,13 @@ fn build_cover_fingerprints(
 
 fn match_cover_title<'a>(
     image_bytes: &[u8],
-    covers: &'a [CoverFingerprint],
+    cover_fingerprints: &'a [CoverFingerprint],
 ) -> eyre::Result<&'a str> {
     let border_hint = classify_border_hint(image_bytes).unwrap_or(BorderHint::None);
     let query_vector = image_to_vector(image_bytes, true)?;
 
     let mut best: Option<(&str, f32)> = None;
-    for cover in covers {
+    for cover in cover_fingerprints {
         let score = l1_distance(&query_vector, &cover.vector);
         match best {
             Some((_, best_score)) if score >= best_score => {}
@@ -637,7 +583,6 @@ mod tests {
     use std::path::PathBuf;
 
     const LIVE_TEST_INTERNAL_LEVEL: &str = "13.0";
-    const LIVE_TEST_SPREADSHEET_ID: &str = "19jn6ZFmg_aMRXKK90y58IUQE-4P32wUC7XkwwnEs7Oo";
     const LIVE_TEST_SHEET_GID: i64 = 1_749_298_731;
 
     fn to_png_bytes(image: ImageBuffer<Rgb<u8>, Vec<u8>>) -> Vec<u8> {
@@ -757,15 +702,16 @@ mod tests {
         let song_data: models::SongDataRoot = serde_json::from_slice(&song_data_bytes)
             .unwrap_or_else(|e| panic!("failed to parse {song_data_json}: {e}"));
         let cover_dir_path = PathBuf::from(cover_dir);
+        let cover_fingerprints = build_cover_fingerprints(&song_data, &cover_dir_path).unwrap();
 
         let map = fetch_user_tier_map_for_sheet(
             &client,
             &api_key,
-            USER_TIER_SPREADSHEET_ID,
-            USER_TIER_SHEET_SPECS[0].sheet_gid,
-            USER_TIER_SHEET_SPECS[0].internal_level,
+            &USER_TIER_CONFIG.spreadsheet_id,
+            USER_TIER_CONFIG.sheets[0].sheet_gid,
+            &USER_TIER_CONFIG.sheets[0].internal_level,
             &song_data,
-            &cover_dir_path,
+            &cover_fingerprints,
         )
         .await
         .expect("failed to fetch live user tier map");

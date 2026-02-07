@@ -1,0 +1,116 @@
+[
+  {
+    "source_version": 6,
+    "spreadsheet_id": "1byBSBQE547KL2KzPkUjY45svcIrJeHh57h-DLJycQbs",
+    "extracts": [
+      { "sheet_name": "UNiVERSEPLUS新曲枠", "data_indexes": [0, 5, 10, 15, 20], "data_offsets": [0, 1, 2, 3] },
+      { "sheet_name": "14以上", "data_indexes": [0, 7, 14, 21], "data_offsets": [0, 2, 3, 5] },
+      { "sheet_name": "13+", "data_indexes": [0, 7, 14], "data_offsets": [0, 2, 3, 5] },
+      { "sheet_name": "13", "data_indexes": [0, 7, 14, 21, 28, 35], "data_offsets": [0, 2, 3, 5] },
+      { "sheet_name": "12+", "data_indexes": [0, 6, 12, 18, 24, 30], "data_offsets": [0, 1, 2, 4] },
+      { "sheet_name": "12", "data_indexes": [0, 6, 12, 18, 24, 30, 36], "data_offsets": [0, 1, 2, 4] },
+      { "sheet_name": "Tmai", "data_indexes": [0], "data_offsets": [1, 10, 11, 18] }
+    ]
+  },
+  {
+    "source_version": 7,
+    "spreadsheet_id": "1xbDMo-36bGL_d435Oy8TTVq4ADFmxl9sYFqhTXiJYRg",
+    "extracts": [
+      { "sheet_name": "FESTiVAL新曲", "data_indexes": [0, 6, 12, 18, 24], "data_offsets": [0, 1, 2, 4] },
+      { "sheet_name": "14以上", "data_indexes": [0, 7, 14, 21], "data_offsets": [0, 2, 3, 5] },
+      { "sheet_name": "13+", "data_indexes": [0, 7, 14], "data_offsets": [0, 2, 3, 5] },
+      { "sheet_name": "13", "data_indexes": [0, 7, 14, 21, 28, 35, 42], "data_offsets": [0, 2, 3, 5] },
+      { "sheet_name": "12+", "data_indexes": [0, 6, 12, 18, 24, 30], "data_offsets": [0, 1, 2, 4] },
+      { "sheet_name": "12+", "data_indexes": [36], "data_offsets": [0, 2, 3, 5] },
+      { "sheet_name": "12", "data_indexes": [0, 7, 14, 21, 27, 34, 41], "data_offsets": [0, 1, 2, 4] },
+      { "sheet_name": "12", "data_indexes": [48], "data_offsets": [0, 2, 3, 5] },
+      { "sheet_name": "Tmai", "data_indexes": [0], "data_offsets": [1, 2, 3, 7] }
+    ]
+  },
+  {
+    "source_version": 8,
+    "spreadsheet_id": "1xqXfzfDfxiEE9mREwgX_ITIY8AowRM7w-TH2t1I_RJE",
+    "extracts": [
+      { "sheet_name": "FESTiVAL+新曲", "data_indexes": [0, 6, 12, 18, 24], "data_offsets": [0, 1, 2, 4] },
+      { "sheet_name": "14以上", "data_indexes": [0, 7, 14, 21], "data_offsets": [0, 2, 3, 5] },
+      { "sheet_name": "13+", "data_indexes": [0, 7, 14, 21], "data_offsets": [0, 2, 3, 5] },
+      { "sheet_name": "13", "data_indexes": [0, 7, 14, 21, 28, 35], "data_offsets": [0, 2, 3, 5] },
+      { "sheet_name": "12+", "data_indexes": [0, 7, 13, 19, 25, 31], "data_offsets": [0, 1, 2, 4] },
+      { "sheet_name": "12+", "data_indexes": [37], "data_offsets": [0, 2, 3, 5] },
+      { "sheet_name": "12", "data_indexes": [0, 7, 14, 21, 28, 35, 42], "data_offsets": [0, 1, 2, 4] },
+      { "sheet_name": "12", "data_indexes": [49], "data_offsets": [0, 2, 3, 5] },
+      { "sheet_name": "Tmai", "data_indexes": [0], "data_offsets": [1, 2, 3, 7] }
+    ]
+  },
+  {
+    "source_version": 9,
+    "spreadsheet_id": "1vSqx2ghJKjWwCLrDEyZTUMSy5wkq_gY4i0GrJgSreQc",
+    "extracts": [
+      { "sheet_name": "BUDDiES新曲", "data_indexes": [0, 6, 12, 18, 24], "data_offsets": [0, 1, 2, 4] },
+      { "sheet_name": "14以上", "data_indexes": [0, 7, 14, 21, 28, 35], "data_offsets": [0, 2, 3, 5] },
+      { "sheet_name": "13+", "data_indexes": [0, 7, 14, 21], "data_offsets": [0, 2, 3, 5] },
+      { "sheet_name": "13", "data_indexes": [0, 7, 14, 21, 28, 35, 42], "data_offsets": [0, 2, 3, 5] },
+      { "sheet_name": "12+", "data_indexes": [0, 6, 12, 19, 26, 33], "data_offsets": [0, 1, 2, 4] },
+      { "sheet_name": "12+", "data_indexes": [39], "data_offsets": [0, 2, 3, 5] },
+      { "sheet_name": "12", "data_indexes": [0, 6, 13, 19, 26, 32], "data_offsets": [0, 1, 2, 4] },
+      { "sheet_name": "12", "data_indexes": [38], "data_offsets": [0, 2, 3, 5] },
+      { "sheet_name": "Tmai", "data_indexes": [0], "data_offsets": [1, 2, 3, 7] }
+    ]
+  },
+  {
+    "source_version": 10,
+    "spreadsheet_id": "1d1AjO92Hj-iay10MsqdR_5TswEaikzC988aEOtFyybo",
+    "extracts": [
+      { "sheet_name": "BUDDiES+新曲", "data_indexes": [0, 6, 12, 18, 24], "data_offsets": [0, 1, 2, 4] },
+      { "sheet_name": "14以上", "data_indexes": [0, 7, 15, 22, 29, 37], "data_offsets": [0, 2, 3, 5] },
+      { "sheet_name": "13+", "data_indexes": [0, 8, 15, 22, 29], "data_offsets": [0, 2, 3, 5] },
+      { "sheet_name": "13", "data_indexes": [0, 8, 16, 23, 30, 37, 45], "data_offsets": [0, 2, 3, 5] },
+      { "sheet_name": "12+", "data_indexes": [0, 7, 14, 20, 27], "data_offsets": [0, 1, 2, 4] },
+      { "sheet_name": "12+", "data_indexes": [34], "data_offsets": [0, 2, 3, 5] },
+      { "sheet_name": "12", "data_indexes": [0, 7, 14, 21, 28, 35], "data_offsets": [0, 1, 2, 4] },
+      { "sheet_name": "12", "data_indexes": [42], "data_offsets": [0, 2, 3, 5] },
+      { "sheet_name": "Tmai", "data_indexes": [0], "data_offsets": [1, 2, 3, 7] }
+    ]
+  },
+  {
+    "source_version": 11,
+    "spreadsheet_id": "1DKssDl2MM-jjK_GmHPEIVcOMcpVzaeiXA9P5hmhDqAo",
+    "extracts": [
+      { "sheet_name": "PRiSM新曲", "data_indexes": [0, 6, 12, 18, 24], "data_offsets": [0, 1, 2, 4] },
+      { "sheet_name": "14以上", "data_indexes": [0, 7, 14, 21, 28], "data_offsets": [0, 2, 3, 5] },
+      { "sheet_name": "13+", "data_indexes": [0, 7, 14, 21], "data_offsets": [0, 2, 3, 5] },
+      { "sheet_name": "13", "data_indexes": [0, 8, 15, 22, 29, 36], "data_offsets": [0, 2, 3, 5] },
+      { "sheet_name": "12+", "data_indexes": [0, 6, 12, 18, 24], "data_offsets": [0, 1, 2, 4] },
+      { "sheet_name": "12", "data_indexes": [0, 7, 14, 22, 29, 36], "data_offsets": [0, 1, 2, 4] },
+      { "sheet_name": "Tmai", "data_indexes": [0], "data_offsets": [1, 2, 3, 7] }
+    ]
+  },
+  {
+    "source_version": 12,
+    "spreadsheet_id": "10N6jmyrzmHrZGbGhDWfpdg4hQKm0t84H2DPkaFG7PNs",
+    "extracts": [
+      { "sheet_name": "PRiSM PLUS新曲", "data_indexes": [0, 6, 12, 18, 24], "data_offsets": [0, 1, 2, 4] },
+      { "sheet_name": "14以上", "data_indexes": [0, 7, 14, 21, 28], "data_offsets": [0, 2, 3, 5] },
+      { "sheet_name": "13+", "data_indexes": [0, 6, 12, 18], "data_offsets": [0, 1, 2, 4] },
+      { "sheet_name": "13", "data_indexes": [0, 6, 12, 18, 24, 30], "data_offsets": [0, 1, 2, 4] },
+      { "sheet_name": "12+", "data_indexes": [0, 6, 12, 18], "data_offsets": [0, 1, 2, 4] },
+      { "sheet_name": "12", "data_indexes": [0, 6, 12, 18, 24, 30], "data_offsets": [0, 1, 2, 4] },
+      { "sheet_name": "Tmai", "data_indexes": [0], "data_offsets": [1, 2, 3, 7] }
+    ]
+  },
+  {
+    "source_version": 13,
+    "spreadsheet_id": "17vd35oIHxjXPUU-6QJwYoTLPs2nneHN4hokMNLoQQLY",
+    "extracts": [
+      { "sheet_name": "CiRCLE新曲", "data_indexes": [0, 6, 12, 18, 24], "data_offsets": [0, 1, 2, 4] },
+      { "sheet_name": "PRiSM PLUS新曲", "data_indexes": [0, 6, 12, 18, 24], "data_offsets": [0, 1, 2, 4] },
+      { "sheet_name": "新曲枠", "data_indexes": [0, 7, 14, 21], "data_offsets": [0, 2, 3, 5] },
+      { "sheet_name": "14以上", "data_indexes": [0, 7, 14, 21, 28], "data_offsets": [0, 2, 3, 5] },
+      { "sheet_name": "13+", "data_indexes": [0, 6, 12, 18], "data_offsets": [0, 1, 2, 4] },
+      { "sheet_name": "13", "data_indexes": [0, 6, 12, 18, 24, 30], "data_offsets": [0, 1, 2, 4] },
+      { "sheet_name": "12+", "data_indexes": [0, 6, 12, 18], "data_offsets": [0, 1, 2, 4] },
+      { "sheet_name": "12", "data_indexes": [0, 6, 12, 18, 24, 30], "data_offsets": [0, 1, 2, 4] },
+      { "sheet_name": "Tmai", "data_indexes": [0], "data_offsets": [1, 2, 3, 7] }
+    ]
+  }
+]

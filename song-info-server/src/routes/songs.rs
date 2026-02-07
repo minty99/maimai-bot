@@ -15,11 +15,13 @@ pub struct SongSheetResponse {
     difficulty: String,
     level: String,
     internal_level: Option<f32>,
+    user_level: Option<String>,
 }
 
 #[derive(Serialize)]
 pub struct SongMetadataResponse {
     internal_level: Option<f32>,
+    user_level: Option<String>,
     image_name: Option<String>,
     version: Option<String>,
     bucket: Option<String>,
@@ -68,6 +70,7 @@ pub async fn random_song_by_level(
                 difficulty: sheet.difficulty.clone(),
                 level: sheet.level.clone(),
                 internal_level,
+                user_level: sheet.user_level.clone(),
             });
         }
 
@@ -155,6 +158,7 @@ pub async fn get_song_metadata(
 
                     return Ok(Json(SongMetadataResponse {
                         internal_level,
+                        user_level: sheet.user_level.clone(),
                         image_name: song.image_name.clone(),
                         version: song.version.clone(),
                         bucket,

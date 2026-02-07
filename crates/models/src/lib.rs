@@ -453,6 +453,8 @@ pub struct SongDataSheet {
     pub level: String,
     #[serde(rename = "internalLevel", skip_serializing_if = "Option::is_none")]
     pub internal_level: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub user_level: Option<String>,
 }
 
 impl SongDataIndex {

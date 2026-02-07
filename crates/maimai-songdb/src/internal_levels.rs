@@ -4,20 +4,28 @@ use eyre::WrapErr;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::HashMap;
+use std::path::Path;
+use std::sync::LazyLock;
 use tokio::time::{sleep, Duration};
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Deserialize)]
 struct ExtractSpec {
-    sheet_name: &'static str,
-    data_indexes: &'static [usize],
+    sheet_name: String,
+    data_indexes: Vec<usize>,
     data_offsets: [usize; 4],
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Deserialize)]
 struct SpreadsheetSpec {
     source_version: i64,
-    spreadsheet_id: &'static str,
-    extracts: &'static [ExtractSpec],
+    spreadsheet_id: String,
+    extracts: Vec<ExtractSpec>,
+}
+
+#[derive(Debug, Deserialize)]
+struct TitleMappings {
+    rename: HashMap<String, String>,
+    skip: Vec<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -35,411 +43,15 @@ pub struct InternalLevelRow {
     pub source_version: i64,
 }
 
-const V6_SHEET_ID: &str = "1byBSBQE547KL2KzPkUjY45svcIrJeHh57h-DLJycQbs";
-const V7_SHEET_ID: &str = "1xbDMo-36bGL_d435Oy8TTVq4ADFmxl9sYFqhTXiJYRg";
-const V8_SHEET_ID: &str = "1xqXfzfDfxiEE9mREwgX_ITIY8AowRM7w-TH2t1I_RJE";
-const V9_SHEET_ID: &str = "1vSqx2ghJKjWwCLrDEyZTUMSy5wkq_gY4i0GrJgSreQc";
-const V10_SHEET_ID: &str = "1d1AjO92Hj-iay10MsqdR_5TswEaikzC988aEOtFyybo";
-const V11_SHEET_ID: &str = "1DKssDl2MM-jjK_GmHPEIVcOMcpVzaeiXA9P5hmhDqAo";
-const V12_SHEET_ID: &str = "10N6jmyrzmHrZGbGhDWfpdg4hQKm0t84H2DPkaFG7PNs";
-const V13_SHEET_ID: &str = "17vd35oIHxjXPUU-6QJwYoTLPs2nneHN4hokMNLoQQLY";
+static SPREADSHEETS: LazyLock<Vec<SpreadsheetSpec>> = LazyLock::new(|| {
+    serde_json::from_str(include_str!("data/spreadsheets.json"))
+        .expect("failed to parse embedded spreadsheets.json")
+});
 
-const V6_EXTRACTS: &[ExtractSpec] = &[
-    ExtractSpec {
-        sheet_name: "UNiVERSEPLUS新曲枠",
-        data_indexes: &[0, 5, 10, 15, 20],
-        data_offsets: [0, 1, 2, 3],
-    },
-    ExtractSpec {
-        sheet_name: "14以上",
-        data_indexes: &[0, 7, 14, 21],
-        data_offsets: [0, 2, 3, 5],
-    },
-    ExtractSpec {
-        sheet_name: "13+",
-        data_indexes: &[0, 7, 14],
-        data_offsets: [0, 2, 3, 5],
-    },
-    ExtractSpec {
-        sheet_name: "13",
-        data_indexes: &[0, 7, 14, 21, 28, 35],
-        data_offsets: [0, 2, 3, 5],
-    },
-    ExtractSpec {
-        sheet_name: "12+",
-        data_indexes: &[0, 6, 12, 18, 24, 30],
-        data_offsets: [0, 1, 2, 4],
-    },
-    ExtractSpec {
-        sheet_name: "12",
-        data_indexes: &[0, 6, 12, 18, 24, 30, 36],
-        data_offsets: [0, 1, 2, 4],
-    },
-    ExtractSpec {
-        sheet_name: "Tmai",
-        data_indexes: &[0],
-        data_offsets: [1, 10, 11, 18],
-    },
-];
-
-const V7_EXTRACTS: &[ExtractSpec] = &[
-    ExtractSpec {
-        sheet_name: "FESTiVAL新曲",
-        data_indexes: &[0, 6, 12, 18, 24],
-        data_offsets: [0, 1, 2, 4],
-    },
-    ExtractSpec {
-        sheet_name: "14以上",
-        data_indexes: &[0, 7, 14, 21],
-        data_offsets: [0, 2, 3, 5],
-    },
-    ExtractSpec {
-        sheet_name: "13+",
-        data_indexes: &[0, 7, 14],
-        data_offsets: [0, 2, 3, 5],
-    },
-    ExtractSpec {
-        sheet_name: "13",
-        data_indexes: &[0, 7, 14, 21, 28, 35, 42],
-        data_offsets: [0, 2, 3, 5],
-    },
-    ExtractSpec {
-        sheet_name: "12+",
-        data_indexes: &[0, 6, 12, 18, 24, 30],
-        data_offsets: [0, 1, 2, 4],
-    },
-    ExtractSpec {
-        sheet_name: "12+",
-        data_indexes: &[36],
-        data_offsets: [0, 2, 3, 5],
-    },
-    ExtractSpec {
-        sheet_name: "12",
-        data_indexes: &[0, 7, 14, 21, 27, 34, 41],
-        data_offsets: [0, 1, 2, 4],
-    },
-    ExtractSpec {
-        sheet_name: "12",
-        data_indexes: &[48],
-        data_offsets: [0, 2, 3, 5],
-    },
-    ExtractSpec {
-        sheet_name: "Tmai",
-        data_indexes: &[0],
-        data_offsets: [1, 2, 3, 7],
-    },
-];
-
-const V8_EXTRACTS: &[ExtractSpec] = &[
-    ExtractSpec {
-        sheet_name: "FESTiVAL+新曲",
-        data_indexes: &[0, 6, 12, 18, 24],
-        data_offsets: [0, 1, 2, 4],
-    },
-    ExtractSpec {
-        sheet_name: "14以上",
-        data_indexes: &[0, 7, 14, 21],
-        data_offsets: [0, 2, 3, 5],
-    },
-    ExtractSpec {
-        sheet_name: "13+",
-        data_indexes: &[0, 7, 14, 21],
-        data_offsets: [0, 2, 3, 5],
-    },
-    ExtractSpec {
-        sheet_name: "13",
-        data_indexes: &[0, 7, 14, 21, 28, 35],
-        data_offsets: [0, 2, 3, 5],
-    },
-    ExtractSpec {
-        sheet_name: "12+",
-        data_indexes: &[0, 7, 13, 19, 25, 31],
-        data_offsets: [0, 1, 2, 4],
-    },
-    ExtractSpec {
-        sheet_name: "12+",
-        data_indexes: &[37],
-        data_offsets: [0, 2, 3, 5],
-    },
-    ExtractSpec {
-        sheet_name: "12",
-        data_indexes: &[0, 7, 14, 21, 28, 35, 42],
-        data_offsets: [0, 1, 2, 4],
-    },
-    ExtractSpec {
-        sheet_name: "12",
-        data_indexes: &[49],
-        data_offsets: [0, 2, 3, 5],
-    },
-    ExtractSpec {
-        sheet_name: "Tmai",
-        data_indexes: &[0],
-        data_offsets: [1, 2, 3, 7],
-    },
-];
-
-const V9_EXTRACTS: &[ExtractSpec] = &[
-    ExtractSpec {
-        sheet_name: "BUDDiES新曲",
-        data_indexes: &[0, 6, 12, 18, 24],
-        data_offsets: [0, 1, 2, 4],
-    },
-    ExtractSpec {
-        sheet_name: "14以上",
-        data_indexes: &[0, 7, 14, 21, 28, 35],
-        data_offsets: [0, 2, 3, 5],
-    },
-    ExtractSpec {
-        sheet_name: "13+",
-        data_indexes: &[0, 7, 14, 21],
-        data_offsets: [0, 2, 3, 5],
-    },
-    ExtractSpec {
-        sheet_name: "13",
-        data_indexes: &[0, 7, 14, 21, 28, 35, 42],
-        data_offsets: [0, 2, 3, 5],
-    },
-    ExtractSpec {
-        sheet_name: "12+",
-        data_indexes: &[0, 6, 12, 19, 26, 33],
-        data_offsets: [0, 1, 2, 4],
-    },
-    ExtractSpec {
-        sheet_name: "12+",
-        data_indexes: &[39],
-        data_offsets: [0, 2, 3, 5],
-    },
-    ExtractSpec {
-        sheet_name: "12",
-        data_indexes: &[0, 6, 13, 19, 26, 32],
-        data_offsets: [0, 1, 2, 4],
-    },
-    ExtractSpec {
-        sheet_name: "12",
-        data_indexes: &[38],
-        data_offsets: [0, 2, 3, 5],
-    },
-    ExtractSpec {
-        sheet_name: "Tmai",
-        data_indexes: &[0],
-        data_offsets: [1, 2, 3, 7],
-    },
-];
-
-const V10_EXTRACTS: &[ExtractSpec] = &[
-    ExtractSpec {
-        sheet_name: "BUDDiES+新曲",
-        data_indexes: &[0, 6, 12, 18, 24],
-        data_offsets: [0, 1, 2, 4],
-    },
-    ExtractSpec {
-        sheet_name: "14以上",
-        data_indexes: &[0, 7, 15, 22, 29, 37],
-        data_offsets: [0, 2, 3, 5],
-    },
-    ExtractSpec {
-        sheet_name: "13+",
-        data_indexes: &[0, 8, 15, 22, 29],
-        data_offsets: [0, 2, 3, 5],
-    },
-    ExtractSpec {
-        sheet_name: "13",
-        data_indexes: &[0, 8, 16, 23, 30, 37, 45],
-        data_offsets: [0, 2, 3, 5],
-    },
-    ExtractSpec {
-        sheet_name: "12+",
-        data_indexes: &[0, 7, 14, 20, 27],
-        data_offsets: [0, 1, 2, 4],
-    },
-    ExtractSpec {
-        sheet_name: "12+",
-        data_indexes: &[34],
-        data_offsets: [0, 2, 3, 5],
-    },
-    ExtractSpec {
-        sheet_name: "12",
-        data_indexes: &[0, 7, 14, 21, 28, 35],
-        data_offsets: [0, 1, 2, 4],
-    },
-    ExtractSpec {
-        sheet_name: "12",
-        data_indexes: &[42],
-        data_offsets: [0, 2, 3, 5],
-    },
-    ExtractSpec {
-        sheet_name: "Tmai",
-        data_indexes: &[0],
-        data_offsets: [1, 2, 3, 7],
-    },
-];
-
-const V11_EXTRACTS: &[ExtractSpec] = &[
-    ExtractSpec {
-        sheet_name: "PRiSM新曲",
-        data_indexes: &[0, 6, 12, 18, 24],
-        data_offsets: [0, 1, 2, 4],
-    },
-    ExtractSpec {
-        sheet_name: "14以上",
-        data_indexes: &[0, 7, 14, 21, 28],
-        data_offsets: [0, 2, 3, 5],
-    },
-    ExtractSpec {
-        sheet_name: "13+",
-        data_indexes: &[0, 7, 14, 21],
-        data_offsets: [0, 2, 3, 5],
-    },
-    ExtractSpec {
-        sheet_name: "13",
-        data_indexes: &[0, 8, 15, 22, 29, 36],
-        data_offsets: [0, 2, 3, 5],
-    },
-    ExtractSpec {
-        sheet_name: "12+",
-        data_indexes: &[0, 6, 12, 18, 24],
-        data_offsets: [0, 1, 2, 4],
-    },
-    ExtractSpec {
-        sheet_name: "12",
-        data_indexes: &[0, 7, 14, 22, 29, 36],
-        data_offsets: [0, 1, 2, 4],
-    },
-    ExtractSpec {
-        sheet_name: "Tmai",
-        data_indexes: &[0],
-        data_offsets: [1, 2, 3, 7],
-    },
-];
-
-const V12_EXTRACTS: &[ExtractSpec] = &[
-    ExtractSpec {
-        sheet_name: "PRiSM PLUS新曲",
-        data_indexes: &[0, 6, 12, 18, 24],
-        data_offsets: [0, 1, 2, 4],
-    },
-    ExtractSpec {
-        sheet_name: "14以上",
-        data_indexes: &[0, 7, 14, 21, 28],
-        data_offsets: [0, 2, 3, 5],
-    },
-    ExtractSpec {
-        sheet_name: "13+",
-        data_indexes: &[0, 6, 12, 18],
-        data_offsets: [0, 1, 2, 4],
-    },
-    ExtractSpec {
-        sheet_name: "13",
-        data_indexes: &[0, 6, 12, 18, 24, 30],
-        data_offsets: [0, 1, 2, 4],
-    },
-    ExtractSpec {
-        sheet_name: "12+",
-        data_indexes: &[0, 6, 12, 18],
-        data_offsets: [0, 1, 2, 4],
-    },
-    ExtractSpec {
-        sheet_name: "12",
-        data_indexes: &[0, 6, 12, 18, 24, 30],
-        data_offsets: [0, 1, 2, 4],
-    },
-    ExtractSpec {
-        sheet_name: "Tmai",
-        data_indexes: &[0],
-        data_offsets: [1, 2, 3, 7],
-    },
-];
-
-const V13_EXTRACTS: &[ExtractSpec] = &[
-    ExtractSpec {
-        sheet_name: "CiRCLE新曲",
-        data_indexes: &[0, 6, 12, 18, 24],
-        data_offsets: [0, 1, 2, 4],
-    },
-    ExtractSpec {
-        sheet_name: "PRiSM PLUS新曲",
-        data_indexes: &[0, 6, 12, 18, 24],
-        data_offsets: [0, 1, 2, 4],
-    },
-    ExtractSpec {
-        sheet_name: "新曲枠",
-        data_indexes: &[0, 7, 14, 21],
-        data_offsets: [0, 2, 3, 5],
-    },
-    ExtractSpec {
-        sheet_name: "14以上",
-        data_indexes: &[0, 7, 14, 21, 28],
-        data_offsets: [0, 2, 3, 5],
-    },
-    ExtractSpec {
-        sheet_name: "13+",
-        data_indexes: &[0, 6, 12, 18],
-        data_offsets: [0, 1, 2, 4],
-    },
-    ExtractSpec {
-        sheet_name: "13",
-        data_indexes: &[0, 6, 12, 18, 24, 30],
-        data_offsets: [0, 1, 2, 4],
-    },
-    ExtractSpec {
-        sheet_name: "12+",
-        data_indexes: &[0, 6, 12, 18],
-        data_offsets: [0, 1, 2, 4],
-    },
-    ExtractSpec {
-        sheet_name: "12",
-        data_indexes: &[0, 6, 12, 18, 24, 30],
-        data_offsets: [0, 1, 2, 4],
-    },
-    ExtractSpec {
-        sheet_name: "Tmai",
-        data_indexes: &[0],
-        data_offsets: [1, 2, 3, 7],
-    },
-];
-
-const SPREADSHEETS: &[SpreadsheetSpec] = &[
-    SpreadsheetSpec {
-        source_version: 6,
-        spreadsheet_id: V6_SHEET_ID,
-        extracts: V6_EXTRACTS,
-    },
-    SpreadsheetSpec {
-        source_version: 7,
-        spreadsheet_id: V7_SHEET_ID,
-        extracts: V7_EXTRACTS,
-    },
-    SpreadsheetSpec {
-        source_version: 8,
-        spreadsheet_id: V8_SHEET_ID,
-        extracts: V8_EXTRACTS,
-    },
-    SpreadsheetSpec {
-        source_version: 9,
-        spreadsheet_id: V9_SHEET_ID,
-        extracts: V9_EXTRACTS,
-    },
-    SpreadsheetSpec {
-        source_version: 10,
-        spreadsheet_id: V10_SHEET_ID,
-        extracts: V10_EXTRACTS,
-    },
-    SpreadsheetSpec {
-        source_version: 11,
-        spreadsheet_id: V11_SHEET_ID,
-        extracts: V11_EXTRACTS,
-    },
-    SpreadsheetSpec {
-        source_version: 12,
-        spreadsheet_id: V12_SHEET_ID,
-        extracts: V12_EXTRACTS,
-    },
-    SpreadsheetSpec {
-        source_version: 13,
-        spreadsheet_id: V13_SHEET_ID,
-        extracts: V13_EXTRACTS,
-    },
-];
+static TITLE_MAPPINGS: LazyLock<TitleMappings> = LazyLock::new(|| {
+    serde_json::from_str(include_str!("data/title_mappings.json"))
+        .expect("failed to parse embedded title_mappings.json")
+});
 
 fn max_column_for_extract(extract: &ExtractSpec) -> usize {
     let max_data_index = extract.data_indexes.iter().copied().max().unwrap_or(0);
@@ -534,7 +146,7 @@ fn extract_records_from_values(
 ) -> Vec<InternalLevelRow> {
     let mut out = Vec::new();
 
-    for &data_index in spec.data_indexes {
+    for &data_index in &spec.data_indexes {
         let title_idx = data_index + spec.data_offsets[0];
         let type_idx = data_index + spec.data_offsets[1];
         let diff_idx = data_index + spec.data_offsets[2];
@@ -630,208 +242,141 @@ fn song_id_from_internal_level_title(title: &str) -> Option<String> {
         return None;
     }
 
-    match manual_mapping(title) {
-        ManualMap::Skip => None,
-        ManualMap::MapTo(mapped) => Some(mapped.to_string()),
-        ManualMap::NoMap => Some(title.to_string()),
+    let mappings = &*TITLE_MAPPINGS;
+
+    if mappings.skip.iter().any(|s| s == title) {
+        return None;
     }
+
+    if let Some(mapped) = mappings.rename.get(title) {
+        return Some(mapped.clone());
+    }
+
+    Some(title.to_string())
 }
 
-enum ManualMap {
-    Skip,
-    MapTo(&'static str),
-    NoMap,
+async fn fetch_rows_for_spreadsheet(
+    client: &reqwest::Client,
+    spreadsheet: &SpreadsheetSpec,
+    google_api_key: &str,
+) -> eyre::Result<(Vec<InternalLevelRow>, usize, Vec<String>)> {
+    let mut rows = Vec::new();
+    let mut total_sheets = 0;
+    let mut failed_sheets = Vec::new();
+
+    for extract in &spreadsheet.extracts {
+        total_sheets += 1;
+        let sheet_identifier = format!("v{} / {}", spreadsheet.source_version, extract.sheet_name);
+
+        match fetch_sheet_values(
+            client,
+            &spreadsheet.spreadsheet_id,
+            &extract.sheet_name,
+            max_column_for_extract(extract),
+            google_api_key,
+        )
+        .await
+        {
+            Ok(values) => {
+                rows.extend(extract_records_from_values(
+                    &values,
+                    extract,
+                    spreadsheet.source_version,
+                ));
+            }
+            Err(e) => {
+                tracing::error!("Failed to fetch sheet '{}': {:#}", sheet_identifier, e);
+                failed_sheets.push(sheet_identifier);
+            }
+        }
+
+        sleep(Duration::from_secs(1)).await;
+    }
+
+    Ok((rows, total_sheets, failed_sheets))
 }
 
-fn manual_mapping(title: &str) -> ManualMap {
-    match title {
-        "ATLUS RUSH" => ManualMap::MapTo("ATLAS RUSH"),
-        "Agitation!" => ManualMap::MapTo("Agitation！"),
-        "Alea jacta est" => ManualMap::MapTo("Alea jacta est!"),
-        "Baban!!  ー甘い罠ー" => ManualMap::MapTo("BaBan!! －甘い罠－"),
-        "Backyun! -悪い女-" => ManualMap::MapTo("Backyun! －悪い女－"),
-        "Bad Apple!! feat nomico" => ManualMap::MapTo("Bad Apple!! feat.nomico"),
-        "Bad Apple!! feat.nomico 〜五十嵐撫子Ver.〜" => {
-            ManualMap::MapTo("Bad Apple!! feat.nomico ～五十嵐 撫子 Ver.～")
-        }
-        "Bad Apple!! feat.nomico(REDALiCE Remix)" => {
-            ManualMap::MapTo("Bad Apple!! feat.nomico (REDALiCE Remix)")
-        }
-        "Boys O'Clock" => ManualMap::MapTo("Boys O’Clock"),
-        "Caliburne ～Story of the Legendary Sword～" => {
-            ManualMap::MapTo("Caliburne ～Story of the Legendary sword～")
-        }
-        "Change Our MIRAI!" => ManualMap::MapTo("Change Our MIRAI！"),
-        "City Escape:Act1" => ManualMap::MapTo("City Escape: Act1"),
-        "Cyber Sparks" => ManualMap::MapTo("CYBER Sparks"),
-        "D✪N’T ST✪P R✪CKIN’" => ManualMap::MapTo("D✪N’T  ST✪P  R✪CKIN’"),
-        "Excalibur ～Revived Resolution～" => {
-            ManualMap::MapTo("Excalibur ～Revived resolution～")
-        }
-        "FREEDOM DiVE(tpz Overcute Remix)" => ManualMap::MapTo("FREEDOM DiVE (tpz Overcute Remix)"),
-        "GRANDIR" => ManualMap::MapTo("GRÄNDIR"),
-        "God Knows…" => ManualMap::MapTo("God knows..."),
-        "Good Bye, Merry-Go-Round." => ManualMap::MapTo("Good bye, Merry-Go-Round."),
-        "Got more raves?" => ManualMap::MapTo("Got more raves？"),
-        "Help me, ERINNNNNN!! （Band ver.）" => {
-            ManualMap::MapTo("Help me, ERINNNNNN!!（Band ver.）")
-        }
-        "Imperishable Night 2006(2016 Refine)" => {
-            ManualMap::MapTo("Imperishable Night 2006 (2016 Refine)")
-        }
-        "Jack-the-Ripper♦" => ManualMap::MapTo("Jack-the-Ripper◆"),
-        "Jorqer" => ManualMap::MapTo("Jörqer"),
-        "ΚΗΥΜΞΧΛ\u{202C}" => ManualMap::MapTo("KHYMΞXΛ"),
-        "L4TS:2018 (feat. あひる ＆ KTA)" => ManualMap::MapTo("L4TS:2018 (feat. あひる & KTA)"),
-        "L4TS:2018(feat.あひる＆KTA)" => ManualMap::MapTo("L4TS:2018 (feat. あひる & KTA)"),
-        "L'epilogue" => ManualMap::MapTo("L'épilogue"),
-        "Love kills U" => ManualMap::MapTo("Love Kills U"),
-        "Love’s Theme of BADASS ～バッド・アス 愛のテーマ～" => {
-            ManualMap::MapTo("Love's Theme of BADASS ～バッド・アス 愛のテーマ～")
-        }
-        "Melody!" => ManualMap::MapTo("Melody！"),
-        "Mjolnir" => ManualMap::MapTo("Mjölnir"),
-        "Party 4U \"holy nite mix\"" => ManualMap::MapTo("Party 4U ”holy nite mix”"),
-        "Quartet Theme[Reborn]" => ManualMap::MapTo("Quartet Theme [Reborn]"),
-        "REVIVER オルタンシア･サーガ-蒼の騎士団- オリジナルVer." => {
-            ManualMap::MapTo("REVIVER オルタンシア・サーガ -蒼の騎士団- オリジナルVer.")
-        }
-        "Re:End of a Dream" => ManualMap::MapTo("Re：End of a Dream"),
-        "Retribution 〜 Cycle of Redemption 〜" => {
-            ManualMap::MapTo("Retribution ～ Cycle of Redemption ～")
-        }
-        "Rooftop Run: Act１" => ManualMap::MapTo("Rooftop Run: Act1"),
-        "Rooftop Run:Act1" => ManualMap::MapTo("Rooftop Run: Act1"),
-        "R’N’R Monsta" => ManualMap::MapTo("R'N'R Monsta"),
-        "SQUAD -Phvntom-" => ManualMap::MapTo("SQUAD-Phvntom-"),
-        "Save This World νMix" => ManualMap::MapTo("Save This World νMIX"),
-        "Seclet Sleuth" => ManualMap::MapTo("Secret Sleuth"),
-        "Session High↑" => ManualMap::MapTo("Session High⤴"),
-        "Seyana.～何でも言うことをきいてくれるアカネチャン～" => {
-            ManualMap::MapTo("Seyana. ～何でも言うことを聞いてくれるアカネチャン～")
-        }
-        "Seyana.～何でも言うことを聞いてくれるアカネチャン～" => {
-            ManualMap::MapTo("Seyana. ～何でも言うことを聞いてくれるアカネチャン～")
-        }
-        "Sky High[Reborn]" => ManualMap::MapTo("Sky High [Reborn]"),
-        "Sqlupp(Camellia's Sqleipd*Hiytex Remix)" => {
-            ManualMap::MapTo("Sqlupp (Camellia's \"Sqleipd*Hiytex\" Remix)")
-        }
-        "Sweetie×2" => ManualMap::MapTo("Sweetiex2"),
-        "System \"Z\"" => ManualMap::MapTo("System “Z”"),
-        "Tic Tac DREAMIN'" => ManualMap::MapTo("Tic Tac DREAMIN’"),
-        "Turn Around" => ManualMap::MapTo("Turn around"),
-        "Urban Crusher[Remix]" => ManualMap::MapTo("Urban Crusher [Remix]"),
-        "YA･DA･YO[Reborn]" => ManualMap::MapTo("YA･DA･YO [Reborn]"),
-        "Yakumo>>JOINT STRUGGLE(2019 update)" => {
-            ManualMap::MapTo("Yakumo >>JOINT STRUGGLE (2019 Update)")
-        }
-        "falling" => ManualMap::MapTo("Falling"),
-        "null" => ManualMap::MapTo("　"),
-        "Åntinomiε" => ManualMap::MapTo("Åntinomiε"),
-        "“411Ψ892”" => ManualMap::MapTo("\"411Ψ892\""),
-        "≠彡゛/了→" => ManualMap::MapTo("≠彡\"/了→"),
-        "【東方ニコカラ】秘神マターラfeat.魂音泉【IOSYS】" => {
-            ManualMap::MapTo("【東方ニコカラ】秘神マターラ feat.魂音泉【IOSYS】")
-        }
-        "ずんだもんの朝食　～目覚ましずんラップ～" => {
-            ManualMap::MapTo("ずんだもんの朝食　〜目覚ましずんラップ〜")
-        }
-        "なだめスかし Negotiation(TVsize)" => {
-            ManualMap::MapTo("なだめスかし Negotiation（TVsize）")
-        }
-        "はげしこの夜-Psylent Crazy Night-" => {
-            ManualMap::MapTo("はげしこの夜 -Psylent Crazy Night-")
-        }
-        "ぼくたちいつでもしゅわっしゅわ！" => {
-            ManualMap::MapTo("ぼくたちいつでも　しゅわっしゅわ！")
-        }
-        "ウッーウッーウマウマ( ﾟ∀ﾟ)" => ManualMap::MapTo("ウッーウッーウマウマ(ﾟ∀ﾟ)"),
-        "オパ！オパ！RACER -GMT mashup-" => {
-            ManualMap::MapTo("オパ! オパ! RACER -GMT mashup-")
-        }
-        "オーケー？オーライ！" => ManualMap::MapTo("オーケー？　オーライ！"),
-        "ガチャガチャきゅ～と・ふぃぎゅ＠メイト" => {
-            ManualMap::MapTo("ガチャガチャきゅ～と・ふぃぎゅ@メイト")
-        }
-        "スカーレット警察のゲットーパトロール２４時" => {
-            ManualMap::MapTo("スカーレット警察のゲットーパトロール24時")
-        }
-        "チルノのパーフェクトさんすう教室 ⑨周年バージョン" => {
-            ManualMap::MapTo("チルノのパーフェクトさんすう教室　⑨周年バージョン")
-        }
-        "トルコ行進曲 -オワタ＼(^o^)／" => {
-            ManualMap::MapTo("トルコ行進曲 - オワタ＼(^o^)／")
-        }
-        "ナイト・オブ・ナイツ(Cranky Remix)" => {
-            ManualMap::MapTo("ナイト・オブ・ナイツ (Cranky Remix)")
-        }
-        "ファンタジーゾーンOPA!-OPA! -GMT remix-" => {
-            ManualMap::MapTo("ファンタジーゾーン OPA-OPA! -GMT remix-")
-        }
-        "プラネタリウム・レビュー" => ManualMap::MapTo("プラネタリウム・レヴュー"),
-        "レッツゴー！陰陽師" => ManualMap::MapTo("レッツゴー!陰陽師"),
-        "夜明けまであと3秒" => ManualMap::MapTo("夜明けまであと３秒"),
-        "天狗の落とし文 feat.ｙｔｒ" => ManualMap::MapTo("天狗の落とし文 feat. ｙｔｒ"),
-        "好きな総菜発表ドラゴン" => ManualMap::MapTo("好きな惣菜発表ドラゴン"),
-        "教えて!!魔法のLyric" => ManualMap::MapTo("教えて!! 魔法のLyric"),
-        "曖昧Mind" => ManualMap::MapTo("曖昧mind"),
-        "泣き虫O'Clock" => ManualMap::MapTo("泣き虫O'clock"),
-        "砂の惑星 feat.HATSUNE MIKU" => ManualMap::MapTo("砂の惑星 feat. HATSUNE MIKU"),
-        "管弦楽組曲 第3番 ニ長調「第2曲(G線上のアリア)」BWV.1068-2" => {
-            ManualMap::MapTo("管弦楽組曲 第3番 ニ長調「第2曲（G線上のアリア）」BWV.1068-2")
-        }
-        "紅星ミゼラブル〜廃憶編" => ManualMap::MapTo("紅星ミゼラブル～廃憶編"),
-        "赤心性:カマトト荒療治" => ManualMap::MapTo("赤心性：カマトト荒療治"),
-        "超熊猫的周遊記(ワンダーパンダートラベラー)" => {
-            ManualMap::MapTo("超熊猫的周遊記（ワンダーパンダートラベラー）")
-        }
-        "雷切 -RAIKIRI-" => ManualMap::MapTo("雷切-RAIKIRI-"),
-        "(  Ꙭ)ﾌﾞｯｺﾛﾘ食べよう" => ManualMap::Skip,
-        "test" => ManualMap::Skip,
-        "実験" => ManualMap::Skip,
-        _ => ManualMap::NoMap,
-    }
+fn cache_path_for_version(cache_dir: &Path, version: i64) -> std::path::PathBuf {
+    cache_dir.join(format!("v{version}.json"))
+}
+
+fn load_cached_rows(path: &Path) -> eyre::Result<Vec<InternalLevelRow>> {
+    let data = std::fs::read_to_string(path).wrap_err("read cached internal level file")?;
+    let rows: Vec<InternalLevelRow> =
+        serde_json::from_str(&data).wrap_err("parse cached internal level json")?;
+    Ok(rows)
+}
+
+fn save_cached_rows(path: &Path, rows: &[InternalLevelRow]) -> eyre::Result<()> {
+    let json = serde_json::to_vec_pretty(rows).wrap_err("serialize internal level rows")?;
+    let file_name = path.file_name().and_then(|n| n.to_str()).unwrap_or("tmp");
+    let tmp_path = path.with_file_name(format!("{file_name}.tmp"));
+    std::fs::write(&tmp_path, json).wrap_err("write temp cache file")?;
+    std::fs::rename(&tmp_path, path).wrap_err("rename temp cache file")?;
+    Ok(())
 }
 
 pub async fn fetch_internal_levels(
     client: &reqwest::Client,
     google_api_key: &str,
+    cache_dir: &Path,
 ) -> eyre::Result<HashMap<(String, String, String), InternalLevelRow>> {
+    std::fs::create_dir_all(cache_dir).wrap_err("create internal_level cache dir")?;
+
+    let spreadsheets = &*SPREADSHEETS;
+
+    let latest_version = spreadsheets
+        .iter()
+        .map(|s| s.source_version)
+        .max()
+        .unwrap_or(0);
+
     let mut all_rows = Vec::new();
-    let mut failed_sheets = Vec::new();
     let mut total_sheets = 0;
+    let mut failed_sheets = Vec::new();
 
-    for spreadsheet in SPREADSHEETS {
-        for extract in spreadsheet.extracts {
-            total_sheets += 1;
-            let sheet_identifier =
-                format!("v{} / {}", spreadsheet.source_version, extract.sheet_name);
+    for spreadsheet in spreadsheets {
+        let version = spreadsheet.source_version;
+        let cache_file = cache_path_for_version(cache_dir, version);
+        let is_latest = version == latest_version;
 
-            match fetch_sheet_values(
-                client,
-                spreadsheet.spreadsheet_id,
-                extract.sheet_name,
-                max_column_for_extract(extract),
-                google_api_key,
-            )
-            .await
-            {
-                Ok(values) => {
-                    all_rows.extend(extract_records_from_values(
-                        &values,
-                        extract,
-                        spreadsheet.source_version,
-                    ));
-                }
-                Err(e) => {
-                    tracing::error!("Failed to fetch sheet '{}': {:#}", sheet_identifier, e);
-                    failed_sheets.push(sheet_identifier);
-                }
+        if !is_latest {
+            if let Ok(cached) = load_cached_rows(&cache_file) {
+                tracing::info!(
+                    "v{}: loaded {} rows from cache (frozen version)",
+                    version,
+                    cached.len()
+                );
+                all_rows.extend(cached);
+                continue;
             }
-
-            sleep(Duration::from_millis(500)).await;
         }
+
+        let reason = if is_latest {
+            "latest version"
+        } else {
+            "cache miss"
+        };
+        tracing::info!("v{}: fetching from Google Sheets ({reason})", version);
+
+        let (rows, sheet_count, failures) =
+            fetch_rows_for_spreadsheet(client, spreadsheet, google_api_key).await?;
+
+        total_sheets += sheet_count;
+        failed_sheets.extend(failures);
+
+        if let Err(e) = save_cached_rows(&cache_file, &rows) {
+            tracing::warn!("v{}: failed to save cache: {:#}", version, e);
+        } else {
+            tracing::info!(
+                "v{}: saved {} rows to cache at {}",
+                version,
+                rows.len(),
+                cache_file.display()
+            );
+        }
+
+        all_rows.extend(rows);
     }
 
     let mut result = HashMap::new();
@@ -851,12 +396,14 @@ pub async fn fetch_internal_levels(
             .or_insert(row);
     }
 
-    let success_count = total_sheets - failed_sheets.len();
-    tracing::info!(
-        "Internal levels: fetched {} / {} sheets successfully",
-        success_count,
-        total_sheets
-    );
+    if total_sheets > 0 {
+        let success_count = total_sheets - failed_sheets.len();
+        tracing::info!(
+            "Internal levels: fetched {} / {} sheets successfully (cached versions skipped)",
+            success_count,
+            total_sheets
+        );
+    }
 
     if !failed_sheets.is_empty() {
         tracing::warn!(
@@ -865,6 +412,8 @@ pub async fn fetch_internal_levels(
             failed_sheets.join(", ")
         );
     }
+
+    tracing::info!("Internal levels: {} unique entries total", result.len());
 
     Ok(result)
 }
@@ -886,8 +435,8 @@ mod tests {
     #[test]
     fn extract_records_from_values_parses_numeric_internal_level() {
         let spec = ExtractSpec {
-            sheet_name: "dummy",
-            data_indexes: &[0],
+            sheet_name: "dummy".to_string(),
+            data_indexes: vec![0],
             data_offsets: [0, 1, 2, 3],
         };
 
@@ -905,5 +454,41 @@ mod tests {
         assert_eq!(rows[0].difficulty, "master");
         assert_eq!(rows[0].internal_level, "13.7");
         assert_eq!(rows[0].source_version, 13);
+    }
+
+    #[tokio::test]
+    #[ignore]
+    async fn fetch_latest_version_first_sheet() {
+        dotenvy::dotenv().ok();
+        let api_key = std::env::var("GOOGLE_API_KEY").expect("GOOGLE_API_KEY required");
+        let spreadsheets = &*SPREADSHEETS;
+        let latest = spreadsheets
+            .iter()
+            .max_by_key(|s| s.source_version)
+            .expect("no spreadsheets defined");
+        let extract = &latest.extracts[0];
+
+        let client = reqwest::Client::new();
+        let values = fetch_sheet_values(
+            &client,
+            &latest.spreadsheet_id,
+            &extract.sheet_name,
+            max_column_for_extract(extract),
+            &api_key,
+        )
+        .await
+        .expect("fetch_sheet_values failed");
+
+        let rows = extract_records_from_values(&values, extract, latest.source_version);
+
+        eprintln!(
+            "v{} / {}: {} raw rows, {} parsed records",
+            latest.source_version,
+            extract.sheet_name,
+            values.len(),
+            rows.len()
+        );
+        eprintln!("rows: {:#?}", rows);
+        assert!(!rows.is_empty(), "expected at least one parsed record");
     }
 }

@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::collections::HashMap;
 use std::fmt;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 pub mod internal_levels;
 pub mod user_tiers;
@@ -13,14 +13,6 @@ pub mod user_tiers;
 pub const SONG_DATA_SUBDIR: &str = "song_data";
 const MAIMAI_SONGS_URL: &str = "https://maimai.sega.jp/data/maimai_songs.json";
 const IMAGE_BASE_URL: &str = "https://maimaidx.jp/maimai-mobile/img/Music/";
-
-pub async fn fetch_and_build_index(
-    config: &SongDbConfig,
-    image_output_dir: &Path,
-) -> eyre::Result<models::SongDataIndex> {
-    let database = SongDatabase::fetch(config, image_output_dir).await?;
-    database.into_index()
-}
 
 #[derive(Debug, Deserialize)]
 struct RawSong {
@@ -148,10 +140,11 @@ pub struct SongDatabase {
     pub songs: Vec<SongRow>,
     pub sheets: Vec<SheetRow>,
     pub internal_levels: HashMap<(String, String, String), internal_levels::InternalLevelRow>,
+    pub user_tiers: HashMap<user_tiers::UserTierKey, user_tiers::UserTierValue>,
 }
 
 impl SongDatabase {
-    pub async fn fetch(config: &SongDbConfig, image_output_dir: &Path) -> eyre::Result<Self> {
+    pub async fn fetch(config: &SongDbConfig, song_data_dir: &Path) -> eyre::Result<Self> {
         // NOTE: maimaidx.jp sometimes has SSL certificate issues ("unable to get local issuer certificate").
         // We bypass verification here since we're only fetching public cover images.
         let client = reqwest::Client::builder()
@@ -172,74 +165,124 @@ impl SongDatabase {
             sheets.len()
         );
 
-        tracing::info!("Fetching internal levels and downloading covers in parallel...");
-        let (internal_levels_result, cover_result) = tokio::join!(
-            internal_levels::fetch_internal_levels(&client, &config.google_api_key),
-            download_cover_images(&client, &songs, image_output_dir)
-        );
+        tracing::info!("Fetching internal levels...");
+        let internal_level_cache_dir = song_data_dir.join("internal_level");
+        let internal_levels = internal_levels::fetch_internal_levels(
+            &client,
+            &config.google_api_key,
+            &internal_level_cache_dir,
+        )
+        .await
+        .wrap_err("fetch internal levels")?;
 
-        let internal_levels = internal_levels_result?;
-        cover_result?;
+        tracing::info!("Downloading covers...");
+        let cover_dir = song_data_dir.join("cover");
+        download_cover_images(&client, &songs, &cover_dir).await?;
 
-        tracing::info!("Completed internal levels fetch and cover downloads");
+        tracing::info!("Fetching user tiers...");
+        let seed_data_root = build_data_root(&songs, &sheets, &internal_levels, None);
+        let user_tiers = user_tiers::fetch_user_tier_map_for_default_levels(
+            &client,
+            &config.google_api_key,
+            &seed_data_root,
+            &cover_dir,
+        )
+        .await?;
 
         Ok(SongDatabase {
             songs,
             sheets,
             internal_levels,
+            user_tiers,
         })
     }
 
     pub fn into_data_root(self) -> eyre::Result<models::SongDataRoot> {
-        use std::collections::BTreeMap;
-
-        let mut song_map: BTreeMap<String, models::SongDataSong> = BTreeMap::new();
-
-        for song in self.songs {
-            song_map.insert(
-                song.song_id.clone(),
-                models::SongDataSong {
-                    title: song.title.clone(),
-                    version: song.version.clone(),
-                    image_name: Some(song.image_name.clone()),
-                    sheets: Vec::new(),
-                },
-            );
-        }
-
-        for sheet in self.sheets {
-            let song = match song_map.get_mut(&sheet.song_id) {
-                Some(song) => song,
-                None => continue,
-            };
-
-            let key = (
-                sheet.song_id.clone(),
-                sheet.sheet_type.clone(),
-                sheet.difficulty.clone(),
-            );
-
-            let internal_level = self
-                .internal_levels
-                .get(&key)
-                .map(|il| il.internal_level.trim().to_string());
-
-            song.sheets.push(models::SongDataSheet {
-                sheet_type: sheet.sheet_type.clone(),
-                difficulty: sheet.difficulty.clone(),
-                level: sheet.level.clone(),
-                internal_level,
-            });
-        }
-
-        Ok(models::SongDataRoot {
-            songs: song_map.into_values().collect(),
-        })
+        Ok(build_data_root(
+            &self.songs,
+            &self.sheets,
+            &self.internal_levels,
+            Some(&self.user_tiers),
+        ))
     }
 
     pub fn into_index(self) -> eyre::Result<models::SongDataIndex> {
         let data_root = self.into_data_root()?;
         Ok(models::SongDataIndex::from_root(data_root))
+    }
+}
+
+fn build_data_root(
+    songs: &[SongRow],
+    sheets: &[SheetRow],
+    internal_levels: &HashMap<(String, String, String), internal_levels::InternalLevelRow>,
+    user_tiers: Option<&HashMap<user_tiers::UserTierKey, user_tiers::UserTierValue>>,
+) -> models::SongDataRoot {
+    use std::collections::BTreeMap;
+
+    let mut song_map: BTreeMap<String, models::SongDataSong> = BTreeMap::new();
+
+    for song in songs {
+        song_map.insert(
+            song.song_id.clone(),
+            models::SongDataSong {
+                title: song.title.clone(),
+                version: song.version.clone(),
+                image_name: Some(song.image_name.clone()),
+                sheets: Vec::new(),
+            },
+        );
+    }
+
+    for sheet in sheets {
+        let song = match song_map.get_mut(&sheet.song_id) {
+            Some(song) => song,
+            None => continue,
+        };
+
+        let key = (
+            sheet.song_id.clone(),
+            sheet.sheet_type.clone(),
+            sheet.difficulty.clone(),
+        );
+
+        let internal_level = internal_levels
+            .get(&key)
+            .map(|il| il.internal_level.trim().to_string());
+
+        let user_key = user_tiers.map(|_| user_tiers::UserTierKey {
+            title: song.title.clone(),
+            chart_type: sheet.sheet_type.clone(),
+            difficulty: sheet.difficulty.clone(),
+        });
+        let user_tier = user_key
+            .as_ref()
+            .and_then(|k| user_tiers.and_then(|map| map.get(k)));
+
+        if let (Some(internal), Some(user_tier_value)) = (internal_level.as_deref(), user_tier) {
+            if internal != user_tier_value.source_internal_level {
+                tracing::warn!(
+                    title = %song.title,
+                    chart_type = %sheet.sheet_type,
+                    difficulty = %sheet.difficulty,
+                    chart_internal_level = %internal,
+                    user_tier_internal_level = %user_tier_value.source_internal_level,
+                    "user tier internal level mismatch"
+                );
+            }
+        }
+
+        song.sheets.push(models::SongDataSheet {
+            sheet_type: sheet.sheet_type.clone(),
+            difficulty: sheet.difficulty.clone(),
+            level: sheet.level.clone(),
+            internal_level,
+            user_level: user_tier.map(|v| v.grade.clone()),
+        });
+    }
+
+    models::SongDataRoot {
+        songs: song_map.into_values().collect(),
     }
 }
 
@@ -501,10 +544,6 @@ async fn download_image(client: &reqwest::Client, image_url: &str) -> eyre::Resu
     unreachable!()
 }
 
-fn cover_image_path(output_dir: &Path, image_name: &str) -> PathBuf {
-    output_dir.join("cover").join(image_name)
-}
-
 fn should_download(cover_path: &Path) -> bool {
     !cover_path.exists()
 }
@@ -523,10 +562,9 @@ fn write_atomic(path: &Path, contents: &[u8]) -> eyre::Result<()> {
 async fn download_cover_images(
     client: &reqwest::Client,
     songs: &[SongRow],
-    output_dir: &Path,
+    cover_dir: &Path,
 ) -> eyre::Result<()> {
-    let cover_dir = output_dir.join("cover");
-    std::fs::create_dir_all(&cover_dir).wrap_err("create cover image dir")?;
+    std::fs::create_dir_all(cover_dir).wrap_err("create cover image dir")?;
 
     let total = songs.len();
     let mut downloaded_count = 0;
@@ -534,7 +572,7 @@ async fn download_cover_images(
     let mut failed_downloads = Vec::new();
 
     for song in songs {
-        let cover_path = cover_image_path(output_dir, &song.image_name);
+        let cover_path = cover_dir.join(&song.image_name);
 
         if should_download(&cover_path) {
             match download_image(client, &song.image_url).await {
