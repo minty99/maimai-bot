@@ -4,17 +4,20 @@ import '../../../../../core/theme/app_colors.dart';
 import '../../../../../core/theme/app_spacing.dart';
 import '../../../../../core/theme/app_typography.dart';
 
-/// Compact LV / GAP stepper controls designed for narrow portrait screens.
+/// Range-first level control with prominent range display and large arrows.
 ///
-/// Layout:  [ LV ◀ 12.5 ▶ ]  [ GAP ◀ 0.5 ▶ ]
+/// Layout (two rows):
+///   Row 1:  [ ◀ ]   12.5 ~ 13.0   [ ▶ ]       ← range + level arrows
+///   Row 2:             GAP [ ◀ 0.5 ▶ ]         ← secondary GAP stepper
 ///
-/// Each cluster: label(22px) + btn(34) + value(flex) + btn(34) + padding.
-/// Total per cluster ≈ 130px at minimum → two clusters + 6px gap = 266px.
-/// Leaves ~77px for a 40px settings icon comfortably on a 375pt screen.
+/// The range ("start ~ end") is the hero element — immediately readable.
+/// Level arrows are large (42px) since level changes are frequent.
+/// GAP controls are compact since gap changes are infrequent.
 class LevelGapControls extends StatelessWidget {
   const LevelGapControls({
     super.key,
-    required this.levelText,
+    required this.rangeStart,
+    required this.rangeEnd,
     required this.gapText,
     required this.onLevelDecrement,
     required this.onLevelIncrement,
@@ -22,7 +25,8 @@ class LevelGapControls extends StatelessWidget {
     required this.onGapIncrement,
   });
 
-  final String levelText;
+  final String rangeStart;
+  final String rangeEnd;
   final String gapText;
   final VoidCallback onLevelDecrement;
   final VoidCallback onLevelIncrement;
@@ -31,87 +35,69 @@ class LevelGapControls extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Row(
+    return Column(
+      mainAxisSize: MainAxisSize.min,
       children: [
-        Expanded(
-          child: _AdjustCluster(
-            label: 'LV',
-            value: levelText,
-            onDecrement: onLevelDecrement,
-            onIncrement: onLevelIncrement,
-          ),
+        // ── Primary row: [ ◀ ]  12.5 ~ 13.0  [ ▶ ] ──
+        Row(
+          children: [
+            _LevelArrow(
+              icon: Icons.chevron_left_rounded,
+              onTap: onLevelDecrement,
+            ),
+            Expanded(
+              child: Center(
+                child: Text.rich(
+                  TextSpan(
+                    children: [
+                      TextSpan(
+                        text: rangeStart,
+                        style: AppTypography.numeric.copyWith(
+                          color: AppColors.accentPrimary,
+                          fontSize: 22,
+                        ),
+                      ),
+                      TextSpan(
+                        text: '  ~  ',
+                        style: AppTypography.numeric.copyWith(
+                          color: AppColors.textMuted,
+                          fontSize: 16,
+                        ),
+                      ),
+                      TextSpan(
+                        text: rangeEnd,
+                        style: AppTypography.numeric.copyWith(
+                          color: AppColors.accentPrimary,
+                          fontSize: 22,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+            _LevelArrow(
+              icon: Icons.chevron_right_rounded,
+              onTap: onLevelIncrement,
+            ),
+          ],
         ),
-        const SizedBox(width: AppSpacing.xs + 2), // 6px
-        Expanded(
-          child: _AdjustCluster(
-            label: 'GAP',
-            value: gapText,
-            onDecrement: onGapDecrement,
-            onIncrement: onGapIncrement,
-          ),
+        const SizedBox(height: AppSpacing.xs),
+
+        // ── Secondary row: GAP [ ◀ 0.5 ▶ ] ──
+        _GapStepper(
+          value: gapText,
+          onDecrement: onGapDecrement,
+          onIncrement: onGapIncrement,
         ),
       ],
     );
   }
 }
 
-class _AdjustCluster extends StatelessWidget {
-  const _AdjustCluster({
-    required this.label,
-    required this.value,
-    required this.onDecrement,
-    required this.onIncrement,
-  });
-
-  final String label;
-  final String value;
-  final VoidCallback onDecrement;
-  final VoidCallback onIncrement;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      height: 40,
-      padding: const EdgeInsets.only(left: 6, right: 2),
-      decoration: BoxDecoration(
-        color: AppColors.surface.withValues(alpha: 0.7),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(
-          color: AppColors.accentPrimary.withValues(alpha: 0.35),
-        ),
-      ),
-      child: Row(
-        children: [
-          Text(
-            label,
-            style: AppTypography.textTheme.labelSmall?.copyWith(
-              color: AppColors.textMuted,
-              fontSize: 10,
-              letterSpacing: 0.5,
-            ),
-          ),
-          const SizedBox(width: 2),
-          _AdjustButton(icon: Icons.remove_rounded, onTap: onDecrement),
-          Expanded(
-            child: Center(
-              child: Text(
-                value,
-                style: AppTypography.numeric.copyWith(
-                  color: AppColors.accentPrimary,
-                  fontSize: 16,
-                ),
-              ),
-            ),
-          ),
-          _AdjustButton(icon: Icons.add_rounded, onTap: onIncrement),
-        ],
-      ),
-    );
-  }
-}
-
-class _AdjustButton extends StatelessWidget {
-  const _AdjustButton({required this.icon, required this.onTap});
+/// Large arrow button for level adjustment (frequent action, glove-friendly).
+class _LevelArrow extends StatelessWidget {
+  const _LevelArrow({required this.icon, required this.onTap});
 
   final IconData icon;
   final VoidCallback onTap;
@@ -122,18 +108,92 @@ class _AdjustButton extends StatelessWidget {
       color: Colors.transparent,
       child: InkWell(
         onTap: onTap,
-        borderRadius: BorderRadius.circular(9),
+        borderRadius: BorderRadius.circular(12),
         child: Ink(
-          width: 34,
-          height: 34,
+          width: 42,
+          height: 42,
           decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(9),
+            borderRadius: BorderRadius.circular(12),
+            color: AppColors.surface.withValues(alpha: 0.8),
             border: Border.all(
-              color: AppColors.accentSecondary.withValues(alpha: 0.4),
+              color: AppColors.accentPrimary.withValues(alpha: 0.4),
             ),
-            color: AppColors.surfaceElevated.withValues(alpha: 0.7),
           ),
-          child: Icon(icon, color: AppColors.accentSecondary, size: 18),
+          child: Icon(icon, color: AppColors.accentPrimary, size: 26),
+        ),
+      ),
+    );
+  }
+}
+
+/// Compact GAP stepper — small since gap changes are infrequent.
+class _GapStepper extends StatelessWidget {
+  const _GapStepper({
+    required this.value,
+    required this.onDecrement,
+    required this.onIncrement,
+  });
+
+  final String value;
+  final VoidCallback onDecrement;
+  final VoidCallback onIncrement;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        Text(
+          'GAP',
+          style: AppTypography.textTheme.labelSmall?.copyWith(
+            color: AppColors.textMuted,
+            fontSize: 10,
+            letterSpacing: 0.8,
+          ),
+        ),
+        const SizedBox(width: 6),
+        _SmallButton(icon: Icons.remove_rounded, onTap: onDecrement),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 10),
+          child: Text(
+            value,
+            style: AppTypography.numeric.copyWith(
+              color: AppColors.textSecondary,
+              fontSize: 14,
+            ),
+          ),
+        ),
+        _SmallButton(icon: Icons.add_rounded, onTap: onIncrement),
+      ],
+    );
+  }
+}
+
+/// Small button for GAP adjustment.
+class _SmallButton extends StatelessWidget {
+  const _SmallButton({required this.icon, required this.onTap});
+
+  final IconData icon;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(8),
+        child: Ink(
+          width: 28,
+          height: 28,
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(8),
+            color: AppColors.surfaceElevated.withValues(alpha: 0.7),
+            border: Border.all(
+              color: AppColors.textMuted.withValues(alpha: 0.4),
+            ),
+          ),
+          child: Icon(icon, color: AppColors.textSecondary, size: 16),
         ),
       ),
     );

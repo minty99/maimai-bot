@@ -336,7 +336,8 @@ class _SongSelectionScreenState extends State<SongSelectionScreen>
                           child: ScaleTransition(
                             scale: _rangeScaleAnimation,
                             child: LevelGapControls(
-                              levelText: levelState.start.toStringAsFixed(1),
+                              rangeStart: levelState.start.toStringAsFixed(1),
+                              rangeEnd: levelState.end.toStringAsFixed(1),
                               gapText: levelState.gap.toStringAsFixed(1),
                               onLevelDecrement: () => context
                                   .read<LevelRangeCubit>()
