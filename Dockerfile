@@ -49,9 +49,9 @@ EXPOSE 3001
 CMD ["maimai-song-info"]
 
 # ============================================
-# Target: record-collector-server
+# Target: maimai-record-collector-server
 # ============================================
-FROM ubuntu:noble as record-collector-server
+FROM ubuntu:noble as maimai-record-collector-server
 
 RUN apt-get update && apt-get install -y \
     ca-certificates \
@@ -75,9 +75,9 @@ EXPOSE 3000
 CMD ["record-collector-server"]
 
 # ============================================
-# Target: personal-discord-bot
+# Target: maimai-personal-discord-bot
 # ============================================
-FROM ubuntu:noble as personal-discord-bot
+FROM ubuntu:noble as maimai-personal-discord-bot
 
 RUN apt-get update && apt-get install -y \
     ca-certificates \

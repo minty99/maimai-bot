@@ -30,7 +30,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-      target: record-collector-server
+      target: maimai-record-collector-server
     container_name: maimai-record-collector-server
     restart: unless-stopped
     environment:
@@ -57,7 +57,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-      target: personal-discord-bot
+      target: maimai-personal-discord-bot
     container_name: maimai-personal-discord-bot
     restart: unless-stopped
     environment:
