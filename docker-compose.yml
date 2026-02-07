@@ -30,8 +30,8 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-      target: maimai-record-collector
-    container_name: maimai-record-collector
+      target: record-collector-server
+    container_name: record-collector-server
     restart: unless-stopped
     environment:
       - SEGA_ID=${SEGA_ID}

@@ -13,7 +13,7 @@
   - 재킷 이미지를 정적 파일로 서빙합니다.
   - 포트: `3001` (기본값)
   - 의존성: SongDB fetch용 환경 변수 (`MAIMAI_*`, `GOOGLE_API_KEY`) 필요
-  
+
 - **Record Collector Server** (`record-collector-server/`): 개인 기록 수집 및 관리 (인증 필요, stateful)
   - 쿠키를 `data/` 아래에 저장/재사용하고, 만료 시 재로그인해서 갱신합니다.
   - DB는 `sqlx::migrate!()`로 런타임에 마이그레이션을 실행합니다.
@@ -21,7 +21,7 @@
   - 이후 10분마다 `playerData`를 다시 크롤링해서 **total play count 변화가 있을 때만** recent를 크롤링합니다.
   - 포트: `3000` (기본값)
   - 의존성: Song Info Server (곡 정보 조회용)
-  
+
 - **Discord Bot** (`discord/`): 두 서버의 API를 호출하여 Discord 명령어 처리 및 DM 알림 전송
   - Record Collector Server의 `/health/ready` 엔드포인트를 폴링하여 서버가 준비될 때까지 대기합니다.
   - Record Collector Server에서 새 플레이가 감지되면 DM으로 알림을 보냅니다.
@@ -78,7 +78,7 @@ cp .env.example .env
 # 편집: 모든 환경 변수 입력
 ```
 
-**주의**: 
+**주의**:
 - `.env` 파일은 절대 커밋하지 마세요 (`.gitignore`에 포함됨)
 - `dotenvy`가 상위 디렉토리를 자동 탐색하므로 어디서 실행하든 작동합니다
 - **보안**: 각 서비스는 필요한 환경 변수만 로드합니다 (Least Privilege 원칙)
@@ -114,7 +114,7 @@ cp .env.example .env
 
 3. **Record Collector Server 실행** (터미널 2):
    ```bash
-   cargo run --bin maimai-record-collector
+   cargo run --bin record-collector-server
    ```
    Record Collector Server는 `http://localhost:3000`에서 실행되며, `/health/ready` 엔드포인트를 제공합니다.
 
@@ -124,7 +124,7 @@ cp .env.example .env
    ```
    Discord 봇은 Record Collector Server의 `/health/ready`를 폴링하여 서버가 준비될 때까지 대기합니다.
 
-**참고**: 
+**참고**:
 - `dotenvy`가 현재 디렉토리와 상위 디렉토리를 탐색하므로 프로젝트 루트에서 실행해도 각 서비스의 `.env`를 자동으로 찾습니다.
 - 각 서비스는 자신의 `.env`만 로드하여 보안을 강화합니다.
 - Song Info Server는 독립적으로 실행 가능하며, Record Collector Server나 Discord 봇 없이도 사용할 수 있습니다.
@@ -151,7 +151,7 @@ cp .env.example .env
 이 프로젝트는 **단일 Dockerfile**을 사용하여 세 서비스를 모두 빌드합니다:
 
 - **빌더 스테이지**: 전체 워크스페이스를 한 번만 컴파일
-- **멀티 타겟**: `target` 옵션으로 각 서비스의 런타임 이미지 생성 (`maimai-song-info`, `maimai-record-collector`, `maimai-discord`)
+- **멀티 타겟**: `target` 옵션으로 각 서비스의 런타임 이미지 생성 (`maimai-song-info`, `record-collector-server`, `maimai-discord`)
 - **효율성**: 중복 빌드 없이 세 바이너리를 동시에 생성
 
 개별 서비스 빌드:
@@ -197,16 +197,16 @@ docker compose down
 Record Collector Server에서 제공하는 CLI 명령어들 (레거시, 참고용):
 
 쿠키 로그인/체크:
-- `cargo run --bin maimai-record-collector -- auth login`
-- `cargo run --bin maimai-record-collector -- auth check`
+- `cargo run --bin record-collector-server -- auth login`
+- `cargo run --bin record-collector-server -- auth check`
 
 HTML/raw fetch (로그인 필요):
-- `cargo run --bin maimai-record-collector -- fetch url --url https://maimaidx-eng.com/maimai-mobile/playerData/ --out data/out/player_data.html`
+- `cargo run --bin record-collector-server -- fetch url --url https://maimaidx-eng.com/maimai-mobile/playerData/ --out data/out/player_data.html`
 
 크롤링/파싱(JSON)만 수행 (DB 미사용):
-- `cargo run --bin maimai-record-collector -- crawl player-data --out data/out/player_data.json`
-- `cargo run --bin maimai-record-collector -- crawl recent --out data/out/recent.json`
-- `cargo run --bin maimai-record-collector -- crawl scores --out data/out/scores.json`
+- `cargo run --bin record-collector-server -- crawl player-data --out data/out/player_data.json`
+- `cargo run --bin record-collector-server -- crawl recent --out data/out/recent.json`
+- `cargo run --bin record-collector-server -- crawl scores --out data/out/scores.json`
 
 ## Discord 명령어
 
