@@ -30,25 +30,29 @@ pub fn start_songdb_tasks(app_state: AppState) {
 
         let data_json_path = song_data_base_path_for_startup.join("data.json");
 
-        if data_json_path.exists() {
-            tracing::info!("songdb: data.json already exists, skipping startup update");
-            return;
-        }
-
-        tracing::info!("songdb: data.json not found, running initial update");
-        if let Err(e) = run_update(
+        tracing::info!("songdb: running startup update");
+        match run_update(
             &song_data_base_path_for_startup,
             songdb_config_for_startup.as_ref(),
         )
         .await
         {
-            tracing::warn!("songdb: startup update failed (non-fatal): {e:#}");
-        } else {
-            tracing::info!("songdb: startup update complete");
-            if let Err(e) = app_state_for_startup.reload_song_data() {
-                tracing::warn!("songdb: failed to reload song data after update: {e:#}");
-            } else {
-                tracing::info!("songdb: song data reloaded successfully");
+            Ok(_) => {
+                tracing::info!("songdb: startup update complete");
+                if let Err(e) = app_state_for_startup.reload_song_data() {
+                    tracing::warn!("songdb: failed to reload song data after update: {e:#}");
+                } else {
+                    tracing::info!("songdb: song data reloaded successfully");
+                }
+            }
+            Err(e) => {
+                if data_json_path.exists() {
+                    tracing::warn!(
+                        "songdb: startup update failed, falling back to existing data.json: {e:#}"
+                    );
+                } else {
+                    tracing::error!("songdb: startup update failed and no data.json exists: {e:#}");
+                }
             }
         }
     });
