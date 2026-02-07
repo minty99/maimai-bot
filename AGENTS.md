@@ -65,7 +65,15 @@ The goal of this file is to keep future changes consistent with the current impl
 
 - Keep modules small and focused (`config`, `http`, `maimai`, `db`, `discord`).
 - Prefer small testable helpers.
+- **Visibility first**: default to private, use `pub(crate)` for crate-internal sharing, and keep `pub` only for true cross-crate API.
 - If adding "UI preview" tests, keep them `#[ignore]` and ensure they require explicit env vars (and never log secrets).
 - **Always run before committing**:
   - `cargo fmt --all` (format all code)
   - `cargo clippy --all -- -D warnings` (lint with warnings as errors)
+
+## Commit discipline
+
+- **Atomic commits**: split commits by meaning (one logical change per commit), and avoid bundling unrelated modifications.
+- **Co-author trailer required**: every commit message must include an agent co-author trailer in the commit body.
+  - OpenAI agents: `Co-authored-by: <Agent Model Name> <noreply@openai.com>` (e.g., `Co-authored-by: GPT-5.3 Codex <noreply@openai.com>`)
+  - Anthropic agents: `Co-authored-by: <Agent Model Name> <noreply@anthropic.com>` (e.g., `Co-authored-by: Claude Sonnet 4.5 <noreply@anthropic.com>`)
