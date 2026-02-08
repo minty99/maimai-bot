@@ -38,7 +38,7 @@ flutter pub get
    - Enter your Song Info Server URL (required for basic functionality)
    - (Optional) Enter your Record Collector Server URL for personal scores
    - Tap Save
-   
+
    **Note**: The app works in degraded mode with only Song Info Server configured. Personal achievement data will not be displayed without Record Collector Server.
 
 ## Running
@@ -61,7 +61,7 @@ flutter run -d android
 1. **Adjust Level Range**:
    - Tap **-** / **+** buttons to adjust the range start
    - Or use volume buttons (Android) / arrow keys (macOS)
-   
+
 2. **Adjust Gap**:
    - Tap gap buttons (0.05, 0.1, 0.2, 0.5) to change range width
 
@@ -163,6 +163,33 @@ flutter build ipa --release
 ```bash
 flutter build macos --release
 ```
+
+### CI Build (GitHub Actions)
+
+The workflow at `.github/workflows/build-apk.yml` builds a signed release APK on push to `main` (when `maimai-picker-app/` changes) or manually via `workflow_dispatch`.
+
+**Required GitHub Secrets:**
+
+| Secret | Value |
+|--------|-------|
+| `KEYSTORE_BASE64` | Base64-encoded release keystore (`base64 -i release-keystore.jks`) |
+| `KEY_ALIAS` | Key alias in the keystore |
+| `KEY_PASSWORD` | Key password |
+| `STORE_PASSWORD` | Keystore password |
+
+**Generate a keystore (if you don't have one):**
+
+```bash
+keytool -genkey -v -keystore release-keystore.jks -keyalg RSA -keysize 2048 -validity 10000 -alias maimai-picker
+```
+
+**Encode it for the secret:**
+
+```bash
+base64 -i release-keystore.jks | pbcopy
+```
+
+Paste the clipboard contents into the `KEYSTORE_BASE64` secret in GitHub → Settings → Secrets and variables → Actions.
 
 ## Troubleshooting
 
