@@ -17,15 +17,14 @@ void main() async {
   final settingsCubit = SettingsCubit();
   final levelRangeCubit = LevelRangeCubit();
 
-  await Future.wait([
-    settingsCubit.initialize(),
-    levelRangeCubit.initialize(),
-  ]);
+  await Future.wait([settingsCubit.initialize(), levelRangeCubit.initialize()]);
 
-  runApp(MaimaiPickerApp(
-    settingsCubit: settingsCubit,
-    levelRangeCubit: levelRangeCubit,
-  ));
+  runApp(
+    MaimaiPickerApp(
+      settingsCubit: settingsCubit,
+      levelRangeCubit: levelRangeCubit,
+    ),
+  );
 }
 
 /// Root application widget with BLoC providers.

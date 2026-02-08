@@ -38,7 +38,9 @@ class LevelRangeCubit extends Cubit<LevelRangeState> {
       final validEnd = _clampLevel(end);
       final effectiveGap = _roundToTenth(validEnd - validStart);
 
-      emit(LevelRangeState(start: validStart, end: validEnd, gap: effectiveGap));
+      emit(
+        LevelRangeState(start: validStart, end: validEnd, gap: effectiveGap),
+      );
     } catch (e) {
       // If loading fails, keep default state
     }
