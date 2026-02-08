@@ -52,6 +52,7 @@ class SongHeroCard extends StatelessWidget {
       child: ClipRRect(
         borderRadius: BorderRadius.circular(20),
         child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             // ── Jacket area: uncropped square, metadata overlaid ──
             Expanded(
