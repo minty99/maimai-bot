@@ -109,57 +109,55 @@ pub(crate) async fn get_song_detail_scores(
         .await
         .map_err(map_maintenance_or_http_client_error)?;
 
-    let detail_indices = find_song_detail_indices_by_title(&client, &title)
+    let detail_idx = find_song_detail_index_by_title(&client, &title)
         .await
         .map_err(map_maintenance_or_http_client_error)?;
-    if detail_indices.is_empty() {
+    let Some(detail_idx) = detail_idx else {
         return Err(AppError::NotFound(format!(
             "No song detail index found for title='{}'",
             title
         )));
-    }
+    };
 
-    let mut responses = Vec::new();
-    for idx in detail_indices {
-        let url = Url::parse_with_params(
-            "https://maimaidx-eng.com/maimai-mobile/record/musicDetail/",
-            &[("idx", idx.as_str())],
-        )
-        .wrap_err("parse musicDetail url")
+    let url = Url::parse_with_params(
+        "https://maimaidx-eng.com/maimai-mobile/record/musicDetail/",
+        &[("idx", detail_idx.as_str())],
+    )
+    .wrap_err("parse musicDetail url")
+    .map_err(|e| AppError::InternalError(e.to_string()))?;
+
+    let bytes = client
+        .get_bytes(&url)
+        .await
+        .map_err(map_maintenance_or_http_client_error)?;
+    let html = String::from_utf8(bytes)
+        .wrap_err("musicDetail response is not utf-8")
+        .map_err(|e| AppError::InternalError(e.to_string()))?;
+    let parsed = parse_song_detail_html(&html)
+        .wrap_err("parse musicDetail html")
         .map_err(|e| AppError::InternalError(e.to_string()))?;
 
-        let bytes = client
-            .get_bytes(&url)
-            .await
-            .map_err(map_maintenance_or_http_client_error)?;
-        let html = String::from_utf8(bytes)
-            .wrap_err("musicDetail response is not utf-8")
-            .map_err(|e| AppError::InternalError(e.to_string()))?;
-        let parsed = parse_song_detail_html(&html)
-            .wrap_err("parse musicDetail html")
-            .map_err(|e| AppError::InternalError(e.to_string()))?;
-
-        for difficulty in parsed.difficulties {
-            let achievement_x10000 = difficulty
-                .achievement_percent
-                .map(|v| (v as f64 * 10000.0).round() as i64);
-            if achievement_x10000.is_none() {
-                continue;
-            }
-            responses.push(SongDetailScoreResponse {
-                title: parsed.title.clone(),
-                chart_type: difficulty.chart_type,
-                diff_category: difficulty.diff_category,
-                achievement_x10000,
-                rank: difficulty.rank,
-                fc: difficulty.fc,
-                sync: difficulty.sync,
-                dx_score: difficulty.dx_score,
-                dx_score_max: difficulty.dx_score_max,
-                last_played_at: difficulty.last_played_at,
-                play_count: difficulty.play_count,
-            });
+    let mut responses = Vec::new();
+    for difficulty in parsed.difficulties {
+        let achievement_x10000 = difficulty
+            .achievement_percent
+            .map(|v| (v as f64 * 10000.0).round() as i64);
+        if achievement_x10000.is_none() {
+            continue;
         }
+        responses.push(SongDetailScoreResponse {
+            title: parsed.title.clone(),
+            chart_type: difficulty.chart_type,
+            diff_category: difficulty.diff_category,
+            achievement_x10000,
+            rank: difficulty.rank,
+            fc: difficulty.fc,
+            sync: difficulty.sync,
+            dx_score: difficulty.dx_score,
+            dx_score_max: difficulty.dx_score_max,
+            last_played_at: difficulty.last_played_at,
+            play_count: difficulty.play_count,
+        });
     }
 
     responses.sort_by_key(|score| (score.chart_type, score.diff_category));
@@ -174,12 +172,11 @@ pub(crate) async fn get_song_detail_scores(
     Ok(Json(responses))
 }
 
-async fn find_song_detail_indices_by_title(
+async fn find_song_detail_index_by_title(
     client: &MaimaiClient,
     title: &str,
-) -> eyre::Result<Vec<String>> {
+) -> eyre::Result<Option<String>> {
     let target_norm = normalize_title_for_match(title);
-    let mut indices = std::collections::BTreeSet::new();
 
     for diff in 0u8..=4 {
         let url = scores_url(diff).wrap_err("build scores url")?;
@@ -192,12 +189,14 @@ async fn find_song_detail_indices_by_title(
                 continue;
             }
             if let Some(idx) = entry.source_idx {
-                indices.insert(idx);
+                if !idx.trim().is_empty() {
+                    return Ok(Some(idx));
+                }
             }
         }
     }
 
-    Ok(indices.into_iter().collect())
+    Ok(None)
 }
 
 fn normalize_title_for_match(s: &str) -> String {
