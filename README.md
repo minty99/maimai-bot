@@ -90,7 +90,7 @@ cp .env.example .env
   - 곡 데이터: `data/song_data/data.json` (기본값)
   - 재킷 이미지: `data/song_data/cover/`
 - Record Collector Server:
-  - DB: `data/record_collector.sqlite3`
+  - DB: `data/maimai.sqlite3`
   - 쿠키: `data/cookies.json`
 
 ## 실행
@@ -189,7 +189,7 @@ docker compose down
   - 곡 데이터: `./data/song_data/data.json`
   - 재킷 이미지: `./data/song_data/cover/`
 - Record Collector Server:
-  - SQLite 데이터베이스: `./data/record_collector.sqlite3`
+  - SQLite 데이터베이스: `./data/maimai.sqlite3`
   - 쿠키: `./data/cookies.json`
 - `docker compose down`을 실행해도 데이터는 유지됩니다.
 
