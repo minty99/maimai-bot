@@ -1,5 +1,5 @@
 use eyre::{Result, WrapErr};
-use models::{ParsedPlayerData, PlayRecordResponse, ScoreResponse};
+use models::{ParsedPlayerData, ParsedRatingTargetMusic, PlayRecordResponse, ScoreResponse};
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use tokio::time::{sleep, Duration};
@@ -199,6 +199,10 @@ impl RecordCollectorClient {
 
     pub async fn get_rated_scores(&self) -> Result<Vec<ScoreResponse>> {
         self.get_with_retry("/api/scores/rated").await
+    }
+
+    pub async fn get_rating_targets(&self) -> Result<ParsedRatingTargetMusic> {
+        self.get_with_retry("/api/rating/targets").await
     }
 
     pub async fn health_check_with_retry(&self) -> Result<()> {

@@ -6,7 +6,7 @@ use time::{Duration as TimeDuration, OffsetDateTime, UtcOffset};
 
 use crate::embeds::{
     build_mai_recent_embeds, build_mai_today_detail_embed, build_mai_today_embed, embed_base,
-    format_level_with_internal, RecentRecordView,
+    embed_maintenance, format_level_with_internal, RecentRecordView,
 };
 use crate::BotData;
 
@@ -512,16 +512,158 @@ pub(crate) async fn mai_today_detail(
 pub(crate) async fn mai_rating(ctx: Context<'_>) -> Result<(), Error> {
     ctx.defer().await?;
 
-    ctx.send(
-        CreateReply::default().ephemeral(true).embed(
-            embed_base("Temporarily Disabled").description(
-                "`/mai-rating` is temporarily disabled.\nIt will be reimplemented with a different approach.",
-            ),
-        ),
-    )
+    let targets = match ctx
+        .data()
+        .record_collector_client
+        .get_rating_targets()
+        .await
+    {
+        Ok(v) => v,
+        Err(e) => {
+            let msg = e.to_string();
+            if msg.contains("MAINTENANCE") || msg.contains("maintenance") {
+                ctx.send(
+                    CreateReply::default()
+                        .ephemeral(true)
+                        .embed(embed_maintenance()),
+                )
+                .await?;
+                return Ok(());
+            }
+            return Err(e.wrap_err("fetch rating targets").into());
+        }
+    };
+
+    let embeds = build_mai_rating_embeds(&ctx.data().song_info_client, targets).await;
+    ctx.send(CreateReply {
+        embeds,
+        ..Default::default()
+    })
     .await?;
 
     Ok(())
+}
+
+#[derive(Debug, Clone)]
+struct RatedRow {
+    title: String,
+    chart_type: models::ChartType,
+    diff_category: models::DifficultyCategory,
+    level: String,
+    internal_level: Option<f32>,
+    achievement_percent: Option<f64>,
+    rank: Option<models::ScoreRank>,
+    rating_points: Option<u32>,
+}
+
+async fn build_mai_rating_embeds(
+    song_info_client: &crate::client::SongInfoClient,
+    targets: models::ParsedRatingTargetMusic,
+) -> Vec<serenity::builder::CreateEmbed> {
+    let new_rows = build_rating_rows(song_info_client, &targets.new_targets).await;
+    let old_rows = build_rating_rows(song_info_client, &targets.old_targets).await;
+
+    let new_sum = new_rows.iter().filter_map(|r| r.rating_points).sum::<u32>();
+    let old_sum = old_rows.iter().filter_map(|r| r.rating_points).sum::<u32>();
+    let total = new_sum.saturating_add(old_sum);
+    let missing_internal = new_rows
+        .iter()
+        .chain(old_rows.iter())
+        .filter(|r| r.internal_level.is_none())
+        .count();
+
+    fn list_desc(rows: &[RatedRow]) -> String {
+        let mut out = String::new();
+        for (idx, r) in rows.iter().enumerate() {
+            let rank = r.rank.map(|v| v.as_str()).unwrap_or("N/A");
+            let level = format_level_with_internal(&r.level, r.internal_level);
+            let achv = r
+                .achievement_percent
+                .map(|v| format!("{v:.4}%"))
+                .unwrap_or_else(|| "N/A".to_string());
+            let pt = r
+                .rating_points
+                .map(|v| format!("{v:>3}pt"))
+                .unwrap_or_else(|| "N/A".to_string());
+
+            out.push_str(&format!(
+                "- [{}] `{}` {} [{}] {} {} — {} • {}\n",
+                idx + 1,
+                pt,
+                r.title,
+                r.chart_type,
+                r.diff_category,
+                level,
+                achv,
+                rank
+            ));
+        }
+        out
+    }
+
+    let mut summary = embed_base("Rating (From Rating Target Music)")
+        .field("Computed", total.to_string(), true)
+        .field("NEW", new_sum.to_string(), true)
+        .field("OLD", old_sum.to_string(), true)
+        .field(
+            "Count",
+            format!("NEW {} / OLD {}", new_rows.len(), old_rows.len()),
+            false,
+        );
+    if missing_internal > 0 {
+        summary = summary.field(
+            "Notes",
+            format!("internal level missing for {missing_internal} chart(s)"),
+            false,
+        );
+    }
+
+    let new_embed = embed_base("Songs for Rating(New)").description(list_desc(&new_rows));
+    let old_embed = embed_base("Songs for Rating(Others)").description(list_desc(&old_rows));
+
+    vec![summary, new_embed, old_embed]
+}
+
+async fn build_rating_rows(
+    song_info_client: &crate::client::SongInfoClient,
+    entries: &[models::ParsedRatingTargetEntry],
+) -> Vec<RatedRow> {
+    let mut out = Vec::with_capacity(entries.len());
+    for entry in entries {
+        let metadata = fetch_song_metadata(
+            song_info_client,
+            &entry.title,
+            entry.chart_type,
+            entry.diff_category,
+        )
+        .await;
+
+        let level = metadata
+            .as_ref()
+            .and_then(|m| m.level.clone())
+            .unwrap_or_else(|| entry.level.clone());
+        let internal_level = metadata
+            .as_ref()
+            .and_then(|m| m.internal_level)
+            .or_else(|| fallback_internal_level(&level));
+        let achievement_percent = entry.achievement_percent.map(|v| v as f64);
+        let rating_points = match (internal_level, achievement_percent) {
+            (Some(internal), Some(achv)) => Some(chart_rating_points(internal as f64, achv, false)),
+            _ => None,
+        };
+
+        out.push(RatedRow {
+            title: entry.title.clone(),
+            chart_type: entry.chart_type,
+            diff_category: entry.diff_category,
+            level,
+            internal_level,
+            achievement_percent,
+            rank: entry.rank,
+            rating_points,
+        });
+    }
+    out
 }
 
 async fn fetch_song_metadata(
@@ -619,4 +761,20 @@ fn chart_rating_points(internal_level: f64, achievement_percent: f64, ap_bonus: 
     } else {
         base
     }
+}
+
+fn fallback_internal_level(level: &str) -> Option<f32> {
+    let level = level.trim();
+    if level.is_empty() || level == "N/A" {
+        return None;
+    }
+
+    let has_plus = level.ends_with('+');
+    let numeric = if has_plus {
+        level.trim_end_matches('+')
+    } else {
+        level
+    };
+    let base: f32 = numeric.trim().parse().ok()?;
+    Some(base + if has_plus { 0.6 } else { 0.0 })
 }
