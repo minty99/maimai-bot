@@ -8,6 +8,7 @@ use crate::embeds::{
     build_mai_recent_embeds, build_mai_today_detail_embed, build_mai_today_embed, embed_base,
     embed_maintenance, format_level_with_internal, RecentRecordView,
 };
+use crate::rating_image::{render_rating_image, RatingImageEntry};
 use crate::BotData;
 
 type Context<'a> = poise::Context<'a, BotData, Box<dyn std::error::Error + Send + Sync>>;
@@ -542,26 +543,8 @@ pub(crate) async fn mai_today_detail(
 pub(crate) async fn mai_rating(ctx: Context<'_>) -> Result<(), Error> {
     ctx.defer().await?;
 
-    let targets = match ctx
-        .data()
-        .record_collector_client
-        .get_rating_targets()
-        .await
-    {
-        Ok(v) => v,
-        Err(e) => {
-            let msg = e.to_string();
-            if msg.contains("MAINTENANCE") || msg.contains("maintenance") {
-                ctx.send(
-                    CreateReply::default()
-                        .ephemeral(true)
-                        .embed(embed_maintenance()),
-                )
-                .await?;
-                return Ok(());
-            }
-            return Err(e.wrap_err("fetch rating targets").into());
-        }
+    let Some(targets) = fetch_rating_targets_or_maintenance(&ctx).await? else {
+        return Ok(());
     };
 
     let embeds = build_mai_rating_embeds(&ctx.data().song_info_client, targets).await;
@@ -574,6 +557,79 @@ pub(crate) async fn mai_rating(ctx: Context<'_>) -> Result<(), Error> {
     Ok(())
 }
 
+/// Generate a single image containing all 50 rating target songs
+#[poise::command(slash_command, rename = "mai-rating-img")]
+pub(crate) async fn mai_rating_img(ctx: Context<'_>) -> Result<(), Error> {
+    ctx.defer().await?;
+
+    let Some(targets) = fetch_rating_targets_or_maintenance(&ctx).await? else {
+        return Ok(());
+    };
+
+    let new_rows = build_rating_rows(&ctx.data().song_info_client, &targets.new_targets).await;
+    let old_rows = build_rating_rows(&ctx.data().song_info_client, &targets.old_targets).await;
+    let new_entries = new_rows
+        .iter()
+        .map(RatingImageEntry::from)
+        .collect::<Vec<_>>();
+    let old_entries = old_rows
+        .iter()
+        .map(RatingImageEntry::from)
+        .collect::<Vec<_>>();
+
+    let image_bytes =
+        match render_rating_image(&ctx.data().song_info_client, &new_entries, &old_entries).await {
+            Ok(bytes) => bytes,
+            Err(e) => {
+                tracing::error!("failed to render mai-rating image: {e:#}");
+                ctx.send(
+                    CreateReply::default().ephemeral(true).embed(
+                        embed_base("Failed to render rating image").description(e.to_string()),
+                    ),
+                )
+                .await?;
+                return Ok(());
+            }
+        };
+
+    ctx.send(CreateReply {
+        attachments: vec![serenity::CreateAttachment::bytes(
+            image_bytes,
+            "mai_rating.png",
+        )],
+        ..Default::default()
+    })
+    .await?;
+
+    Ok(())
+}
+
+async fn fetch_rating_targets_or_maintenance(
+    ctx: &Context<'_>,
+) -> Result<Option<models::ParsedRatingTargetMusic>, Error> {
+    match ctx
+        .data()
+        .record_collector_client
+        .get_rating_targets()
+        .await
+    {
+        Ok(v) => Ok(Some(v)),
+        Err(e) => {
+            let msg = e.to_string();
+            if msg.contains("MAINTENANCE") || msg.contains("maintenance") {
+                ctx.send(
+                    CreateReply::default()
+                        .ephemeral(true)
+                        .embed(embed_maintenance()),
+                )
+                .await?;
+                return Ok(None);
+            }
+            Err(e.wrap_err("fetch rating targets").into())
+        }
+    }
+}
+
 #[derive(Debug, Clone)]
 struct RatedRow {
     title: String,
@@ -584,6 +640,23 @@ struct RatedRow {
     achievement_percent: Option<f64>,
     rank: Option<models::ScoreRank>,
     rating_points: Option<u32>,
+    image_name: Option<String>,
+}
+
+impl From<&RatedRow> for RatingImageEntry {
+    fn from(value: &RatedRow) -> Self {
+        Self {
+            title: value.title.clone(),
+            chart_type: value.chart_type,
+            diff_category: value.diff_category,
+            level: value.level.clone(),
+            internal_level: value.internal_level,
+            achievement_percent: value.achievement_percent,
+            rank: value.rank,
+            rating_points: value.rating_points,
+            image_name: value.image_name.clone(),
+        }
+    }
 }
 
 async fn build_mai_rating_embeds(
@@ -691,6 +764,7 @@ async fn build_rating_rows(
             achievement_percent,
             rank: entry.rank,
             rating_points,
+            image_name: metadata.and_then(|m| m.image_name),
         });
     }
     out
