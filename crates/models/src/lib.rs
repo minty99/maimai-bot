@@ -532,6 +532,22 @@ pub struct ParsedPlayerData {
     pub total_play_count: u32,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ParsedRatingTargetEntry {
+    pub title: String,
+    pub chart_type: ChartType,
+    pub diff_category: DifficultyCategory,
+    pub level: String,
+    pub achievement_percent: Option<f32>,
+    pub rank: Option<ScoreRank>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ParsedRatingTargetMusic {
+    pub new_targets: Vec<ParsedRatingTargetEntry>,
+    pub old_targets: Vec<ParsedRatingTargetEntry>,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
 pub struct ScoreEntry {
     pub title: String,
