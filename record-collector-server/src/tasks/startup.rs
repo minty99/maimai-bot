@@ -1,16 +1,14 @@
 use eyre::{Result, WrapErr};
-use reqwest::Url;
 use sqlx::SqlitePool;
 use tracing::info;
 
-use crate::db::{
-    clear_scores, get_app_state_u32, set_app_state_u32, upsert_playlogs, upsert_scores,
-};
+use crate::db::{get_app_state_u32, set_app_state_u32, upsert_playlogs};
 use crate::http_client::{is_maintenance_window_now, MaimaiClient};
-use maimai_parsers::{parse_player_data_html, parse_recent_html, parse_scores_html};
+use maimai_parsers::{parse_player_data_html, parse_recent_html};
 use models::{config::AppConfig, ParsedPlayRecord, ParsedPlayerData};
 
 use crate::config::RecordCollectorConfig;
+use crate::tasks::scores_sync::rebuild_scores_with_client;
 
 const STATE_KEY_TOTAL_PLAY_COUNT: &str = "player.total_play_count";
 const STATE_KEY_RATING: &str = "player.rating";
@@ -118,7 +116,7 @@ fn to_app_config(config: &RecordCollectorConfig) -> AppConfig {
 }
 
 async fn fetch_player_data_logged_in(client: &MaimaiClient) -> Result<ParsedPlayerData> {
-    let url = Url::parse("https://maimaidx-eng.com/maimai-mobile/playerData/")
+    let url = reqwest::Url::parse("https://maimaidx-eng.com/maimai-mobile/playerData/")
         .wrap_err("parse playerData url")?;
     let bytes = client
         .get_bytes(&url)
@@ -129,30 +127,11 @@ async fn fetch_player_data_logged_in(client: &MaimaiClient) -> Result<ParsedPlay
 }
 
 async fn fetch_recent_entries_logged_in(client: &MaimaiClient) -> Result<Vec<ParsedPlayRecord>> {
-    let url = Url::parse("https://maimaidx-eng.com/maimai-mobile/record/")
+    let url = reqwest::Url::parse("https://maimaidx-eng.com/maimai-mobile/record/")
         .wrap_err("parse record url")?;
     let bytes = client.get_bytes(&url).await.wrap_err("fetch record url")?;
     let html = String::from_utf8(bytes).wrap_err("record response is not utf-8")?;
     parse_recent_html(&html).wrap_err("parse recent html")
-}
-
-async fn rebuild_scores_with_client(pool: &SqlitePool, client: &MaimaiClient) -> Result<usize> {
-    clear_scores(pool).await.wrap_err("clear scores")?;
-
-    let mut all = Vec::new();
-
-    for diff in 0u8..=4 {
-        let url = scores_url(diff).wrap_err("build scores url")?;
-        let bytes = client.get_bytes(&url).await.wrap_err("fetch scores url")?;
-        let html = String::from_utf8(bytes).wrap_err("scores response is not utf-8")?;
-        let mut entries = parse_scores_html(&html, diff).wrap_err("parse scores html")?;
-        all.append(&mut entries);
-    }
-
-    let count = all.len();
-    upsert_scores(pool, &all).await.wrap_err("upsert scores")?;
-
-    Ok(count)
 }
 
 fn annotate_recent_entries_with_play_count(
@@ -190,16 +169,6 @@ async fn persist_player_snapshot(pool: &SqlitePool, player_data: &ParsedPlayerDa
         .await
         .wrap_err("store rating")?;
     Ok(())
-}
-
-fn scores_url(diff: u8) -> Result<Url> {
-    if diff > 4 {
-        return Err(eyre::eyre!("diff must be 0..4"));
-    }
-    Url::parse(&format!(
-        "https://maimaidx-eng.com/maimai-mobile/record/musicGenre/search/?genre=99&diff={diff}"
-    ))
-    .wrap_err("parse scores url")
 }
 
 fn unix_timestamp() -> i64 {

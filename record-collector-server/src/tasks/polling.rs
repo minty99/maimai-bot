@@ -10,6 +10,7 @@ use maimai_parsers::{parse_player_data_html, parse_recent_html};
 use models::{ParsedPlayRecord, ParsedPlayerData};
 
 use crate::state::AppState;
+use crate::tasks::scores_sync::rebuild_scores_with_client;
 
 const STATE_KEY_TOTAL_PLAY_COUNT: &str = "player.total_play_count";
 const STATE_KEY_RATING: &str = "player.rating";
@@ -88,6 +89,11 @@ async fn poll_and_sync_if_needed(app_state: &AppState) -> Result<bool> {
     upsert_playlogs(&app_state.db_pool, &entries)
         .await
         .wrap_err("upsert playlogs")?;
+
+    let scores_count = rebuild_scores_with_client(&app_state.db_pool, &client)
+        .await
+        .wrap_err("refresh scores after playlog sync")?;
+    info!("Scores refreshed after recent sync: entries={scores_count}");
 
     persist_player_snapshot(&app_state.db_pool, &player_data)
         .await
