@@ -28,6 +28,10 @@ fn run_fixture_test(diff: u8, filename: &str) {
         .iter()
         .filter(|e| e.dx_score.is_some())
         .all(|e| e.dx_score_max.is_some()));
+    assert!(entries.iter().any(|e| e
+        .source_idx
+        .as_ref()
+        .is_some_and(|idx| !idx.trim().is_empty())));
     if diff == 0 {
         assert!(entries.iter().any(|e| e.chart_type == ChartType::Std));
         assert!(entries.iter().any(|e| e.chart_type == ChartType::Dx));

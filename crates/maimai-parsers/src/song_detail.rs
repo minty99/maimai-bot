@@ -1,4 +1,4 @@
-use scraper::{Html, Selector};
+use scraper::{ElementRef, Html, Selector};
 
 use models::{
     ChartType, DifficultyCategory, FcStatus, ParsedSongDetail, ParsedSongDifficultyDetail,
@@ -15,6 +15,8 @@ pub fn parse_song_detail_html(html: &str) -> eyre::Result<ParsedSongDetail> {
     let level_selector = Selector::parse(".music_lv_back").unwrap();
     let score_block_selector = Selector::parse(".music_score_block").unwrap();
     let icon_selector = Selector::parse("img").unwrap();
+    let detail_row_selector = Selector::parse(".black_block tr").unwrap();
+    let td_selector = Selector::parse("td").unwrap();
 
     let title = document
         .select(&title_selector)
@@ -39,15 +41,17 @@ pub fn parse_song_detail_html(html: &str) -> eyre::Result<ParsedSongDetail> {
         let level = section
             .select(&level_selector)
             .next()
-            .map(|e| e.text().collect::<Vec<_>>().join("").trim().to_string())
+            .map(|e| collect_text(&e).trim().to_string())
             .filter(|s| !s.is_empty())
             .ok_or_else(|| eyre::eyre!("missing level (.music_lv_back)"))?;
 
         let mut achievement_percent: Option<f32> = None;
         let mut dx_score: Option<i32> = None;
         let mut dx_score_max: Option<i32> = None;
+        let mut last_played_at: Option<String> = None;
+        let mut play_count: Option<u32> = None;
         for block in section.select(&score_block_selector) {
-            let text = block.text().collect::<Vec<_>>().join("");
+            let text = collect_text(&block);
             if achievement_percent.is_none() {
                 if let Some(p) = parse_percent(&text) {
                     achievement_percent = Some(p);
@@ -60,6 +64,33 @@ pub fn parse_song_detail_html(html: &str) -> eyre::Result<ParsedSongDetail> {
                     dx_score_max = Some(max);
                     continue;
                 }
+            }
+        }
+        for row in section.select(&detail_row_selector) {
+            let mut cells = row.select(&td_selector);
+            let Some(label_cell) = cells.next() else {
+                continue;
+            };
+            let Some(value_cell) = cells.next() else {
+                continue;
+            };
+
+            let label = normalize_label(&collect_text(&label_cell));
+            let value = collect_text(&value_cell).trim().to_string();
+            if value.is_empty() {
+                continue;
+            }
+
+            if label.contains("lastplayeddate") || label.contains("最終プレイ日") {
+                last_played_at = Some(value);
+                continue;
+            }
+            if label.contains("playcount") || label.contains("プレイ回数") {
+                let digits = value
+                    .chars()
+                    .filter(|c| c.is_ascii_digit())
+                    .collect::<String>();
+                play_count = digits.parse::<u32>().ok();
             }
         }
 
@@ -93,6 +124,8 @@ pub fn parse_song_detail_html(html: &str) -> eyre::Result<ParsedSongDetail> {
             sync,
             dx_score,
             dx_score_max,
+            last_played_at,
+            play_count,
         });
     }
 
@@ -103,6 +136,18 @@ pub fn parse_song_detail_html(html: &str) -> eyre::Result<ParsedSongDetail> {
         chart_type: page_chart_type,
         difficulties,
     })
+}
+
+fn collect_text(element: &ElementRef<'_>) -> String {
+    element.text().collect::<Vec<_>>().join("")
+}
+
+fn normalize_label(s: &str) -> String {
+    s.trim()
+        .to_ascii_lowercase()
+        .chars()
+        .filter(|c| !c.is_whitespace() && *c != ':' && *c != '：')
+        .collect()
 }
 
 fn diff_category_from_id(id: &str) -> Option<DifficultyCategory> {

@@ -33,6 +33,19 @@ fn parse_song_detail_example1() {
         .iter()
         .filter(|d| d.dx_score.is_some())
         .all(|d| d.dx_score_max.is_some()));
+    assert!(parsed.difficulties.iter().all(|d| d
+        .last_played_at
+        .as_ref()
+        .is_some_and(|v| !v.trim().is_empty())));
+    assert!(parsed
+        .difficulties
+        .iter()
+        .all(|d| d.play_count.is_some_and(|v| v > 0)));
+    assert_eq!(
+        parsed.difficulties[0].last_played_at.as_deref(),
+        Some("2025/10/23 00:15")
+    );
+    assert_eq!(parsed.difficulties[0].play_count, Some(1));
 
     println!(
         "title={:?} diffs={}",
@@ -84,6 +97,19 @@ fn parse_song_detail_example2() {
         .iter()
         .filter(|d| d.dx_score.is_some())
         .all(|d| d.dx_score_max.is_some()));
+    assert!(parsed.difficulties.iter().all(|d| d
+        .last_played_at
+        .as_ref()
+        .is_some_and(|v| !v.trim().is_empty())));
+    assert!(parsed
+        .difficulties
+        .iter()
+        .all(|d| d.play_count.is_some_and(|v| v > 0)));
+    assert_eq!(
+        parsed.difficulties[0].last_played_at.as_deref(),
+        Some("2025/09/17 22:46")
+    );
+    assert_eq!(parsed.difficulties[0].play_count, Some(1));
 
     println!(
         "title={:?} diffs={}",

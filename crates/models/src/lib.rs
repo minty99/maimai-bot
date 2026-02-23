@@ -522,6 +522,8 @@ pub struct ParsedSongDifficultyDetail {
     pub sync: Option<SyncStatus>,
     pub dx_score: Option<i32>,
     pub dx_score_max: Option<i32>,
+    pub last_played_at: Option<String>,
+    pub play_count: Option<u32>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -591,6 +593,29 @@ pub struct ScoreResponse {
     pub sync: Option<SyncStatus>,
     pub dx_score: Option<i32>,
     pub dx_score_max: Option<i32>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SongDetailScoreResponse {
+    pub title: String,
+    pub chart_type: ChartType,
+    pub diff_category: DifficultyCategory,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub achievement_x10000: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub rank: Option<ScoreRank>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub fc: Option<FcStatus>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub sync: Option<SyncStatus>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub dx_score: Option<i32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub dx_score_max: Option<i32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub last_played_at: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub play_count: Option<u32>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

@@ -11,7 +11,8 @@ pub fn parse_scores_html(html: &str, diff: u8) -> eyre::Result<Vec<ParsedScoreEn
     let level_selector = Selector::parse(".music_lv_block").unwrap();
     let icon_selector = Selector::parse("img").unwrap();
     let chart_type_selector = Selector::parse("img.music_kind_icon").unwrap();
-    let idx_selector = Selector::parse(r#"input[name="idx"]"#).unwrap();
+    let idx_selector =
+        Selector::parse(r#"form[action*="/record/musicDetail/"] input[name="idx"]"#).unwrap();
 
     let diff_category = diff_category_from_u8(diff)?;
 
