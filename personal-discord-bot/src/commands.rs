@@ -1,5 +1,4 @@
 use eyre::{Result, WrapErr};
-use ordered_float::OrderedFloat;
 use poise::serenity_prelude as serenity;
 use poise::CreateReply;
 use std::time::Duration;
@@ -174,17 +173,35 @@ pub(crate) async fn mai_score(
 
     let mut embed = embed_base(&matched_title);
     let mut has_rows = false;
+    let mut first_image_name = None::<String>;
 
     for score in &matched_scores {
         has_rows = true;
+        let metadata = fetch_song_metadata(
+            &ctx.data().song_info_client,
+            &score.title,
+            score.chart_type,
+            score.diff_category,
+        )
+        .await;
+
         let achievement_percent = score
             .achievement_x10000
             .map(|x| x as f64 / 10000.0)
             .unwrap_or(0.0);
-        let level = format_level_with_internal(&score.level, score.internal_level);
+        let level = metadata
+            .as_ref()
+            .and_then(|m| m.level.as_deref())
+            .unwrap_or("N/A");
+        let level =
+            format_level_with_internal(level, metadata.as_ref().and_then(|m| m.internal_level));
         let rank = score.rank.map(|r| r.as_str()).unwrap_or("N/A");
         let fc = score.fc.map(|v| v.as_str()).unwrap_or("-");
         let sync = score.sync.map(|v| v.as_str()).unwrap_or("-");
+
+        if first_image_name.is_none() {
+            first_image_name = metadata.and_then(|m| m.image_name);
+        }
 
         let field_name = format!("[{}] {} {}", score.chart_type, score.diff_category, level);
 
@@ -194,15 +211,13 @@ pub(crate) async fn mai_score(
     }
 
     let mut attachments = Vec::new();
-    if let Some(score) = matched_scores.first() {
-        if let Some(ref image_name) = score.image_name {
-            embed = embed.thumbnail(format!("attachment://{image_name}"));
-            match ctx.data().song_info_client.get_cover(image_name).await {
-                Ok(bytes) => {
-                    attachments.push(serenity::CreateAttachment::bytes(bytes, image_name.clone()));
-                }
-                Err(e) => tracing::warn!("failed to fetch cover image {image_name}: {e:?}"),
+    if let Some(ref image_name) = first_image_name {
+        embed = embed.thumbnail(format!("attachment://{image_name}"));
+        match ctx.data().song_info_client.get_cover(image_name).await {
+            Ok(bytes) => {
+                attachments.push(serenity::CreateAttachment::bytes(bytes, image_name.clone()));
             }
+            Err(e) => tracing::warn!("failed to fetch cover image {image_name}: {e:?}"),
         }
     }
 
@@ -246,23 +261,44 @@ pub(crate) async fn mai_recent(ctx: Context<'_>) -> Result<(), Error> {
     let mut recent = play_records.into_iter().take(take).collect::<Vec<_>>();
     recent.reverse();
 
-    let records: Vec<RecentRecordView> = recent
-        .into_iter()
-        .map(|record| RecentRecordView {
+    let mut records = Vec::with_capacity(recent.len());
+    for record in recent {
+        let metadata = match record.diff_category {
+            Some(diff_category) => {
+                fetch_song_metadata(
+                    &ctx.data().song_info_client,
+                    &record.title,
+                    record.chart_type,
+                    diff_category,
+                )
+                .await
+            }
+            None => None,
+        };
+        let internal_level = metadata.as_ref().and_then(|m| m.internal_level);
+        let rating_points = match (internal_level, record.achievement_x10000) {
+            (Some(internal), Some(achievement_x10000)) => Some(chart_rating_points(
+                internal as f64,
+                achievement_x10000 as f64 / 10000.0,
+                is_ap_like(record.fc.as_ref()),
+            )),
+            _ => None,
+        };
+        records.push(RecentRecordView {
             track: record.track.map(|t| t as i64),
             played_at: record.played_at,
             title: record.title,
             chart_type: record.chart_type,
             diff_category: record.diff_category,
-            level: record.level,
-            internal_level: record.internal_level,
-            rating_points: record.rating_points,
+            level: metadata.as_ref().and_then(|m| m.level.clone()),
+            internal_level,
+            rating_points,
             achievement_percent: record.achievement_x10000.map(|x| x as f64 / 10000.0),
             achievement_new_record: record.achievement_new_record.unwrap_or(0) != 0,
             first_play: record.first_play.unwrap_or(0) != 0,
             rank: record.score_rank,
-        })
-        .collect();
+        });
+    }
 
     let embeds = build_mai_recent_embeds("Player", &records, None);
 
@@ -411,20 +447,39 @@ pub(crate) async fn mai_today_detail(
         .get_today(&day_key)
         .await?;
 
-    let mut rows: Vec<_> = plays
-        .into_iter()
-        .map(|play| {
-            let achievement_percent = play.achievement_x10000.map(|x| x as f64 / 10000.0);
-            crate::embeds::TodayDetailRowView {
-                title: play.title,
-                chart_type: play.chart_type,
-                achievement_percent,
-                rating_points: play.rating_points,
-                achievement_new_record: play.achievement_new_record.unwrap_or(0) != 0,
-                first_play: play.first_play.unwrap_or(0) != 0,
+    let mut rows = Vec::with_capacity(plays.len());
+    for play in plays {
+        let metadata = match play.diff_category {
+            Some(diff_category) => {
+                fetch_song_metadata(
+                    &ctx.data().song_info_client,
+                    &play.title,
+                    play.chart_type,
+                    diff_category,
+                )
+                .await
             }
-        })
-        .collect();
+            None => None,
+        };
+        let internal_level = metadata.as_ref().and_then(|m| m.internal_level);
+        let rating_points = match (internal_level, play.achievement_x10000) {
+            (Some(internal), Some(achievement_x10000)) => Some(chart_rating_points(
+                internal as f64,
+                achievement_x10000 as f64 / 10000.0,
+                is_ap_like(play.fc.as_ref()),
+            )),
+            _ => None,
+        };
+
+        rows.push(crate::embeds::TodayDetailRowView {
+            title: play.title,
+            chart_type: play.chart_type,
+            achievement_percent: play.achievement_x10000.map(|x| x as f64 / 10000.0),
+            rating_points,
+            achievement_new_record: play.achievement_new_record.unwrap_or(0) != 0,
+            first_play: play.first_play.unwrap_or(0) != 0,
+        });
+    }
 
     rows.sort_by_key(|r| std::cmp::Reverse(r.rating_points.unwrap_or(0)));
 
@@ -457,125 +512,111 @@ pub(crate) async fn mai_today_detail(
 pub(crate) async fn mai_rating(ctx: Context<'_>) -> Result<(), Error> {
     ctx.defer().await?;
 
-    let embeds = build_mai_rating_embeds(&ctx.data().record_collector_client).await?;
-
-    ctx.send(CreateReply {
-        embeds,
-        ..Default::default()
-    })
+    ctx.send(
+        CreateReply::default().ephemeral(true).embed(
+            embed_base("Temporarily Disabled").description(
+                "`/mai-rating` is temporarily disabled.\nIt will be reimplemented with a different approach.",
+            ),
+        ),
+    )
     .await?;
 
     Ok(())
 }
 
-async fn build_mai_rating_embeds(
-    client: &crate::client::RecordCollectorClient,
-) -> Result<Vec<serenity::builder::CreateEmbed>> {
-    let scores = client.get_rated_scores().await?;
-
-    #[derive(Debug, Clone)]
-    struct RatedRow {
-        bucket: String,
-        title: String,
-        chart_type: models::ChartType,
-        diff_category: models::DifficultyCategory,
-        level: String,
-        internal_level: f32,
-        achievement_percent: f64,
-        rank: Option<models::ScoreRank>,
-        rating_points: u32,
-    }
-
-    let mut missing_data = 0usize;
-    let mut out_rows = Vec::new();
-
-    for score in scores {
-        let Some(achievement_x10000) = score.achievement_x10000 else {
-            continue;
-        };
-        let achievement_percent = achievement_x10000 as f64 / 10000.0;
-
-        let Some(ref bucket) = score.bucket else {
-            missing_data += 1;
-            continue;
-        };
-
-        let Some(internal_level) = score.internal_level else {
-            missing_data += 1;
-            continue;
-        };
-
-        let Some(rating_points) = score.rating_points else {
-            missing_data += 1;
-            continue;
-        };
-
-        out_rows.push(RatedRow {
-            bucket: bucket.clone(),
-            title: score.title,
-            chart_type: score.chart_type,
-            diff_category: score.diff_category,
-            level: score.level,
-            internal_level,
-            achievement_percent,
-            rank: score.rank,
-            rating_points,
-        });
-    }
-
-    let mut new_rows = out_rows
-        .iter()
-        .filter(|r| r.bucket == "New")
-        .cloned()
-        .collect::<Vec<_>>();
-    let mut old_rows = out_rows
-        .iter()
-        .filter(|r| r.bucket == "Old")
-        .cloned()
-        .collect::<Vec<_>>();
-
-    new_rows
-        .sort_by_key(|r| std::cmp::Reverse((r.rating_points, OrderedFloat(r.achievement_percent))));
-    old_rows
-        .sort_by_key(|r| std::cmp::Reverse((r.rating_points, OrderedFloat(r.achievement_percent))));
-
-    let new_rows = new_rows.into_iter().take(15).collect::<Vec<_>>();
-    let old_rows = old_rows.into_iter().take(35).collect::<Vec<_>>();
-
-    let new_sum = new_rows.iter().map(|r| r.rating_points).sum::<u32>();
-    let old_sum = old_rows.iter().map(|r| r.rating_points).sum::<u32>();
-    let total = new_sum.saturating_add(old_sum);
-
-    fn list_desc(rows: &[RatedRow]) -> String {
-        let mut out = String::new();
-        for (idx, r) in rows.iter().enumerate() {
-            let rank = r.rank.map(|r| r.as_str()).unwrap_or("N/A");
-            let level = format_level_with_internal(&r.level, Some(r.internal_level));
-            out.push_str(&format!(
-                "- [{}] `{:>3}pt` {} [{}] {} {} — {:.4}% • {}\n",
-                idx + 1,
-                r.rating_points,
-                r.title,
-                r.chart_type,
-                r.diff_category,
-                level,
-                r.achievement_percent,
-                rank
-            ));
+async fn fetch_song_metadata(
+    song_info_client: &crate::client::SongInfoClient,
+    title: &str,
+    chart_type: models::ChartType,
+    diff_category: models::DifficultyCategory,
+) -> Option<crate::client::SongMetadata> {
+    match song_info_client
+        .get_song_metadata(title, chart_type.as_str(), diff_category.as_str())
+        .await
+    {
+        Ok(v) => v,
+        Err(e) => {
+            tracing::warn!(
+                "failed to fetch song metadata for {title} [{chart_type} {diff_category}]: {e:#}"
+            );
+            None
         }
-        out
     }
+}
 
-    let mut summary = embed_base("Rating")
-        .field("Computed", total.to_string(), true)
-        .field("NEW 15", new_sum.to_string(), true)
-        .field("OLD 35", old_sum.to_string(), true);
-    if missing_data > 0 {
-        summary = summary.field("Notes", format!("missing song data: {missing_data}"), false);
+fn is_ap_like(fc: Option<&models::FcStatus>) -> bool {
+    matches!(
+        fc,
+        Some(&models::FcStatus::Ap) | Some(&models::FcStatus::ApPlus)
+    )
+}
+
+fn coefficient_for_achievement(achievement_percent: f64) -> f64 {
+    const ACHIEVEMENT_CAP: f64 = 100.5;
+    let a = achievement_percent.min(ACHIEVEMENT_CAP);
+
+    if a >= 100.5 {
+        22.4
+    } else if a >= 100.4999 {
+        22.2
+    } else if a >= 100.0 {
+        21.6
+    } else if a >= 99.9999 {
+        21.4
+    } else if a >= 99.5 {
+        21.1
+    } else if a >= 99.0 {
+        20.8
+    } else if a >= 98.9999 {
+        20.6
+    } else if a >= 98.0 {
+        20.3
+    } else if a >= 97.0 {
+        20.0
+    } else if a >= 96.9999 {
+        17.6
+    } else if a >= 94.0 {
+        16.8
+    } else if a >= 90.0 {
+        15.2
+    } else if a >= 80.0 {
+        13.6
+    } else if a >= 79.9999 {
+        12.8
+    } else if a >= 75.0 {
+        12.0
+    } else if a >= 70.0 {
+        11.2
+    } else if a >= 60.0 {
+        9.6
+    } else if a >= 50.0 {
+        8.0
+    } else if a >= 40.0 {
+        6.4
+    } else if a >= 30.0 {
+        4.8
+    } else if a >= 20.0 {
+        3.2
+    } else if a >= 10.0 {
+        1.6
+    } else {
+        0.0
     }
+}
 
-    let new_embed = embed_base("NEW 15").description(list_desc(&new_rows));
-    let old_embed = embed_base("OLD 35").description(list_desc(&old_rows));
-
-    Ok(vec![summary, new_embed, old_embed])
+fn chart_rating_points(internal_level: f64, achievement_percent: f64, ap_bonus: bool) -> u32 {
+    const ACHIEVEMENT_CAP: f64 = 100.5;
+    let coef = coefficient_for_achievement(achievement_percent);
+    let ach = achievement_percent.min(ACHIEVEMENT_CAP);
+    let base = ((coef * internal_level * ach) / 100.0).floor();
+    let base = if base.is_finite() && base > 0.0 {
+        base as u32
+    } else {
+        0
+    };
+    if ap_bonus {
+        base.saturating_add(1)
+    } else {
+        base
+    }
 }

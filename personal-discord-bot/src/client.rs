@@ -18,6 +18,16 @@ pub(crate) enum PlayerDataResult {
     Unavailable(String),
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub(crate) struct SongMetadata {
+    pub(crate) level: Option<String>,
+    pub(crate) internal_level: Option<f32>,
+    pub(crate) user_level: Option<String>,
+    pub(crate) image_name: Option<String>,
+    pub(crate) version: Option<String>,
+    pub(crate) bucket: Option<String>,
+}
+
 #[derive(Debug)]
 pub struct SongInfoClient {
     client: Client,
@@ -43,7 +53,7 @@ impl SongInfoClient {
         Ok(Self { client, base_url })
     }
 
-    pub async fn get_cover(&self, image_name: &str) -> Result<Vec<u8>> {
+    pub(crate) async fn get_cover(&self, image_name: &str) -> Result<Vec<u8>> {
         let url = format!("{}/api/cover/{}", self.base_url, image_name);
         let resp = self
             .client
@@ -60,6 +70,44 @@ impl SongInfoClient {
             .await
             .map(|b| b.to_vec())
             .wrap_err("read cover image bytes")
+    }
+
+    pub(crate) async fn get_song_metadata(
+        &self,
+        title: &str,
+        chart_type: &str,
+        diff_category: &str,
+    ) -> Result<Option<SongMetadata>> {
+        let url = format!(
+            "{}/api/songs/{}/{}/{}",
+            self.base_url,
+            urlencoding::encode(title),
+            urlencoding::encode(chart_type),
+            urlencoding::encode(diff_category)
+        );
+
+        let resp = self
+            .client
+            .get(&url)
+            .send()
+            .await
+            .wrap_err("fetch song metadata")?;
+
+        if resp.status() == reqwest::StatusCode::NOT_FOUND {
+            return Ok(None);
+        }
+        if !resp.status().is_success() {
+            return Err(eyre::eyre!(
+                "Failed to fetch song metadata: HTTP {}",
+                resp.status()
+            ));
+        }
+
+        let metadata = resp
+            .json::<SongMetadata>()
+            .await
+            .wrap_err("parse song metadata")?;
+        Ok(Some(metadata))
     }
 }
 

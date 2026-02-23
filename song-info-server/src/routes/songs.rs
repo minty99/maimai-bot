@@ -22,6 +22,7 @@ pub(crate) struct SongSheetResponse {
 
 #[derive(Serialize)]
 pub(crate) struct SongMetadataResponse {
+    level: Option<String>,
     internal_level: Option<f32>,
     user_level: Option<String>,
     image_name: Option<String>,
@@ -366,6 +367,7 @@ pub(crate) async fn get_song_metadata(
                     });
 
                     return Ok(Json(SongMetadataResponse {
+                        level: Some(sheet.level.clone()),
                         internal_level,
                         user_level: sheet.user_level.clone(),
                         image_name: song.image_name.clone(),
