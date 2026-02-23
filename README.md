@@ -17,10 +17,11 @@
 - **Record Collector Server** (`record-collector-server/`): 개인 기록 수집 및 관리 (인증 필요, stateful)
   - 쿠키를 `data/` 아래에 저장/재사용하고, 만료 시 재로그인해서 갱신합니다.
   - DB는 `sqlx::migrate!()`로 런타임에 마이그레이션을 실행합니다.
+  - 곡 메타데이터(레벨/내부레벨/버전 등)는 저장하지 않으며, 플레이/스코어 기록만 수집합니다.
   - 시작 시 `playerData`를 크롤링하고, 필요하면 scores(난이도 0..4) + recent를 DB에 초기 적재합니다.
   - 이후 10분마다 `playerData`를 다시 크롤링해서 **total play count 변화가 있을 때만** recent를 크롤링합니다.
   - 포트: `3000` (기본값)
-  - 의존성: Song Info Server (곡 정보 조회용)
+  - 의존성: SEGA ID 인증 정보
 
 - **Discord Bot** (`personal-discord-bot/`): 두 서버의 API를 호출하여 Discord 명령어 처리 및 DM 알림 전송
   - Record Collector Server의 `/health/ready` 엔드포인트를 폴링하여 서버가 준비될 때까지 대기합니다.
@@ -60,7 +61,7 @@ cp song-info-server/.env.example song-info-server/.env
 **2. Record Collector Server 설정** (`record-collector-server/.env`)
 ```bash
 cp record-collector-server/.env.example record-collector-server/.env
-# 편집: SEGA_ID, SEGA_PASSWORD, DATABASE_URL, SONG_INFO_SERVER_URL 등 입력
+# 편집: SEGA_ID, SEGA_PASSWORD, DATABASE_URL 등 입력
 ```
 
 **3. Discord Bot 설정** (`personal-discord-bot/.env`)
@@ -89,7 +90,7 @@ cp .env.example .env
   - 곡 데이터: `data/song_data/data.json` (기본값)
   - 재킷 이미지: `data/song_data/cover/`
 - Record Collector Server:
-  - DB: `data/maimai.sqlite3`
+  - DB: `data/record_collector.sqlite3`
   - 쿠키: `data/cookies.json`
 
 ## 실행
@@ -188,7 +189,7 @@ docker compose down
   - 곡 데이터: `./data/song_data/data.json`
   - 재킷 이미지: `./data/song_data/cover/`
 - Record Collector Server:
-  - SQLite 데이터베이스: `./data/maimai.sqlite3`
+  - SQLite 데이터베이스: `./data/record_collector.sqlite3`
   - 쿠키: `./data/cookies.json`
 - `docker compose down`을 실행해도 데이터는 유지됩니다.
 

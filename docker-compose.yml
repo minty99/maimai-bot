@@ -38,8 +38,7 @@ services:
       - SEGA_PASSWORD=${SEGA_PASSWORD}
       - RECORD_COLLECTOR_PORT=3000
       - DATA_DIR=${DATA_DIR:-/app/data}
-      - DATABASE_URL=sqlite:/app/data/maimai.sqlite3
-      - SONG_INFO_SERVER_URL=http://maimai-song-info-server:3001
+      - DATABASE_URL=sqlite:/app/data/record_collector.sqlite3
       - RUST_LOG=${RUST_LOG:-info}
     volumes:
       - ./data:/app/data
