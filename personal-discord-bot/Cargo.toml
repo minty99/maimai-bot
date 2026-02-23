@@ -8,8 +8,11 @@ name = "personal-discord-bot"
 path = "src/main.rs"
 
 [dependencies]
+ab_glyph = "0.2.32"
 dotenvy = { workspace = true }
 eyre = { workspace = true }
+image = "0.25.9"
+imageproc = "0.25.0"
 models = { version = "0.1.0", path = "../crates/models" }
 ordered-float = { workspace = true }
 poise = { workspace = true }
