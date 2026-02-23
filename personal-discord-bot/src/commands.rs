@@ -155,13 +155,29 @@ pub(crate) async fn mai_score(
         candidates[idx].clone()
     };
 
-    let matched_scores: Vec<_> = scores
-        .iter()
-        .filter(|s| s.title == matched_title)
-        .cloned()
-        .collect();
+    let detailed_scores = match ctx
+        .data()
+        .record_collector_client
+        .get_song_detail_scores(&matched_title)
+        .await
+    {
+        Ok(v) => v,
+        Err(e) => {
+            let msg = e.to_string();
+            if msg.contains("MAINTENANCE") || msg.contains("maintenance") {
+                ctx.send(
+                    CreateReply::default()
+                        .ephemeral(true)
+                        .embed(embed_maintenance()),
+                )
+                .await?;
+                return Ok(());
+            }
+            return Err(e.wrap_err("fetch song detail scores").into());
+        }
+    };
 
-    if matched_scores.is_empty() {
+    if detailed_scores.is_empty() {
         ctx.send(
             CreateReply::default()
                 .ephemeral(true)
@@ -175,7 +191,7 @@ pub(crate) async fn mai_score(
     let mut has_rows = false;
     let mut first_image_name = None::<String>;
 
-    for score in &matched_scores {
+    for score in &detailed_scores {
         has_rows = true;
         let metadata = fetch_song_metadata(
             &ctx.data().song_info_client,
@@ -198,6 +214,16 @@ pub(crate) async fn mai_score(
         let rank = score.rank.map(|r| r.as_str()).unwrap_or("N/A");
         let fc = score.fc.map(|v| v.as_str()).unwrap_or("-");
         let sync = score.sync.map(|v| v.as_str()).unwrap_or("-");
+        let last_played = score
+            .last_played_at
+            .as_deref()
+            .map(|v| format!("Last: {v}"));
+        let play_count = score.play_count.map(|v| format!("Plays: {v}"));
+        let detail_suffix = [last_played, play_count]
+            .into_iter()
+            .flatten()
+            .collect::<Vec<_>>()
+            .join(" • ");
 
         if first_image_name.is_none() {
             first_image_name = metadata.and_then(|m| m.image_name);
@@ -205,7 +231,11 @@ pub(crate) async fn mai_score(
 
         let field_name = format!("[{}] {} {}", score.chart_type, score.diff_category, level);
 
-        let field_value = format!("{:.4}% • {} • {} • {}", achievement_percent, rank, fc, sync);
+        let field_value = if detail_suffix.is_empty() {
+            format!("{achievement_percent:.4}% • {rank} • {fc} • {sync}")
+        } else {
+            format!("{achievement_percent:.4}% • {rank} • {fc} • {sync}\n{detail_suffix}")
+        };
 
         embed = embed.field(field_name, field_value, false);
     }
