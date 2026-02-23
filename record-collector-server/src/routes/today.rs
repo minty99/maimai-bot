@@ -8,7 +8,6 @@ use time::{Date, Duration as TimeDuration, Month, OffsetDateTime, UtcOffset};
 use crate::{
     error::Result,
     routes::responses::{play_record_response_from_record, PlayRecordResponse},
-    song_info_client::SongInfoClient,
     state::AppState,
 };
 use models::PlayRecord;
@@ -79,7 +78,6 @@ pub(crate) async fn get_today(
             title,
             chart_type,
             diff_category,
-            level,
             achievement_x10000,
             score_rank,
             fc,
@@ -98,14 +96,9 @@ pub(crate) async fn get_today(
     .fetch_all(&state.db_pool)
     .await?;
 
-    let song_info_client = SongInfoClient::new(
-        state.config.song_info_server_url.clone(),
-        state.http_client.clone(),
-    );
-
     let mut responses = Vec::with_capacity(rows.len());
     for record in rows {
-        responses.push(play_record_response_from_record(record, &song_info_client).await?);
+        responses.push(play_record_response_from_record(record)?);
     }
 
     Ok(Json(responses))

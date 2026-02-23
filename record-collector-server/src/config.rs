@@ -7,7 +7,6 @@ pub(crate) struct RecordCollectorConfig {
     pub(crate) port: u16,
     pub(crate) database_url: String,
     pub(crate) data_dir: String,
-    pub(crate) song_info_server_url: String,
 }
 
 impl RecordCollectorConfig {
@@ -22,8 +21,6 @@ impl RecordCollectorConfig {
         let database_url =
             std::env::var("DATABASE_URL").wrap_err("missing env var: DATABASE_URL")?;
         let data_dir = std::env::var("DATA_DIR").unwrap_or_else(|_| "data".to_string());
-        let song_info_server_url = std::env::var("SONG_INFO_SERVER_URL")
-            .unwrap_or_else(|_| "http://localhost:3001".to_string());
 
         Ok(Self {
             sega_id,
@@ -31,7 +28,6 @@ impl RecordCollectorConfig {
             port,
             database_url,
             data_dir,
-            song_info_server_url,
         })
     }
 }

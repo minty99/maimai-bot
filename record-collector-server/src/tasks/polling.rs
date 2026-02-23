@@ -85,9 +85,7 @@ async fn poll_and_sync_if_needed(app_state: &AppState) -> Result<bool> {
             .wrap_err("classify first plays")?;
     }
 
-    let scraped_at = unix_timestamp();
-
-    upsert_playlogs(&app_state.db_pool, scraped_at, &entries)
+    upsert_playlogs(&app_state.db_pool, &entries)
         .await
         .wrap_err("upsert playlogs")?;
 

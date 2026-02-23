@@ -1,6 +1,5 @@
 use crate::config::RecordCollectorConfig;
 use crate::http_client::MaimaiClient;
-use reqwest::Client;
 use sqlx::SqlitePool;
 use std::path::PathBuf;
 
@@ -8,7 +7,6 @@ use std::path::PathBuf;
 pub(crate) struct AppState {
     pub(crate) db_pool: SqlitePool,
     pub(crate) config: RecordCollectorConfig,
-    pub(crate) http_client: Client,
 }
 
 impl AppState {

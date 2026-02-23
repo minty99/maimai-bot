@@ -77,14 +77,13 @@ pub(crate) async fn startup_sync(
 
         let entries =
             annotate_recent_entries_with_play_count(entries, player_data.total_play_count);
-        let scraped_at = unix_timestamp();
         let count_total = entries.len();
         let count_with_idx = entries
             .iter()
             .filter(|e| e.played_at_unixtime.is_some())
             .count();
 
-        upsert_playlogs(db_pool, scraped_at, &entries)
+        upsert_playlogs(db_pool, &entries)
             .await
             .wrap_err("upsert playlogs")?;
 
@@ -140,7 +139,6 @@ async fn fetch_recent_entries_logged_in(client: &MaimaiClient) -> Result<Vec<Par
 async fn rebuild_scores_with_client(pool: &SqlitePool, client: &MaimaiClient) -> Result<usize> {
     clear_scores(pool).await.wrap_err("clear scores")?;
 
-    let scraped_at = unix_timestamp();
     let mut all = Vec::new();
 
     for diff in 0u8..=4 {
@@ -152,9 +150,7 @@ async fn rebuild_scores_with_client(pool: &SqlitePool, client: &MaimaiClient) ->
     }
 
     let count = all.len();
-    upsert_scores(pool, scraped_at, &all)
-        .await
-        .wrap_err("upsert scores")?;
+    upsert_scores(pool, &all).await.wrap_err("upsert scores")?;
 
     Ok(count)
 }

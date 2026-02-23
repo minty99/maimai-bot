@@ -7,7 +7,6 @@ use serde::Deserialize;
 use crate::{
     error::Result,
     routes::responses::{play_record_response_from_record, PlayRecordResponse},
-    song_info_client::SongInfoClient,
     state::AppState,
 };
 use models::PlayRecord;
@@ -29,7 +28,7 @@ pub(crate) async fn get_recent(
     let limit = params.limit.clamp(1, 500);
 
     let rows = sqlx::query_as::<_, PlayRecord>(
-        "SELECT played_at_unixtime, played_at, track, title, chart_type, diff_category, level, 
+        "SELECT played_at_unixtime, played_at, track, title, chart_type, diff_category, 
                 achievement_x10000, score_rank, fc, sync, dx_score, dx_score_max, 
                 credit_play_count, achievement_new_record, first_play
          FROM playlogs
@@ -40,14 +39,9 @@ pub(crate) async fn get_recent(
     .fetch_all(&state.db_pool)
     .await?;
 
-    let song_info_client = SongInfoClient::new(
-        state.config.song_info_server_url.clone(),
-        state.http_client.clone(),
-    );
-
     let mut responses = Vec::with_capacity(rows.len());
     for record in rows {
-        responses.push(play_record_response_from_record(record, &song_info_client).await?);
+        responses.push(play_record_response_from_record(record)?);
     }
 
     Ok(Json(responses))

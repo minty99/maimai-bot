@@ -33,13 +33,12 @@ pub(crate) async fn migrate(pool: &SqlitePool) -> eyre::Result<()> {
 
 pub(crate) async fn upsert_scores(
     pool: &SqlitePool,
-    scraped_at: i64,
     entries: &[ParsedScoreEntry],
 ) -> eyre::Result<()> {
     let mut tx = pool.begin().await.wrap_err("begin transaction")?;
 
     for entry in entries {
-        upsert_score(&mut tx, scraped_at, entry).await?;
+        upsert_score(&mut tx, entry).await?;
     }
 
     tx.commit().await.wrap_err("commit transaction")?;
@@ -48,7 +47,6 @@ pub(crate) async fn upsert_scores(
 
 pub(crate) async fn upsert_playlogs(
     pool: &SqlitePool,
-    scraped_at: i64,
     entries: &[ParsedPlayRecord],
 ) -> eyre::Result<()> {
     let mut tx = pool.begin().await.wrap_err("begin transaction")?;
@@ -57,7 +55,7 @@ pub(crate) async fn upsert_playlogs(
         let Some(played_at_unixtime) = entry.played_at_unixtime else {
             continue;
         };
-        insert_playlog(&mut tx, scraped_at, played_at_unixtime, entry).await?;
+        insert_playlog(&mut tx, played_at_unixtime, entry).await?;
     }
 
     tx.commit().await.wrap_err("commit transaction")?;
@@ -112,7 +110,6 @@ ON CONFLICT(key) DO UPDATE SET
 
 async fn upsert_score(
     tx: &mut sqlx::Transaction<'_, Sqlite>,
-    scraped_at: i64,
     entry: &ParsedScoreEntry,
 ) -> eyre::Result<()> {
     let achievement_x10000 = percent_to_x10000(entry.achievement_percent);
@@ -120,36 +117,29 @@ async fn upsert_score(
     sqlx::query(
         r#"
 		INSERT INTO scores (
-		  title, chart_type, diff_category, level,
+		  title, chart_type, diff_category,
 		  achievement_x10000, rank, fc, sync,
-		  dx_score, dx_score_max,
-		  source_idx, scraped_at
+		  dx_score, dx_score_max
 		)
-		VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)
+		VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)
 		ON CONFLICT(title, chart_type, diff_category) DO UPDATE SET
-		  level = excluded.level,
 		  achievement_x10000 = excluded.achievement_x10000,
 		  rank = excluded.rank,
 		  fc = excluded.fc,
 		  sync = excluded.sync,
 		  dx_score = excluded.dx_score,
-		  dx_score_max = excluded.dx_score_max,
-		  source_idx = excluded.source_idx,
-		  scraped_at = excluded.scraped_at
+		  dx_score_max = excluded.dx_score_max
 		"#,
     )
     .bind(&entry.title)
     .bind(chart_type_str(entry.chart_type))
     .bind(entry.diff_category.as_str())
-    .bind(&entry.level)
     .bind(achievement_x10000)
     .bind(entry.rank.map(|r| r.as_str()))
     .bind(entry.fc.map(|v| v.as_str()))
     .bind(entry.sync.map(|v| v.as_str()))
     .bind(entry.dx_score)
     .bind(entry.dx_score_max)
-    .bind(entry.source_idx.as_deref())
-    .bind(scraped_at)
     .execute(&mut **tx)
     .await
     .wrap_err("upsert scores")?;
@@ -158,7 +148,6 @@ async fn upsert_score(
 
 async fn insert_playlog(
     tx: &mut sqlx::Transaction<'_, Sqlite>,
-    scraped_at: i64,
     played_at_unixtime: i64,
     entry: &ParsedPlayRecord,
 ) -> eyre::Result<()> {
@@ -171,13 +160,12 @@ async fn insert_playlog(
 	INSERT INTO playlogs (
 	  played_at_unixtime,
 	  played_at, track, credit_play_count,
-	  title, chart_type, diff_category, level,
+	  title, chart_type, diff_category,
 	  achievement_x10000, achievement_new_record, first_play,
 	  score_rank, fc, sync,
-	  dx_score, dx_score_max,
-	  scraped_at
+	  dx_score, dx_score_max
 	)
-	VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17)
+	VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16)
 	ON CONFLICT(played_at_unixtime) DO NOTHING
 	"#,
     )
@@ -188,7 +176,6 @@ async fn insert_playlog(
     .bind(&entry.title)
     .bind(chart_type_str(entry.chart_type))
     .bind(entry.diff_category.map(|d| d.as_str().to_string()))
-    .bind(entry.level.as_deref())
     .bind(achievement_x10000)
     .bind(achievement_new_record)
     .bind(first_play)
@@ -197,7 +184,6 @@ async fn insert_playlog(
     .bind(entry.sync.map(|v| v.as_str()))
     .bind(entry.dx_score)
     .bind(entry.dx_score_max)
-    .bind(scraped_at)
     .execute(&mut **tx)
     .await
     .wrap_err("insert playlogs")?;

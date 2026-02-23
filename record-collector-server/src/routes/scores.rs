@@ -7,7 +7,6 @@ use serde::Deserialize;
 use crate::{
     error::Result,
     routes::responses::{score_response_from_entry, ScoreResponse},
-    song_info_client::SongInfoClient,
     state::AppState,
 };
 use models::ScoreEntry;
@@ -24,7 +23,7 @@ pub(crate) async fn search_scores(
     let search_term = format!("%{}%", params.q);
 
     let rows = sqlx::query_as::<_, ScoreEntry>(
-        "SELECT title, chart_type, diff_category, level, achievement_x10000, rank, fc, sync, dx_score, dx_score_max, source_idx
+        "SELECT title, chart_type, diff_category, achievement_x10000, rank, fc, sync, dx_score, dx_score_max
          FROM scores
          WHERE title LIKE ? AND achievement_x10000 IS NOT NULL
          ORDER BY title
@@ -34,14 +33,9 @@ pub(crate) async fn search_scores(
     .fetch_all(&state.db_pool)
     .await?;
 
-    let song_info_client = SongInfoClient::new(
-        state.config.song_info_server_url.clone(),
-        state.http_client.clone(),
-    );
-
     let mut responses = Vec::with_capacity(rows.len());
     for entry in rows {
-        responses.push(score_response_from_entry(entry, &song_info_client).await?);
+        responses.push(score_response_from_entry(entry)?);
     }
 
     Ok(Json(responses))
@@ -52,7 +46,7 @@ pub(crate) async fn get_score(
     Path((title, chart_type, diff_category)): Path<(String, String, String)>,
 ) -> Result<Json<ScoreResponse>> {
     let score = sqlx::query_as::<_, ScoreEntry>(
-        "SELECT title, chart_type, diff_category, level, achievement_x10000, rank, fc, sync, dx_score, dx_score_max, source_idx
+        "SELECT title, chart_type, diff_category, achievement_x10000, rank, fc, sync, dx_score, dx_score_max
          FROM scores
          WHERE title = ? AND chart_type = ? AND diff_category = ? AND achievement_x10000 IS NOT NULL"
     )
@@ -63,13 +57,7 @@ pub(crate) async fn get_score(
     .await?;
 
     if let Some(entry) = score {
-        let song_info_client = SongInfoClient::new(
-            state.config.song_info_server_url.clone(),
-            state.http_client.clone(),
-        );
-        return Ok(Json(
-            score_response_from_entry(entry, &song_info_client).await?,
-        ));
+        return Ok(Json(score_response_from_entry(entry)?));
     }
 
     Err(crate::error::AppError::NotFound(format!(
@@ -82,7 +70,7 @@ pub(crate) async fn get_all_rated_scores(
     State(state): State<AppState>,
 ) -> Result<Json<Vec<ScoreResponse>>> {
     let rows = sqlx::query_as::<_, ScoreEntry>(
-        "SELECT title, chart_type, diff_category, level, achievement_x10000, rank, fc, sync, dx_score, dx_score_max, source_idx
+        "SELECT title, chart_type, diff_category, achievement_x10000, rank, fc, sync, dx_score, dx_score_max
          FROM scores
          WHERE achievement_x10000 IS NOT NULL
          ORDER BY title, chart_type, diff_category"
@@ -90,14 +78,9 @@ pub(crate) async fn get_all_rated_scores(
     .fetch_all(&state.db_pool)
     .await?;
 
-    let song_info_client = SongInfoClient::new(
-        state.config.song_info_server_url.clone(),
-        state.http_client.clone(),
-    );
-
     let mut responses = Vec::with_capacity(rows.len());
     for entry in rows {
-        responses.push(score_response_from_entry(entry, &song_info_client).await?);
+        responses.push(score_response_from_entry(entry)?);
     }
 
     Ok(Json(responses))
