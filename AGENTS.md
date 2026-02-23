@@ -77,3 +77,8 @@ The goal of this file is to keep future changes consistent with the current impl
 - **Co-author trailer required**: every commit message must include an agent co-author trailer in the commit body.
   - OpenAI agents: `Co-authored-by: <Agent Model Name> <noreply@openai.com>` (e.g., `Co-authored-by: GPT-5.3 Codex <noreply@openai.com>`)
   - Anthropic agents: `Co-authored-by: <Agent Model Name> <noreply@anthropic.com>` (e.g., `Co-authored-by: Claude Sonnet 4.5 <noreply@anthropic.com>`)
+- **No escaped newlines in commit body**: never write literal `\n` in commit messages. Use real line breaks only.
+  - Prefer `git commit -m "<subject>" -m "<body line 1>" -m "<body line 2>"` (multiple `-m`) or `git commit` with an editor.
+- **Trailer recognition check (mandatory after each commit)**:
+  - `git log -1 --format='%B'` must show a standalone `Co-authored-by:` trailer line.
+  - If the trailer is missing or `\n` appears literally, fix immediately with `git commit --amend -m ...` (using real newlines).
