@@ -1,21 +1,11 @@
 use serde::{Deserialize, Serialize};
+use std::fmt;
 use strum::{Display, EnumIter, EnumString, IntoEnumIterator};
 
 pub mod config;
 
 #[derive(
-    Debug,
-    Clone,
-    Copy,
-    PartialEq,
-    Eq,
-    PartialOrd,
-    Ord,
-    Hash,
-    Serialize,
-    Deserialize,
-    EnumString,
-    Display,
+    Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize, EnumString,
 )]
 #[repr(u8)]
 pub enum ChartType {
@@ -53,6 +43,12 @@ impl ChartType {
     }
 }
 
+impl fmt::Display for ChartType {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(self.as_str())
+    }
+}
+
 #[derive(
     Debug,
     Clone,
@@ -66,7 +62,6 @@ impl ChartType {
     Deserialize,
     EnumString,
     EnumIter,
-    Display,
 )]
 #[repr(u8)]
 pub enum DifficultyCategory {
@@ -141,6 +136,12 @@ impl DifficultyCategory {
             "ReMAS" => Some(Self::ReMaster),
             _ => None,
         }
+    }
+}
+
+impl fmt::Display for DifficultyCategory {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(self.as_str())
     }
 }
 
@@ -225,7 +226,7 @@ impl MaimaiVersion {
 
 #[cfg(test)]
 mod maimai_version_tests {
-    use super::MaimaiVersion;
+    use super::{ChartType, DifficultyCategory, MaimaiVersion};
     use strum::IntoEnumIterator;
 
     #[test]
@@ -244,6 +245,17 @@ mod maimai_version_tests {
         for version in MaimaiVersion::iter() {
             assert_eq!(MaimaiVersion::from_name(version.as_str()), Some(version));
         }
+    }
+
+    #[test]
+    fn chart_and_difficulty_display_are_canonical() {
+        assert_eq!(ChartType::Std.to_string(), "STD");
+        assert_eq!(ChartType::Dx.to_string(), "DX");
+        assert_eq!(DifficultyCategory::Basic.to_string(), "BASIC");
+        assert_eq!(DifficultyCategory::Advanced.to_string(), "ADVANCED");
+        assert_eq!(DifficultyCategory::Expert.to_string(), "EXPERT");
+        assert_eq!(DifficultyCategory::Master.to_string(), "MASTER");
+        assert_eq!(DifficultyCategory::ReMaster.to_string(), "Re:MASTER");
     }
 }
 
