@@ -71,3 +71,20 @@ fn parse_scores_diff3_fixture() {
 fn parse_scores_diff4_fixture() {
     run_fixture_test(4, "diff4_remaster.html");
 }
+
+#[test]
+fn parse_scores_intl_version0_diff0_fixture() {
+    let html = std::fs::read_to_string(fixture_path("version0_maimai_diff0.html")).unwrap();
+    let entries = parse_scores_html(&html, 0).unwrap();
+
+    assert_eq!(
+        entries.len(),
+        43,
+        "expected maimai version song count changed"
+    );
+    assert!(entries
+        .iter()
+        .all(|e| e.diff_category == DifficultyCategory::Basic));
+    assert!(entries.iter().all(|e| !e.title.trim().is_empty()));
+    assert!(entries.iter().all(|e| !e.level.trim().is_empty()));
+}
