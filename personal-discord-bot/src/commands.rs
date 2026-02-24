@@ -1,7 +1,6 @@
 use eyre::{Result, WrapErr};
 use poise::serenity_prelude as serenity;
 use poise::CreateReply;
-use std::time::Duration;
 use time::{Duration as TimeDuration, OffsetDateTime, UtcOffset};
 
 use crate::embeds::{
@@ -13,27 +12,6 @@ use crate::BotData;
 
 type Context<'a> = poise::Context<'a, BotData, Box<dyn std::error::Error + Send + Sync>>;
 type Error = Box<dyn std::error::Error + Send + Sync>;
-
-fn normalize_for_match(s: &str) -> String {
-    s.to_lowercase()
-        .chars()
-        .filter(|c| c.is_alphanumeric())
-        .collect()
-}
-
-fn top_title_matches(query: &str, titles: &[String], limit: usize) -> Vec<String> {
-    let query_norm = normalize_for_match(query);
-    let mut scored: Vec<_> = titles
-        .iter()
-        .map(|title| {
-            let title_norm = normalize_for_match(title);
-            let score = strsim::jaro_winkler(&query_norm, &title_norm);
-            (title.clone(), score)
-        })
-        .collect();
-    scored.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
-    scored.into_iter().take(limit).map(|(t, _)| t).collect()
-}
 
 /// Get song records by song title or key
 #[poise::command(slash_command, rename = "mai-score")]
@@ -59,101 +37,18 @@ pub(crate) async fn mai_score(
         return Ok(());
     }
 
-    let titles: Vec<String> = scores.iter().map(|s| s.title.clone()).collect();
-    let search_norm = normalize_for_match(&search);
-    let exact_title = titles
+    let matched_title = scores
         .iter()
-        .find(|t| normalize_for_match(t) == search_norm)
-        .cloned();
-
-    let matched_title = if let Some(exact) = exact_title {
-        exact
-    } else {
-        let candidates = top_title_matches(&search, &titles, 5);
-        if candidates.is_empty() {
-            ctx.send(
-                CreateReply::default()
-                    .ephemeral(true)
-                    .embed(embed_base("No records found").description("No titles to match.")),
-            )
-            .await?;
-            return Ok(());
-        }
-
-        let uuid = ctx.id();
-        let button_prefix = format!("{uuid}:score_pick:");
-
-        let mut buttons = Vec::new();
-        let mut lines = Vec::new();
-        for (i, title) in candidates.iter().enumerate() {
-            let custom_id = format!("{button_prefix}{i}");
-            buttons.push(
-                serenity::CreateButton::new(custom_id)
-                    .style(serenity::ButtonStyle::Secondary)
-                    .label(format!("{}", i + 1)),
-            );
-            lines.push(format!("`{}` {}", i + 1, title));
-        }
-
-        let reply = ctx
-            .send(
-                CreateReply::default()
-                    .embed(
-                        embed_base("No exact match")
-                            .description(format!("Query: `{search}`\n\n{}", lines.join("\n"))),
-                    )
-                    .components(vec![serenity::CreateActionRow::Buttons(buttons)]),
-            )
-            .await?;
-
-        let interaction = serenity::ComponentInteractionCollector::new(ctx)
-            .author_id(ctx.author().id)
-            .channel_id(ctx.channel_id())
-            .timeout(Duration::from_secs(60))
-            .filter({
-                let button_prefix = button_prefix.clone();
-                move |mci| mci.data.custom_id.starts_with(&button_prefix)
-            })
-            .await;
-
-        let Some(mci) = interaction else {
-            if let Ok(msg) = reply.message().await {
-                let mut msg = msg.into_owned();
-                msg.edit(
-                    ctx,
-                    serenity::EditMessage::new()
-                        .embed(embed_base("No exact match").description(
-                            "Timed out. Re-run `/mai-score <title>` with one of the suggested titles.",
-                        ))
-                        .components(Vec::new()),
-                )
-                .await?;
-            }
-            return Ok(());
-        };
-
-        mci.create_response(ctx, serenity::CreateInteractionResponse::Acknowledge)
-            .await?;
-
-        let idx = mci
-            .data
-            .custom_id
-            .strip_prefix(&button_prefix)
-            .and_then(|s| s.parse::<usize>().ok());
-
-        let Some(idx) = idx else {
-            return Ok(());
-        };
-        if idx >= candidates.len() {
-            return Ok(());
-        }
-
-        if let Ok(msg) = reply.message().await {
-            let msg = msg.into_owned();
-            let _ = msg.delete(ctx).await;
-        }
-
-        candidates[idx].clone()
+        .find(|score| score.title.trim() == search.trim())
+        .map(|score| score.title.clone());
+    let Some(matched_title) = matched_title else {
+        ctx.send(
+            CreateReply::default()
+                .ephemeral(true)
+                .embed(embed_base("No records found").description("No titles to match.")),
+        )
+        .await?;
+        return Ok(());
     };
 
     let detailed_scores = match ctx
