@@ -88,3 +88,20 @@ fn parse_scores_intl_version0_diff0_fixture() {
     assert!(entries.iter().all(|e| !e.title.trim().is_empty()));
     assert!(entries.iter().all(|e| !e.level.trim().is_empty()));
 }
+
+#[test]
+fn parse_scores_universe_fixture_technicians_high_is_std() {
+    let html = std::fs::read_to_string(fixture_path("version17_universe_diff0.html")).unwrap();
+    let entries = parse_scores_html(&html, 0).unwrap();
+
+    let technicians_high = entries
+        .iter()
+        .filter(|e| e.title == "Technicians High")
+        .collect::<Vec<_>>();
+    assert_eq!(
+        technicians_high.len(),
+        1,
+        "expected a single Technicians High entry"
+    );
+    assert_eq!(technicians_high[0].chart_type, ChartType::Std);
+}
