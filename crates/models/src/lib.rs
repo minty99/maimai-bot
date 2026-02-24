@@ -661,8 +661,6 @@ pub enum SongBucket {
 #[derive(Debug, Clone)]
 pub struct SongDataIndex {
     map: HashMap<SongKey, f32>,
-    song_version: HashMap<String, String>,
-    song_image_name: HashMap<String, String>,
 }
 
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
@@ -680,8 +678,6 @@ pub struct SongDataRoot {
 #[derive(Debug, Serialize, Deserialize)]
 pub struct SongDataSong {
     pub title: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub version: Option<String>,
     #[serde(rename = "imageName", skip_serializing_if = "Option::is_none")]
     pub image_name: Option<String>,
     pub sheets: Vec<SongDataSheet>,
@@ -693,6 +689,8 @@ pub struct SongDataSheet {
     pub sheet_type: String,
     pub difficulty: String,
     pub level: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub version: Option<String>,
     #[serde(rename = "internalLevel", skip_serializing_if = "Option::is_none")]
     pub internal_level: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -703,8 +701,6 @@ impl SongDataIndex {
     pub fn empty() -> Self {
         Self {
             map: HashMap::new(),
-            song_version: HashMap::new(),
-            song_image_name: HashMap::new(),
         }
     }
 
@@ -722,62 +718,22 @@ impl SongDataIndex {
         self.map.get(&key).copied()
     }
 
-    pub fn bucket(&self, title: &str) -> Option<SongBucket> {
-        let title_norm = normalize_title(title);
-        let version = self.song_version.get(&title_norm)?;
-        if is_new_version(version) {
-            Some(SongBucket::New)
-        } else {
-            Some(SongBucket::Old)
-        }
-    }
-
-    pub fn image_name(&self, title: &str) -> Option<&str> {
-        let title_norm = normalize_title(title);
-        self.song_image_name.get(&title_norm).map(|s| s.as_str())
-    }
-
-    pub fn version(&self, title: &str) -> Option<&str> {
-        let title_norm = normalize_title(title);
-        self.song_version.get(&title_norm).map(|s| s.as_str())
-    }
-
     pub fn from_root(root: SongDataRoot) -> Self {
         let mut map = HashMap::new();
-        let mut song_version = HashMap::new();
-        let mut song_image_name = HashMap::new();
 
         for song in root.songs {
             let title_norm = normalize_title(&song.title);
 
-            if let Some(version) = song.version.as_deref() {
-                let version = version.trim();
-                if !version.is_empty() {
-                    song_version
-                        .entry(title_norm.clone())
-                        .or_insert_with(|| version.to_string());
-                }
-            }
-
-            if let Some(image_name) = song.image_name.as_deref() {
-                let image_name = image_name.trim();
-                if !image_name.is_empty() {
-                    song_image_name
-                        .entry(title_norm.clone())
-                        .or_insert_with(|| image_name.to_string());
-                }
-            }
-
             for sheet in song.sheets {
+                let Some(chart_type) = ChartType::from_lowercase(&sheet.sheet_type) else {
+                    continue;
+                };
+
                 let Some(internal_str) = &sheet.internal_level else {
                     continue;
                 };
 
                 let Ok(internal_value) = internal_str.trim().parse::<f32>() else {
-                    continue;
-                };
-
-                let Some(chart_type) = ChartType::from_lowercase(&sheet.sheet_type) else {
                     continue;
                 };
                 let Some(diff_category) = DifficultyCategory::from_lowercase(&sheet.difficulty)
@@ -796,11 +752,7 @@ impl SongDataIndex {
             }
         }
 
-        Self {
-            map,
-            song_version,
-            song_image_name,
-        }
+        Self { map }
     }
 }
 
@@ -809,8 +761,4 @@ fn normalize_title(s: &str) -> String {
         .chars()
         .filter(|c| !c.is_whitespace())
         .collect::<String>()
-}
-
-fn is_new_version(version: &str) -> bool {
-    matches!(version, "PRiSM PLUS" | "CiRCLE")
 }

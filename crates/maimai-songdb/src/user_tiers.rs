@@ -629,13 +629,13 @@ mod tests {
         let root = SongDataRoot {
             songs: vec![SongDataSong {
                 title: "Song A".to_string(),
-                version: None,
                 image_name: Some("a.png".to_string()),
                 sheets: vec![
                     SongDataSheet {
                         sheet_type: "std".to_string(),
                         difficulty: "expert".to_string(),
                         level: "13".to_string(),
+                        version: None,
                         internal_level: Some("13.0".to_string()),
                         user_level: None,
                     },
@@ -643,6 +643,7 @@ mod tests {
                         sheet_type: "std".to_string(),
                         difficulty: "master".to_string(),
                         level: "13+".to_string(),
+                        version: None,
                         internal_level: Some("13.0".to_string()),
                         user_level: None,
                     },

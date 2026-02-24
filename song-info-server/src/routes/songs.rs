@@ -16,6 +16,7 @@ pub(crate) struct SongSheetResponse {
     chart_type: ChartType,
     difficulty: DifficultyCategory,
     level: String,
+    version: Option<String>,
     internal_level: Option<f32>,
     user_level: Option<String>,
 }
@@ -39,7 +40,6 @@ pub(crate) struct SongSelectionStatsResponse {
 #[derive(Serialize)]
 pub(crate) struct SongResponse {
     title: String,
-    version: Option<String>,
     image_name: Option<String>,
     sheets: Vec<SongSheetResponse>,
     selection_stats: SongSelectionStatsResponse,
@@ -82,11 +82,6 @@ pub(crate) async fn random_song_by_level(
 
     for song in song_data_root.iter() {
         let mut song_has_sheet_in_level_range = false;
-        let song_version_enum = song.version.as_deref().and_then(MaimaiVersion::from_name);
-        let song_passes_version_filter = include_versions.as_ref().is_none_or(|allowed| {
-            song_version_enum.is_some_and(|version| allowed.contains(&version))
-        });
-
         let mut sheets = Vec::new();
 
         for sheet in &song.sheets {
@@ -112,7 +107,16 @@ pub(crate) async fn random_song_by_level(
                 continue;
             };
 
-            if !song_passes_version_filter {
+            let sheet_version = sheet
+                .version
+                .clone()
+                .map(|v| v.trim().to_string())
+                .filter(|v| !v.is_empty());
+            let sheet_version_enum = sheet_version.as_deref().and_then(MaimaiVersion::from_name);
+
+            if include_versions.as_ref().is_some_and(|allowed| {
+                sheet_version_enum.is_none_or(|version| !allowed.contains(&version))
+            }) {
                 continue;
             }
 
@@ -134,6 +138,7 @@ pub(crate) async fn random_song_by_level(
                 chart_type,
                 difficulty,
                 level: sheet.level.clone(),
+                version: sheet_version,
                 internal_level,
                 user_level: sheet.user_level.clone(),
             });
@@ -146,7 +151,6 @@ pub(crate) async fn random_song_by_level(
         if !sheets.is_empty() {
             candidates.push(SongResponse {
                 title: song.title.clone(),
-                version: song.version.clone(),
                 image_name: song.image_name.clone(),
                 sheets,
                 selection_stats: SongSelectionStatsResponse {
@@ -183,23 +187,33 @@ pub(crate) async fn list_versions(
         .read()
         .map_err(|_| AppError::IoError("Failed to read song data".to_string()))?;
 
-    let mut counts: HashMap<MaimaiVersion, usize> = HashMap::new();
+    let mut version_song_titles: HashMap<MaimaiVersion, HashSet<String>> = HashMap::new();
     for song in song_data_root.iter() {
-        let Some(version_name) = song.version.as_deref() else {
-            continue;
-        };
-        let Some(version) = MaimaiVersion::from_name(version_name) else {
-            continue;
-        };
+        let mut seen_versions_for_song = HashSet::new();
+        for sheet in &song.sheets {
+            let version_name = sheet.version.as_deref();
+            let Some(version_name) = version_name else {
+                continue;
+            };
+            let Some(version) = MaimaiVersion::from_name(version_name) else {
+                continue;
+            };
+            seen_versions_for_song.insert(version);
+        }
 
-        *counts.entry(version).or_insert(0) += 1;
+        for version in seen_versions_for_song {
+            version_song_titles
+                .entry(version)
+                .or_default()
+                .insert(song.title.clone());
+        }
     }
 
     let versions = MaimaiVersion::iter()
         .map(|version| SongVersionResponse {
             version_index: version.as_index(),
             version_name: version.as_str().to_string(),
-            song_count: counts.get(&version).copied().unwrap_or(0),
+            song_count: version_song_titles.get(&version).map_or(0, HashSet::len),
         })
         .collect();
 
@@ -357,8 +371,13 @@ pub(crate) async fn get_song_metadata(
                         .internal_level
                         .as_deref()
                         .and_then(|value| value.trim().parse::<f32>().ok());
+                    let version = sheet
+                        .version
+                        .clone()
+                        .map(|v| v.trim().to_string())
+                        .filter(|v| !v.is_empty());
 
-                    let bucket = song.version.as_ref().map(|v| {
+                    let bucket = version.as_ref().map(|v| {
                         if is_new_version(v) {
                             "New".to_string()
                         } else {
@@ -371,7 +390,7 @@ pub(crate) async fn get_song_metadata(
                         internal_level,
                         user_level: sheet.user_level.clone(),
                         image_name: song.image_name.clone(),
-                        version: song.version.clone(),
+                        version,
                         bucket,
                     }));
                 }

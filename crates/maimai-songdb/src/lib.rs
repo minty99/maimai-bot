@@ -11,9 +11,11 @@ use std::fmt;
 use std::path::Path;
 
 mod internal_levels;
+mod sheet_versions;
 mod user_tiers;
 
 use internal_levels::{InternalLevelKey, InternalLevelRow};
+use sheet_versions::SheetVersionMap;
 use user_tiers::{UserTierKey, UserTierValue};
 
 pub const SONG_DATA_SUBDIR: &str = "song_data";
@@ -75,7 +77,6 @@ struct SongRow {
     artist: Option<String>,
     image_name: String,
     image_url: String,
-    version: Option<String>,
     release_date: Option<String>,
     sort_order: Option<i64>,
     is_new: bool,
@@ -145,6 +146,7 @@ impl SongDbConfig {
 pub struct SongDatabase {
     songs: Vec<SongRow>,
     sheets: Vec<SheetRow>,
+    sheet_versions: SheetVersionMap,
     internal_levels: HashMap<InternalLevelKey, InternalLevelRow>,
     user_tiers: HashMap<UserTierKey, UserTierValue>,
 }
@@ -171,6 +173,14 @@ impl SongDatabase {
             sheets.len()
         );
 
+        tracing::info!("Fetching INTL sheet versions...");
+        let sheet_versions = sheet_versions::fetch_intl_sheet_versions(
+            &config.intl_sega_id,
+            &config.intl_sega_password,
+        )
+        .await
+        .wrap_err("fetch INTL sheet versions")?;
+
         tracing::info!("Fetching internal levels...");
         let internal_level_cache_dir = song_data_dir.join("internal_level");
         let internal_levels = internal_levels::fetch_internal_levels(
@@ -186,7 +196,8 @@ impl SongDatabase {
         download_cover_images(&client, &songs, &cover_dir).await?;
 
         tracing::info!("Fetching user tiers...");
-        let seed_data_root = build_data_root(&songs, &sheets, &internal_levels, None);
+        let seed_data_root =
+            build_data_root(&songs, &sheets, &sheet_versions, &internal_levels, None);
         let user_tiers = user_tiers::fetch_user_tier_map_for_default_levels(
             &client,
             &config.google_api_key,
@@ -198,6 +209,7 @@ impl SongDatabase {
         Ok(SongDatabase {
             songs,
             sheets,
+            sheet_versions,
             internal_levels,
             user_tiers,
         })
@@ -207,6 +219,7 @@ impl SongDatabase {
         Ok(build_data_root(
             &self.songs,
             &self.sheets,
+            &self.sheet_versions,
             &self.internal_levels,
             Some(&self.user_tiers),
         ))
@@ -221,6 +234,7 @@ impl SongDatabase {
 fn build_data_root(
     songs: &[SongRow],
     sheets: &[SheetRow],
+    sheet_versions: &SheetVersionMap,
     internal_levels: &HashMap<InternalLevelKey, InternalLevelRow>,
     user_tiers: Option<&HashMap<UserTierKey, UserTierValue>>,
 ) -> SongDataRoot {
@@ -233,7 +247,6 @@ fn build_data_root(
             song.song_id.clone(),
             SongDataSong {
                 title: song.title.clone(),
-                version: song.version.clone(),
                 image_name: Some(song.image_name.clone()),
                 sheets: Vec::new(),
             },
@@ -278,6 +291,10 @@ fn build_data_root(
             sheet_type: sheet.sheet_type.as_lowercase().to_string(),
             difficulty: sheet.difficulty.as_lowercase().to_string(),
             level: sheet.level.clone(),
+            version: sheet_versions
+                .get(&sheet.song_id)
+                .and_then(|versions| versions.get(&sheet.sheet_type))
+                .cloned(),
             internal_level,
             user_level: user_tier.map(|v| v.grade.clone()),
         });
@@ -343,12 +360,6 @@ fn extract_song(raw_song: &RawSong) -> SongRow {
         raw_song.image_url.trim_start_matches('/')
     );
     let image_name = format!("{}.png", sha256_hex(&image_url));
-    let version_id = raw_song
-        .version
-        .get(0..3)
-        .and_then(|prefix| prefix.parse::<i32>().ok())
-        .unwrap_or(0);
-    let version = version_from_version_id(version_id).map(str::to_string);
     let release_date = parse_release_date(raw_song.release.as_deref());
     let sort_order = raw_song.version.parse::<i64>().ok();
 
@@ -366,7 +377,6 @@ fn extract_song(raw_song: &RawSong) -> SongRow {
         artist,
         image_name,
         image_url,
-        version,
         release_date,
         sort_order,
         is_new: is_truthy(&raw_song.date),
@@ -486,39 +496,6 @@ fn extract_comment(raw_song: &RawSong) -> Option<String> {
         comment = format!("【🤝バディ】{comment}");
     }
     Some(comment)
-}
-
-fn version_from_version_id(version_id: i32) -> Option<&'static str> {
-    match version_id {
-        0 => None,
-        100 => Some("maimai"),
-        110 => Some("maimai PLUS"),
-        120 => Some("GreeN"),
-        130 => Some("GreeN PLUS"),
-        140 => Some("ORANGE"),
-        150 => Some("ORANGE PLUS"),
-        160 => Some("PiNK"),
-        170 => Some("PiNK PLUS"),
-        180 => Some("MURASAKi"),
-        185 => Some("MURASAKi PLUS"),
-        190 => Some("MiLK"),
-        195 => Some("MiLK PLUS"),
-        199 => Some("FiNALE"),
-        200 => Some("maimaiでらっくす"),
-        205 => Some("maimaiでらっくす PLUS"),
-        210 => Some("Splash"),
-        215 => Some("Splash PLUS"),
-        220 => Some("UNiVERSE"),
-        225 => Some("UNiVERSE PLUS"),
-        230 => Some("FESTiVAL"),
-        235 => Some("FESTiVAL PLUS"),
-        240 => Some("BUDDiES"),
-        245 => Some("BUDDiES PLUS"),
-        250 => Some("PRiSM"),
-        255 => Some("PRiSM PLUS"),
-        260 => Some("CiRCLE"),
-        _ => None,
-    }
 }
 
 fn parse_release_date(value: Option<&str>) -> Option<String> {
@@ -732,21 +709,6 @@ mod tests {
 
         raw_song.title = "Bad Apple!! feat nomico".to_string();
         assert_eq!(derive_song_id(&raw_song), "Bad Apple!! feat.nomico");
-    }
-
-    #[test]
-    fn maps_version_prefix_to_version_name() {
-        let version_id = "24001"
-            .get(0..3)
-            .and_then(|prefix| prefix.parse::<i32>().ok());
-        let version = version_id.and_then(version_from_version_id);
-        assert_eq!(version, Some("BUDDiES"));
-
-        let version_id = "25599"
-            .get(0..3)
-            .and_then(|prefix| prefix.parse::<i32>().ok());
-        let version = version_id.and_then(version_from_version_id);
-        assert_eq!(version, Some("PRiSM PLUS"));
     }
 
     #[test]
