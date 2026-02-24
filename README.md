@@ -46,37 +46,11 @@
 
 ## 설정
 
-환경 변수는 **실행 모드에 따라 다른 파일**을 사용합니다:
-
-### Standalone 개발 (로컬 실행)
-
-각 서비스별로 `.env` 파일을 생성하세요:
-
-**1. Song Info Server 설정** (`song-info-server/.env`)
-```bash
-cp song-info-server/.env.example song-info-server/.env
-# 편집: SONG_INFO_PORT, SONG_DATA_PATH, MAIMAI_*, USER_AGENT, GOOGLE_API_KEY 등 입력
-```
-
-**2. Record Collector Server 설정** (`record-collector-server/.env`)
-```bash
-cp record-collector-server/.env.example record-collector-server/.env
-# 편집: SEGA_ID, SEGA_PASSWORD, DATABASE_URL 등 입력
-```
-
-**3. Discord Bot 설정** (`personal-discord-bot/.env`)
-```bash
-cp personal-discord-bot/.env.example personal-discord-bot/.env
-# 편집: DISCORD_BOT_TOKEN, DISCORD_USER_ID, SONG_INFO_SERVER_URL, RECORD_COLLECTOR_SERVER_URL 등 입력
-```
-
-### Docker Compose (프로덕션)
-
-루트 `.env` 파일을 생성하세요:
+환경 변수는 프로젝트 루트의 `.env` 파일을 사용합니다:
 
 ```bash
 cp .env.example .env
-# 편집: 모든 환경 변수 입력
+# 편집: SEGA_ID, SEGA_PASSWORD, DISCORD_BOT_TOKEN, DISCORD_USER_ID 등 입력
 ```
 
 **주의**:
@@ -101,10 +75,8 @@ cp .env.example .env
 
 1. **환경 변수 설정** (처음 한 번만):
    ```bash
-   cp song-info-server/.env.example song-info-server/.env
-   cp record-collector-server/.env.example record-collector-server/.env
-   cp personal-discord-bot/.env.example personal-discord-bot/.env
-   # 각 .env 파일 편집하여 실제 credentials 입력
+   cp .env.example .env
+   # .env 파일 편집하여 실제 credentials 입력
    ```
 
 2. **Song Info Server 실행** (터미널 1):
@@ -127,71 +99,7 @@ cp .env.example .env
 
 **참고**:
 - `dotenvy`가 현재 디렉토리와 상위 디렉토리를 탐색하므로 프로젝트 루트에서 실행해도 각 서비스의 `.env`를 자동으로 찾습니다.
-- 각 서비스는 자신의 `.env`만 로드하여 보안을 강화합니다.
 - Song Info Server는 독립적으로 실행 가능하며, Record Collector Server나 Discord 봇 없이도 사용할 수 있습니다.
-
-### Docker로 실행
-
-Docker Compose를 사용하여 세 개의 서비스를 함께 실행할 수 있습니다.
-
-#### 환경 변수 설정
-
-프로젝트 루트에 `.env` 파일을 생성하고 모든 환경 변수를 설정하세요:
-
-```bash
-cp .env.example .env
-# 편집: SEGA_ID, SEGA_PASSWORD, DISCORD_BOT_TOKEN, DISCORD_USER_ID 등 입력
-```
-
-**중요**: Docker Compose는 서비스 이름으로 통신합니다:
-- `SONG_INFO_SERVER_URL=http://maimai-song-info-server:3001`
-- `RECORD_COLLECTOR_SERVER_URL=http://maimai-record-collector-server:3000`
-
-#### Docker 빌드 최적화
-
-이 프로젝트는 **단일 Dockerfile**을 사용하여 세 서비스를 모두 빌드합니다:
-
-- **빌더 스테이지**: 전체 워크스페이스를 한 번만 컴파일
-- **멀티 타겟**: `target` 옵션으로 각 서비스의 런타임 이미지 생성 (`maimai-song-info`, `maimai-record-collector-server`, `maimai-personal-discord-bot`)
-- **효율성**: 중복 빌드 없이 세 바이너리를 동시에 생성
-
-개별 서비스 빌드:
-```bash
-docker compose build maimai-song-info-server         # song-info-server만 빌드
-docker compose build maimai-record-collector-server  # record-collector-server만 빌드
-docker compose build maimai-personal-discord-bot     # discord만 빌드
-docker compose build                         # 모든 서비스 빌드
-```
-
-#### 실행
-
-```bash
-docker compose up -d
-```
-
-#### 로그 확인
-
-```bash
-docker compose logs -f maimai-song-info-server
-docker compose logs -f maimai-record-collector-server
-docker compose logs -f maimai-personal-discord-bot
-```
-
-#### 종료
-
-```bash
-docker compose down
-```
-
-#### 데이터 영속성
-
-- Song Info Server:
-  - 곡 데이터: `./data/song_data/data.json`
-  - 재킷 이미지: `./data/song_data/cover/`
-- Record Collector Server:
-  - SQLite 데이터베이스: `./data/maimai.sqlite3`
-  - 쿠키: `./data/cookies.json`
-- `docker compose down`을 실행해도 데이터는 유지됩니다.
 
 ### 개발/디버깅 명령어
 
@@ -212,8 +120,8 @@ HTML/raw fetch (로그인 필요):
 ## Discord 명령어
 
 - `/mai-score <title>`
-  - 1곡만 매칭해서 보여줍니다.
-  - exact match가 없으면 가장 가까운 제목 5개를 버튼으로 제시하고, 선택하면 해당 안내 메시지를 삭제한 뒤 선택한 제목으로 다시 조회합니다.
+  - 곡 제목 exact match만 조회합니다.
+  - exact match가 없으면 조회 실패로 처리합니다.
   - 기록이 없는(미플레이) 항목은 출력하지 않습니다.
 - `/mai-recent`
   - recent 페이지 기준 “가장 최근 1 credit”만 보여줍니다.
