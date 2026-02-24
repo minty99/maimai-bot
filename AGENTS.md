@@ -29,10 +29,10 @@ The goal of this file is to keep future changes consistent with the current impl
   - Background loop (every 10 minutes):
     - fetches `playerData` again
     - only if **total play count changed**: fetches recent page, upserts playlogs, then sends a DM embed for "New plays detected"
-  - Slash commands:
-    - `/mai-score <title>`: selects a single best match
+- Slash commands:
+    - `/mai-score <title>`: exact title match only
       - exact match: show that title
-      - non-exact: show top 5 candidates as buttons; on click delete the prompt message, then display the selected title's scores
+      - non-exact: treat as not found (no fuzzy candidates/buttons)
       - hide "unplayed" rows (`achievement_x10000 IS NULL`)
     - `/mai-recent`: shows the latest credit (based on recent page's TRACK numbering), formatted from `TRACK 01` upwards
 
@@ -73,6 +73,12 @@ The goal of this file is to keep future changes consistent with the current impl
 
 ## Commit discipline
 
+- **Use Conventional Commits subject line**: `<type>(<scope>): <summary>` (imperative, lowercase type).
+  - Preferred types: `feat`, `fix`, `refactor`, `docs`, `test`, `ci`, `chore`.
+  - Scope should map to component names in this repo (e.g. `discord`, `record-collector-server`, `song-info-server`, `models`, `agents`).
+  - Examples:
+    - `fix(record-collector-server): handle all matching musicDetail indexes`
+    - `docs(agents): define commit message convention`
 - **Atomic commits**: split commits by meaning (one logical change per commit), and avoid bundling unrelated modifications.
 - **Co-author trailer required**: every commit message must include an agent co-author trailer in the commit body.
   - OpenAI agents: `Co-authored-by: <Agent Model Name> <noreply@openai.com>` (e.g., `Co-authored-by: GPT-5.3 Codex <noreply@openai.com>`)
