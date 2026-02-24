@@ -1,7 +1,7 @@
 use scraper::{ElementRef, Html, Selector};
 
 use models::{
-    ChartType, DifficultyCategory, ParsedRatingTargetEntry, ParsedRatingTargetMusic, ScoreRank,
+    ChartType, DifficultyCategory, ParsedRatingTargetEntry, ParsedRatingTargets, ScoreRank,
 };
 
 const SECTION_NEW: &str = "Songs for Rating(New)";
@@ -9,16 +9,16 @@ const SECTION_OLD: &str = "Songs for Rating(Others)";
 const NEW_TARGET_COUNT: usize = 15;
 const OLD_TARGET_COUNT: usize = 35;
 
-pub fn parse_rating_target_music_html(html: &str) -> eyre::Result<ParsedRatingTargetMusic> {
+pub fn parse_rating_target_music_html(html: &str) -> eyre::Result<ParsedRatingTargets> {
     let new_html = extract_section_html(html, SECTION_NEW, &[SECTION_OLD])?;
     let old_html = extract_section_html(html, SECTION_OLD, &[])?;
 
-    let new_targets = take_first_n(parse_rating_entries(new_html)?, NEW_TARGET_COUNT, "new")?;
-    let old_targets = take_first_n(parse_rating_entries(old_html)?, OLD_TARGET_COUNT, "old")?;
+    let current_targets = take_first_n(parse_rating_entries(new_html)?, NEW_TARGET_COUNT, "new")?;
+    let legacy_targets = take_first_n(parse_rating_entries(old_html)?, OLD_TARGET_COUNT, "old")?;
 
-    Ok(ParsedRatingTargetMusic {
-        new_targets,
-        old_targets,
+    Ok(ParsedRatingTargets {
+        current_targets,
+        legacy_targets,
     })
 }
 

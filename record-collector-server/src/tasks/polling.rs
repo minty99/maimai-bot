@@ -7,7 +7,7 @@ use tracing::{debug, error, info};
 use crate::db::{get_app_state_u32, set_app_state_u32, upsert_playlogs};
 use crate::http_client::{is_maintenance_window_now, MaimaiClient};
 use maimai_parsers::{parse_player_data_html, parse_recent_html};
-use models::{ParsedPlayRecord, ParsedPlayerData};
+use models::{ParsedPlayRecord, ParsedPlayerProfile};
 
 use crate::state::AppState;
 use crate::tasks::scores_sync::rebuild_scores_with_client;
@@ -107,7 +107,7 @@ async fn poll_and_sync_if_needed(app_state: &AppState) -> Result<bool> {
     }
 }
 
-async fn fetch_player_data_logged_in(client: &MaimaiClient) -> Result<ParsedPlayerData> {
+async fn fetch_player_data_logged_in(client: &MaimaiClient) -> Result<ParsedPlayerProfile> {
     let url = reqwest::Url::parse("https://maimaidx-eng.com/maimai-mobile/playerData/")
         .wrap_err("parse playerData url")?;
     let bytes = client
@@ -187,7 +187,7 @@ async fn annotate_first_play_flags(
 
 async fn persist_player_snapshot(
     pool: &sqlx::SqlitePool,
-    player_data: &ParsedPlayerData,
+    player_data: &ParsedPlayerProfile,
 ) -> Result<()> {
     let now = unix_timestamp();
     set_app_state_u32(

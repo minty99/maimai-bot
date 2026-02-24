@@ -5,11 +5,11 @@ use crate::error::Result;
 use crate::http_client::is_maintenance_window_now;
 use crate::state::AppState;
 use maimai_parsers::parse_rating_target_music_html;
-use models::ParsedRatingTargetMusic;
+use models::ParsedRatingTargets;
 
 pub(crate) async fn get_rating_targets(
     State(state): State<AppState>,
-) -> Result<Json<ParsedRatingTargetMusic>> {
+) -> Result<Json<ParsedRatingTargets>> {
     if is_maintenance_window_now() {
         return Err(crate::error::AppError::Maintenance(
             "maimai DX NET maintenance window (04:00-07:00 local time)".to_string(),

@@ -1,7 +1,7 @@
 use eyre::{ContextCompat, WrapErr};
 use image::imageops::FilterType;
 use image::{DynamicImage, GenericImageView};
-use models::{ChartType, DifficultyCategory, SongDataRoot};
+use models::{ChartType, DifficultyCategory, SongCatalog};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::HashMap;
@@ -104,7 +104,7 @@ async fn fetch_user_tier_map_for_sheet(
     spreadsheet_id: &str,
     sheet_gid: i64,
     internal_level: &str,
-    song_data: &SongDataRoot,
+    song_data: &SongCatalog,
     cover_fingerprints: &[CoverFingerprint],
 ) -> eyre::Result<HashMap<UserTierKey, String>> {
     let entries = fetch_sheet_entries(client, google_api_key, spreadsheet_id, sheet_gid).await?;
@@ -128,7 +128,7 @@ async fn fetch_user_tier_map_for_sheet(
 pub(crate) async fn fetch_user_tier_map_for_default_levels(
     client: &reqwest::Client,
     google_api_key: &str,
-    song_data: &SongDataRoot,
+    song_data: &SongCatalog,
     cover_dir: &Path,
 ) -> eyre::Result<HashMap<UserTierKey, UserTierValue>> {
     let mut out = HashMap::new();
@@ -347,7 +347,7 @@ async fn download_image(client: &reqwest::Client, image_url: &str) -> eyre::Resu
 }
 
 fn build_cover_fingerprints(
-    song_data: &SongDataRoot,
+    song_data: &SongCatalog,
     cover_dir: &Path,
 ) -> eyre::Result<Vec<CoverFingerprint>> {
     let mut out = Vec::new();
@@ -510,7 +510,7 @@ fn classify_border_hint(image_bytes: &[u8]) -> eyre::Result<BorderHint> {
 }
 
 fn resolve_key(
-    song_data: &SongDataRoot,
+    song_data: &SongCatalog,
     matched_title: &str,
     border_hint: BorderHint,
     internal_level: &str,
@@ -522,7 +522,7 @@ fn resolve_key(
         .iter()
         .filter(|sheet| sheet.internal_level.as_deref() == Some(internal_level))
         .filter_map(|sheet| {
-            let chart_type = ChartType::from_lowercase(&sheet.sheet_type)?;
+            let chart_type = ChartType::from_lowercase(&sheet.chart_type)?;
             let difficulty = DifficultyCategory::from_lowercase(&sheet.difficulty)?;
             Some((chart_type, difficulty))
         })
@@ -573,7 +573,7 @@ fn resolve_key(
 mod tests {
     use super::*;
     use image::{ImageBuffer, Rgb};
-    use models::{SongDataSheet, SongDataSong};
+    use models::{SongCatalogChart, SongCatalogSong};
     use std::path::PathBuf;
 
     const LIVE_TEST_INTERNAL_LEVEL: &str = "13.0";
@@ -626,24 +626,24 @@ mod tests {
 
     #[test]
     fn resolve_key_prefers_hint_and_master() {
-        let root = SongDataRoot {
-            songs: vec![SongDataSong {
+        let root = SongCatalog {
+            songs: vec![SongCatalogSong {
                 title: "Song A".to_string(),
                 image_name: Some("a.png".to_string()),
                 sheets: vec![
-                    SongDataSheet {
-                        sheet_type: "std".to_string(),
+                    SongCatalogChart {
+                        chart_type: "std".to_string(),
                         difficulty: "expert".to_string(),
                         level: "13".to_string(),
-                        version: None,
+                        version_name: None,
                         internal_level: Some("13.0".to_string()),
                         user_level: None,
                     },
-                    SongDataSheet {
-                        sheet_type: "std".to_string(),
+                    SongCatalogChart {
+                        chart_type: "std".to_string(),
                         difficulty: "master".to_string(),
                         level: "13+".to_string(),
-                        version: None,
+                        version_name: None,
                         internal_level: Some("13.0".to_string()),
                         user_level: None,
                     },
@@ -694,7 +694,7 @@ mod tests {
 
         let song_data_bytes = std::fs::read(&song_data_json)
             .unwrap_or_else(|e| panic!("failed to read {song_data_json}: {e}"));
-        let song_data: SongDataRoot = serde_json::from_slice(&song_data_bytes)
+        let song_data: SongCatalog = serde_json::from_slice(&song_data_bytes)
             .unwrap_or_else(|e| panic!("failed to parse {song_data_json}: {e}"));
         let cover_dir_path = PathBuf::from(cover_dir);
         let cover_fingerprints = build_cover_fingerprints(&song_data, &cover_dir_path).unwrap();

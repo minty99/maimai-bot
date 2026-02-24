@@ -11,10 +11,10 @@ use std::collections::HashSet;
 use crate::{
     error::{AppError, Result},
     http_client::{is_maintenance_window_now, MaimaiClient},
-    routes::responses::{score_response_from_entry, ScoreResponse},
+    routes::responses::{score_response_from_entry, ScoreApiResponse},
     state::AppState,
 };
-use models::{ScoreEntry, SongDetailScoreResponse};
+use models::{SongDetailScoreApiResponse, StoredScoreEntry};
 
 #[derive(Deserialize)]
 pub(crate) struct SearchQuery {
@@ -24,10 +24,10 @@ pub(crate) struct SearchQuery {
 pub(crate) async fn search_scores(
     State(state): State<AppState>,
     Query(params): Query<SearchQuery>,
-) -> Result<Json<Vec<ScoreResponse>>> {
+) -> Result<Json<Vec<ScoreApiResponse>>> {
     let search_term = format!("%{}%", params.q);
 
-    let rows = sqlx::query_as::<_, ScoreEntry>(
+    let rows = sqlx::query_as::<_, StoredScoreEntry>(
         "SELECT title, chart_type, diff_category, achievement_x10000, rank, fc, sync, dx_score, dx_score_max
          FROM scores
          WHERE title LIKE ? AND achievement_x10000 IS NOT NULL
@@ -49,8 +49,8 @@ pub(crate) async fn search_scores(
 pub(crate) async fn get_score(
     State(state): State<AppState>,
     Path((title, chart_type, diff_category)): Path<(String, String, String)>,
-) -> Result<Json<ScoreResponse>> {
-    let score = sqlx::query_as::<_, ScoreEntry>(
+) -> Result<Json<ScoreApiResponse>> {
+    let score = sqlx::query_as::<_, StoredScoreEntry>(
         "SELECT title, chart_type, diff_category, achievement_x10000, rank, fc, sync, dx_score, dx_score_max
          FROM scores
          WHERE title = ? AND chart_type = ? AND diff_category = ? AND achievement_x10000 IS NOT NULL"
@@ -73,8 +73,8 @@ pub(crate) async fn get_score(
 
 pub(crate) async fn get_all_rated_scores(
     State(state): State<AppState>,
-) -> Result<Json<Vec<ScoreResponse>>> {
-    let rows = sqlx::query_as::<_, ScoreEntry>(
+) -> Result<Json<Vec<ScoreApiResponse>>> {
+    let rows = sqlx::query_as::<_, StoredScoreEntry>(
         "SELECT title, chart_type, diff_category, achievement_x10000, rank, fc, sync, dx_score, dx_score_max
          FROM scores
          WHERE achievement_x10000 IS NOT NULL
@@ -94,7 +94,7 @@ pub(crate) async fn get_all_rated_scores(
 pub(crate) async fn get_song_detail_scores(
     State(state): State<AppState>,
     Path(title): Path<String>,
-) -> Result<Json<Vec<SongDetailScoreResponse>>> {
+) -> Result<Json<Vec<SongDetailScoreApiResponse>>> {
     if is_maintenance_window_now() {
         return Err(AppError::Maintenance(
             "maimai DX NET maintenance window (04:00-07:00 local time)".to_string(),
@@ -147,7 +147,7 @@ pub(crate) async fn get_song_detail_scores(
             if achievement_x10000.is_none() {
                 continue;
             }
-            responses.push(SongDetailScoreResponse {
+            responses.push(SongDetailScoreApiResponse {
                 title: parsed.title.clone(),
                 chart_type: difficulty.chart_type,
                 diff_category: difficulty.diff_category,

@@ -1,8 +1,8 @@
 use scraper::{ElementRef, Html, Selector};
 
 use models::{
-    ChartType, DifficultyCategory, FcStatus, ParsedSongDetail, ParsedSongDifficultyDetail,
-    ScoreRank, SyncStatus,
+    ChartType, DifficultyCategory, FcStatus, ParsedSongChartDetail, ParsedSongDetail, ScoreRank,
+    SyncStatus,
 };
 
 pub fn parse_song_detail_html(html: &str) -> eyre::Result<ParsedSongDetail> {
@@ -114,7 +114,7 @@ pub fn parse_song_detail_html(html: &str) -> eyre::Result<ParsedSongDetail> {
             sync = merge_sync(sync.take(), parse_sync_from_icon_src(src));
         }
 
-        difficulties.push(ParsedSongDifficultyDetail {
+        difficulties.push(ParsedSongChartDetail {
             diff_category,
             level,
             chart_type: chart_type.unwrap_or(page_chart_type),

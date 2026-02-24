@@ -1,5 +1,5 @@
 use eyre::Result;
-use models::ParsedPlayerData;
+use models::ParsedPlayerProfile;
 use poise::serenity_prelude as serenity;
 use serenity::builder::{CreateEmbed, CreateMessage};
 use tracing::{info, warn};
@@ -42,7 +42,7 @@ pub(crate) async fn send_startup_dm(
     Ok(())
 }
 
-fn embed_startup(player_data: &ParsedPlayerData) -> CreateEmbed {
+fn embed_startup(player_data: &ParsedPlayerProfile) -> CreateEmbed {
     let mut embed = embed_base(&format!("Welcome, {}!", player_data.user_name));
     embed = embed.description(format!(
         "**Rating**: {}\n**Total Plays**: {}",

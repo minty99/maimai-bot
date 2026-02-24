@@ -5,7 +5,7 @@ use reqwest::Url;
 use tracing::debug;
 
 use maimai_parsers::parse_player_data_html;
-use models::ParsedPlayerData;
+use models::ParsedPlayerProfile;
 
 use crate::error::Result;
 use crate::state::AppState;
@@ -14,7 +14,7 @@ use crate::state::AppState;
 /// Fetches and parses the player data from maimaidx-eng.com
 pub(crate) async fn get_player(
     State(state): State<AppState>,
-) -> Result<(StatusCode, Json<ParsedPlayerData>)> {
+) -> Result<(StatusCode, Json<ParsedPlayerProfile>)> {
     debug!("GET /api/player: fetching player data");
 
     if is_maintenance_window_now() {

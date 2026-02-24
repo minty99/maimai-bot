@@ -51,8 +51,8 @@ async fn main() -> eyre::Result<()> {
                     e
                 );
                 (
-                    models::SongDataRoot { songs: Vec::new() },
-                    models::SongDataIndex::empty(),
+                    models::SongCatalog { songs: Vec::new() },
+                    models::SongInternalLevelIndex::empty(),
                     false,
                 )
             }

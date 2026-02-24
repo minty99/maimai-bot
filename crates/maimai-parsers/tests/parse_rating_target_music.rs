@@ -13,6 +13,6 @@ fn parse_rating_target_music_fixture() {
     let html = std::fs::read_to_string(fixture_path("rating_target_music.html")).unwrap();
     let parsed = parse_rating_target_music_html(&html).unwrap();
 
-    assert_eq!(parsed.new_targets.len(), 15);
-    assert_eq!(parsed.old_targets.len(), 35);
+    assert_eq!(parsed.current_targets.len(), 15);
+    assert_eq!(parsed.legacy_targets.len(), 35);
 }

@@ -461,8 +461,8 @@ pub(crate) async fn mai_rating_img(ctx: Context<'_>) -> Result<(), Error> {
         return Ok(());
     };
 
-    let new_rows = build_rating_rows(&ctx.data().song_info_client, &targets.new_targets).await;
-    let old_rows = build_rating_rows(&ctx.data().song_info_client, &targets.old_targets).await;
+    let new_rows = build_rating_rows(&ctx.data().song_info_client, &targets.current_targets).await;
+    let old_rows = build_rating_rows(&ctx.data().song_info_client, &targets.legacy_targets).await;
     let new_entries = new_rows
         .iter()
         .map(RatingImageEntry::from)
@@ -501,7 +501,7 @@ pub(crate) async fn mai_rating_img(ctx: Context<'_>) -> Result<(), Error> {
 
 async fn fetch_rating_targets_or_maintenance(
     ctx: &Context<'_>,
-) -> Result<Option<models::ParsedRatingTargetMusic>, Error> {
+) -> Result<Option<models::ParsedRatingTargets>, Error> {
     match ctx
         .data()
         .record_collector_client
@@ -556,10 +556,10 @@ impl From<&RatedRow> for RatingImageEntry {
 
 async fn build_mai_rating_embeds(
     song_info_client: &crate::client::SongInfoClient,
-    targets: models::ParsedRatingTargetMusic,
+    targets: models::ParsedRatingTargets,
 ) -> Vec<serenity::builder::CreateEmbed> {
-    let new_rows = build_rating_rows(song_info_client, &targets.new_targets).await;
-    let old_rows = build_rating_rows(song_info_client, &targets.old_targets).await;
+    let new_rows = build_rating_rows(song_info_client, &targets.current_targets).await;
+    let old_rows = build_rating_rows(song_info_client, &targets.legacy_targets).await;
 
     let new_sum = new_rows.iter().filter_map(|r| r.rating_points).sum::<u32>();
     let old_sum = old_rows.iter().filter_map(|r| r.rating_points).sum::<u32>();

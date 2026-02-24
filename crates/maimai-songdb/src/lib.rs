@@ -2,7 +2,8 @@
 
 use eyre::{ContextCompat, WrapErr};
 use models::{
-    ChartType, DifficultyCategory, SongDataIndex, SongDataRoot, SongDataSheet, SongDataSong,
+    ChartType, DifficultyCategory, SongCatalog, SongCatalogChart, SongCatalogSong,
+    SongInternalLevelIndex,
 };
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
@@ -215,7 +216,7 @@ impl SongDatabase {
         })
     }
 
-    pub fn into_data_root(self) -> eyre::Result<SongDataRoot> {
+    pub fn into_data_root(self) -> eyre::Result<SongCatalog> {
         Ok(build_data_root(
             &self.songs,
             &self.sheets,
@@ -225,9 +226,9 @@ impl SongDatabase {
         ))
     }
 
-    pub fn into_index(self) -> eyre::Result<SongDataIndex> {
+    pub fn into_index(self) -> eyre::Result<SongInternalLevelIndex> {
         let data_root = self.into_data_root()?;
-        Ok(SongDataIndex::from_root(data_root))
+        Ok(SongInternalLevelIndex::from_catalog(data_root))
     }
 }
 
@@ -237,15 +238,15 @@ fn build_data_root(
     sheet_versions: &SheetVersionMap,
     internal_levels: &HashMap<InternalLevelKey, InternalLevelRow>,
     user_tiers: Option<&HashMap<UserTierKey, UserTierValue>>,
-) -> SongDataRoot {
+) -> SongCatalog {
     use std::collections::BTreeMap;
 
-    let mut song_map: BTreeMap<String, SongDataSong> = BTreeMap::new();
+    let mut song_map: BTreeMap<String, SongCatalogSong> = BTreeMap::new();
 
     for song in songs {
         song_map.insert(
             song.song_id.clone(),
-            SongDataSong {
+            SongCatalogSong {
                 title: song.title.clone(),
                 image_name: Some(song.image_name.clone()),
                 sheets: Vec::new(),
@@ -287,11 +288,11 @@ fn build_data_root(
             }
         }
 
-        song.sheets.push(SongDataSheet {
-            sheet_type: sheet.sheet_type.as_lowercase().to_string(),
+        song.sheets.push(SongCatalogChart {
+            chart_type: sheet.sheet_type.as_lowercase().to_string(),
             difficulty: sheet.difficulty.as_lowercase().to_string(),
             level: sheet.level.clone(),
-            version: sheet_versions
+            version_name: sheet_versions
                 .get(&sheet.song_id)
                 .and_then(|versions| versions.get(&sheet.sheet_type))
                 .cloned(),
@@ -300,7 +301,7 @@ fn build_data_root(
         });
     }
 
-    SongDataRoot {
+    SongCatalog {
         songs: song_map.into_values().collect(),
     }
 }

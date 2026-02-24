@@ -28,7 +28,6 @@ pub(crate) struct SongMetadataResponse {
     user_level: Option<String>,
     image_name: Option<String>,
     version: Option<String>,
-    bucket: Option<String>,
 }
 
 #[derive(Serialize)]
@@ -100,7 +99,7 @@ pub(crate) async fn random_song_by_level(
 
             song_has_sheet_in_level_range = true;
 
-            let Some(chart_type) = parse_sheet_chart_type(&sheet.sheet_type) else {
+            let Some(chart_type) = parse_sheet_chart_type(&sheet.chart_type) else {
                 continue;
             };
             let Some(difficulty) = parse_sheet_difficulty(&sheet.difficulty) else {
@@ -108,7 +107,7 @@ pub(crate) async fn random_song_by_level(
             };
 
             let sheet_version = sheet
-                .version
+                .version_name
                 .clone()
                 .map(|v| v.trim().to_string())
                 .filter(|v| !v.is_empty());
@@ -191,7 +190,7 @@ pub(crate) async fn list_versions(
     for song in song_data_root.iter() {
         let mut seen_versions_for_song = HashSet::new();
         for sheet in &song.sheets {
-            let version_name = sheet.version.as_deref();
+            let version_name = sheet.version_name.as_deref();
             let Some(version_name) = version_name else {
                 continue;
             };
@@ -363,7 +362,7 @@ pub(crate) async fn get_song_metadata(
         if song.title.eq_ignore_ascii_case(&title) {
             // Found matching song, now search for matching sheet
             for sheet in &song.sheets {
-                if sheet.sheet_type.eq_ignore_ascii_case(&chart_type)
+                if sheet.chart_type.eq_ignore_ascii_case(&chart_type)
                     && sheet.difficulty.eq_ignore_ascii_case(&diff_category)
                 {
                     // Found matching sheet
@@ -372,18 +371,10 @@ pub(crate) async fn get_song_metadata(
                         .as_deref()
                         .and_then(|value| value.trim().parse::<f32>().ok());
                     let version = sheet
-                        .version
+                        .version_name
                         .clone()
                         .map(|v| v.trim().to_string())
                         .filter(|v| !v.is_empty());
-
-                    let bucket = version.as_ref().map(|v| {
-                        if is_new_version(v) {
-                            "New".to_string()
-                        } else {
-                            "Old".to_string()
-                        }
-                    });
 
                     return Ok(Json(SongMetadataResponse {
                         level: Some(sheet.level.clone()),
@@ -391,7 +382,6 @@ pub(crate) async fn get_song_metadata(
                         user_level: sheet.user_level.clone(),
                         image_name: song.image_name.clone(),
                         version,
-                        bucket,
                     }));
                 }
             }
@@ -403,8 +393,4 @@ pub(crate) async fn get_song_metadata(
         "Song not found: {} / {} / {}",
         title, chart_type, diff_category
     )))
-}
-
-fn is_new_version(version: &str) -> bool {
-    matches!(version, "PRiSM PLUS" | "CiRCLE")
 }

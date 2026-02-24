@@ -7,10 +7,10 @@ use time::{Date, Duration as TimeDuration, Month, OffsetDateTime, UtcOffset};
 
 use crate::{
     error::Result,
-    routes::responses::{play_record_response_from_record, PlayRecordResponse},
+    routes::responses::{play_record_response_from_record, PlayRecordApiResponse},
     state::AppState,
 };
-use models::PlayRecord;
+use models::StoredPlayRecord;
 
 #[derive(Deserialize)]
 pub(crate) struct TodayQuery {
@@ -20,7 +20,7 @@ pub(crate) struct TodayQuery {
 pub(crate) async fn get_today(
     State(state): State<AppState>,
     Query(params): Query<TodayQuery>,
-) -> Result<Json<Vec<PlayRecordResponse>>> {
+) -> Result<Json<Vec<PlayRecordApiResponse>>> {
     let offset = UtcOffset::from_hms(9, 0, 0).unwrap_or(UtcOffset::UTC);
 
     // Parse day or use today (JST)
@@ -70,7 +70,7 @@ pub(crate) async fn get_today(
         end_date.day()
     );
 
-    let rows = sqlx::query_as::<_, PlayRecord>(
+    let rows = sqlx::query_as::<_, StoredPlayRecord>(
         "SELECT 
             played_at_unixtime,
             played_at,

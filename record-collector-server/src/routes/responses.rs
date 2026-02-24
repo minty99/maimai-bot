@@ -2,11 +2,12 @@ use std::str::FromStr;
 
 use crate::error::{AppError, Result};
 use models::{
-    ChartType, DifficultyCategory, FcStatus, PlayRecord, ScoreEntry, ScoreRank, SyncStatus,
+    ChartType, DifficultyCategory, FcStatus, ScoreRank, StoredPlayRecord, StoredScoreEntry,
+    SyncStatus,
 };
-pub(crate) use models::{PlayRecordResponse, ScoreResponse};
+pub(crate) use models::{PlayRecordApiResponse, ScoreApiResponse};
 
-pub(crate) fn score_response_from_entry(entry: ScoreEntry) -> Result<ScoreResponse> {
+pub(crate) fn score_response_from_entry(entry: StoredScoreEntry) -> Result<ScoreApiResponse> {
     let chart_type = ChartType::from_str(&entry.chart_type).map_err(|e| {
         AppError::InternalError(format!("invalid chart_type '{}': {}", entry.chart_type, e))
     })?;
@@ -21,7 +22,7 @@ pub(crate) fn score_response_from_entry(entry: ScoreEntry) -> Result<ScoreRespon
     let fc = parse_optional::<FcStatus>(&entry.fc);
     let sync = parse_optional::<SyncStatus>(&entry.sync);
 
-    Ok(ScoreResponse {
+    Ok(ScoreApiResponse {
         title: entry.title,
         chart_type,
         diff_category,
@@ -34,7 +35,9 @@ pub(crate) fn score_response_from_entry(entry: ScoreEntry) -> Result<ScoreRespon
     })
 }
 
-pub(crate) fn play_record_response_from_record(record: PlayRecord) -> Result<PlayRecordResponse> {
+pub(crate) fn play_record_response_from_record(
+    record: StoredPlayRecord,
+) -> Result<PlayRecordApiResponse> {
     let chart_type = ChartType::from_str(&record.chart_type).map_err(|e| {
         AppError::InternalError(format!("invalid chart_type '{}': {}", record.chart_type, e))
     })?;
@@ -53,7 +56,7 @@ pub(crate) fn play_record_response_from_record(record: PlayRecord) -> Result<Pla
     let fc = parse_optional::<FcStatus>(&record.fc);
     let sync = parse_optional::<SyncStatus>(&record.sync);
 
-    Ok(PlayRecordResponse {
+    Ok(PlayRecordApiResponse {
         played_at_unixtime: record.played_at_unixtime,
         played_at: record.played_at,
         track: record.track,

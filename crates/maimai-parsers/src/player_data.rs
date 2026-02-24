@@ -1,9 +1,9 @@
 use eyre::WrapErr;
 use scraper::{Html, Selector};
 
-use models::ParsedPlayerData;
+use models::ParsedPlayerProfile;
 
-pub fn parse_player_data_html(html: &str) -> eyre::Result<ParsedPlayerData> {
+pub fn parse_player_data_html(html: &str) -> eyre::Result<ParsedPlayerProfile> {
     let document = Html::parse_document(html);
 
     let name_selector = Selector::parse(".name_block").unwrap();
@@ -40,7 +40,7 @@ pub fn parse_player_data_html(html: &str) -> eyre::Result<ParsedPlayerData> {
     let total_play_count = extract_number_after(&counts_text, "maimaiDX total play count")
         .ok_or_else(|| eyre::eyre!("missing total play count"))?;
 
-    Ok(ParsedPlayerData {
+    Ok(ParsedPlayerProfile {
         user_name,
         rating,
         current_version_play_count,

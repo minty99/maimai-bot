@@ -1,7 +1,7 @@
 use eyre::{Result, WrapErr};
 use models::{
-    ParsedPlayerData, ParsedRatingTargetMusic, PlayRecordResponse, ScoreResponse,
-    SongDetailScoreResponse,
+    ParsedPlayerProfile, ParsedRatingTargets, PlayRecordApiResponse, ScoreApiResponse,
+    SongDetailScoreApiResponse,
 };
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
@@ -16,7 +16,7 @@ struct RecordCollectorErrorResponse {
 }
 
 pub(crate) enum PlayerDataResult {
-    Ok(ParsedPlayerData),
+    Ok(ParsedPlayerProfile),
     Maintenance,
     Unavailable(String),
 }
@@ -28,7 +28,6 @@ pub(crate) struct SongMetadata {
     pub(crate) user_level: Option<String>,
     pub(crate) image_name: Option<String>,
     pub(crate) version: Option<String>,
-    pub(crate) bucket: Option<String>,
 }
 
 #[derive(Debug)]
@@ -125,7 +124,7 @@ impl RecordCollectorClient {
         for attempt in 0..3 {
             match self.client.get(&url).send().await {
                 Ok(resp) if resp.status().is_success() => {
-                    match resp.json::<ParsedPlayerData>().await {
+                    match resp.json::<ParsedPlayerProfile>().await {
                         Ok(data) => return PlayerDataResult::Ok(data),
                         Err(e) => {
                             if attempt < 2 {
@@ -172,7 +171,7 @@ impl RecordCollectorClient {
         PlayerDataResult::Unavailable("Max retries exceeded".to_string())
     }
 
-    pub async fn search_scores(&self, query: &str) -> Result<Vec<ScoreResponse>> {
+    pub async fn search_scores(&self, query: &str) -> Result<Vec<ScoreApiResponse>> {
         self.get_with_retry(&format!(
             "/api/scores/search?q={}",
             urlencoding::encode(query)
@@ -180,7 +179,12 @@ impl RecordCollectorClient {
         .await
     }
 
-    pub async fn get_score(&self, title: &str, chart: &str, diff: &str) -> Result<ScoreResponse> {
+    pub async fn get_score(
+        &self,
+        title: &str,
+        chart: &str,
+        diff: &str,
+    ) -> Result<ScoreApiResponse> {
         self.get_with_retry(&format!(
             "/api/scores/{}/{}/{}",
             urlencoding::encode(title),
@@ -190,28 +194,28 @@ impl RecordCollectorClient {
         .await
     }
 
-    pub async fn get_recent(&self, limit: usize) -> Result<Vec<PlayRecordResponse>> {
+    pub async fn get_recent(&self, limit: usize) -> Result<Vec<PlayRecordApiResponse>> {
         self.get_with_retry(&format!("/api/recent?limit={}", limit))
             .await
     }
 
-    pub async fn get_today(&self, day: &str) -> Result<Vec<PlayRecordResponse>> {
+    pub async fn get_today(&self, day: &str) -> Result<Vec<PlayRecordApiResponse>> {
         self.get_with_retry(&format!("/api/today?day={}", day))
             .await
     }
 
-    pub async fn get_rated_scores(&self) -> Result<Vec<ScoreResponse>> {
+    pub async fn get_rated_scores(&self) -> Result<Vec<ScoreApiResponse>> {
         self.get_with_retry("/api/scores/rated").await
     }
 
-    pub async fn get_rating_targets(&self) -> Result<ParsedRatingTargetMusic> {
+    pub async fn get_rating_targets(&self) -> Result<ParsedRatingTargets> {
         self.get_with_retry("/api/rating/targets").await
     }
 
     pub async fn get_song_detail_scores(
         &self,
         title: &str,
-    ) -> Result<Vec<SongDetailScoreResponse>> {
+    ) -> Result<Vec<SongDetailScoreApiResponse>> {
         self.get_with_retry(&format!(
             "/api/scores/detail/{}",
             urlencoding::encode(title)
