@@ -77,14 +77,22 @@ pub fn parse_scores_html(html: &str, diff: u8) -> eyre::Result<Vec<ParsedScoreEn
         }
 
         let chart_type = entry
-            .ancestors()
-            .filter_map(ElementRef::wrap)
-            .find_map(|ancestor| {
-                ancestor
-                    .select(&chart_type_selector)
-                    .next()
-                    .and_then(|e| e.value().attr("src"))
-                    .and_then(parse_chart_type_from_icon_src)
+            .select(&chart_type_selector)
+            .next()
+            .and_then(|e| e.value().attr("src"))
+            .and_then(parse_chart_type_from_icon_src)
+            .or_else(|| {
+                // Fallback for legacy layouts where the kind icon is outside score entry.
+                entry
+                    .ancestors()
+                    .filter_map(ElementRef::wrap)
+                    .find_map(|ancestor| {
+                        ancestor
+                            .select(&chart_type_selector)
+                            .next()
+                            .and_then(|e| e.value().attr("src"))
+                            .and_then(parse_chart_type_from_icon_src)
+                    })
             })
             .unwrap_or(ChartType::Std);
 
