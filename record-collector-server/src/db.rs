@@ -165,7 +165,7 @@ async fn insert_playlog(
 	  score_rank, fc, sync,
 	  dx_score, dx_score_max
 	)
-	VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16)
+	VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15)
 	ON CONFLICT(played_at_unixtime) DO NOTHING
 	"#,
     )
