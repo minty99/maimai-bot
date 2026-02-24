@@ -183,21 +183,20 @@ async fn find_song_detail_indices_by_title(
     let mut seen = HashSet::new();
     let mut indices = Vec::new();
 
-    for diff in 0u8..=4 {
-        let url = scores_url(diff).wrap_err("build scores url")?;
-        let bytes = client.get_bytes(&url).await.wrap_err("fetch scores url")?;
-        let html = String::from_utf8(bytes).wrap_err("scores response is not utf-8")?;
-        let entries = parse_scores_html(&html, diff).wrap_err("parse scores html")?;
+    let diff = 0u8;
+    let url = scores_url(diff).wrap_err("build scores url")?;
+    let bytes = client.get_bytes(&url).await.wrap_err("fetch scores url")?;
+    let html = String::from_utf8(bytes).wrap_err("scores response is not utf-8")?;
+    let entries = parse_scores_html(&html, diff).wrap_err("parse scores html")?;
 
-        for entry in entries {
-            if normalize_title_for_match(&entry.title) != target_norm {
-                continue;
-            }
-            if let Some(idx) = entry.source_idx {
-                let idx = idx.trim();
-                if !idx.is_empty() && seen.insert(idx.to_string()) {
-                    indices.push(idx.to_string());
-                }
+    for entry in entries {
+        if normalize_title_for_match(&entry.title) != target_norm {
+            continue;
+        }
+        if let Some(idx) = entry.source_idx {
+            let idx = idx.trim();
+            if !idx.is_empty() && seen.insert(idx.to_string()) {
+                indices.push(idx.to_string());
             }
         }
     }
