@@ -1,0 +1,8 @@
+[package]
+name = "maimai-auth"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+eyre.workspace = true
+reqwest = { workspace = true, features = ["cookies"] }

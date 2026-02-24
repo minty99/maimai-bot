@@ -2,6 +2,7 @@
 members = [
     "record-collector-server",
     "song-info-server",
+    "crates/maimai-auth",
     "crates/maimai-parsers",
     "crates/maimai-songdb",
     "crates/models",

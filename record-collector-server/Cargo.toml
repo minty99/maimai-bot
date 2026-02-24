@@ -14,8 +14,9 @@ chrono-tz = { workspace = true }
 cookie_store = { workspace = true }
 dotenvy = { workspace = true }
 eyre = { workspace = true }
+maimai-auth = { path = "../crates/maimai-auth" }
 maimai-parsers = { path = "../crates/maimai-parsers" }
-models = { version = "0.1.0", path = "../crates/models" }
+models = { path = "../crates/models" }
 rand = { workspace = true }
 reqwest = { workspace = true, features = ["json"] }
 reqwest_cookie_store = { workspace = true }

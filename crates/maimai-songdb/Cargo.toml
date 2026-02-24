@@ -9,6 +9,8 @@ dotenvy.workspace = true
 eyre.workspace = true
 hex = { workspace = true }
 image = "0.25.9"
+maimai-auth = { path = "../maimai-auth" }
+maimai-parsers = { path = "../maimai-parsers" }
 models = { path = "../models" }
 reqwest = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
