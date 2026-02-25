@@ -16,6 +16,10 @@ pub(crate) fn create_router(state: AppState) -> Router {
         .route("/api/songs/random", get(songs::random_song_by_level))
         .route("/api/songs/versions", get(songs::list_versions))
         .route(
+            "/api/songs/by-title/{title}",
+            get(songs::get_song_info_by_title),
+        )
+        .route(
             "/api/songs/{title}/{chart_type}/{diff_category}",
             get(songs::get_song_metadata),
         )

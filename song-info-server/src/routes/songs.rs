@@ -31,6 +31,13 @@ pub(crate) struct SongMetadataResponse {
 }
 
 #[derive(Serialize)]
+pub(crate) struct SongInfoResponse {
+    title: String,
+    image_name: Option<String>,
+    sheets: Vec<SongSheetResponse>,
+}
+
+#[derive(Serialize)]
 pub(crate) struct SongSelectionStatsResponse {
     level_song_count: usize,
     filtered_song_count: usize,
@@ -393,4 +400,66 @@ pub(crate) async fn get_song_metadata(
         "Song not found: {} / {} / {}",
         title, chart_type, diff_category
     )))
+}
+
+pub(crate) async fn get_song_info_by_title(
+    State(state): State<AppState>,
+    Path(title): Path<String>,
+) -> Result<Json<SongInfoResponse>> {
+    let title = urlencoding::decode(&title)
+        .map_err(|_| AppError::JsonError("Invalid title encoding".to_string()))?
+        .into_owned();
+
+    let song_data_root = state
+        .song_data_root
+        .read()
+        .map_err(|_| AppError::IoError("Failed to read song data".to_string()))?;
+
+    let Some(song) = song_data_root
+        .iter()
+        .find(|song| song.title.eq_ignore_ascii_case(&title))
+    else {
+        return Err(AppError::NotFound(format!("Song not found: {}", title)));
+    };
+
+    let sheets = song
+        .sheets
+        .iter()
+        .map(|sheet| -> Result<SongSheetResponse> {
+            let chart_type = parse_sheet_chart_type(&sheet.chart_type).ok_or_else(|| {
+                AppError::JsonError(format!(
+                    "unknown chart type in song data: {}",
+                    sheet.chart_type
+                ))
+            })?;
+            let difficulty = parse_sheet_difficulty(&sheet.difficulty).ok_or_else(|| {
+                AppError::JsonError(format!(
+                    "unknown difficulty in song data: {}",
+                    sheet.difficulty
+                ))
+            })?;
+
+            Ok(SongSheetResponse {
+                chart_type,
+                difficulty,
+                level: sheet.level.clone(),
+                version: sheet
+                    .version_name
+                    .clone()
+                    .map(|v| v.trim().to_string())
+                    .filter(|v| !v.is_empty()),
+                internal_level: sheet
+                    .internal_level
+                    .as_deref()
+                    .and_then(|value| value.trim().parse::<f32>().ok()),
+                user_level: sheet.user_level.clone(),
+            })
+        })
+        .collect::<Result<Vec<_>>>()?;
+
+    Ok(Json(SongInfoResponse {
+        title: song.title.clone(),
+        image_name: song.image_name.clone(),
+        sheets,
+    }))
 }

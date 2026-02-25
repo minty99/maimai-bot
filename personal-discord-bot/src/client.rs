@@ -1,7 +1,7 @@
 use eyre::{Result, WrapErr};
 use models::{
-    ParsedPlayerProfile, ParsedRatingTargets, PlayRecordApiResponse, ScoreApiResponse,
-    SongDetailScoreApiResponse,
+    ChartType, DifficultyCategory, ParsedPlayerProfile, ParsedRatingTargets, PlayRecordApiResponse,
+    ScoreApiResponse, SongDetailScoreApiResponse,
 };
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
@@ -28,6 +28,23 @@ pub(crate) struct SongMetadata {
     pub(crate) user_level: Option<String>,
     pub(crate) image_name: Option<String>,
     pub(crate) version: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub(crate) struct SongInfoSheet {
+    pub(crate) chart_type: ChartType,
+    pub(crate) difficulty: DifficultyCategory,
+    pub(crate) level: String,
+    pub(crate) version: Option<String>,
+    pub(crate) internal_level: Option<f32>,
+    pub(crate) user_level: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub(crate) struct SongInfo {
+    pub(crate) title: String,
+    pub(crate) image_name: Option<String>,
+    pub(crate) sheets: Vec<SongInfoSheet>,
 }
 
 #[derive(Debug)]
@@ -110,6 +127,33 @@ impl SongInfoClient {
             .await
             .wrap_err("parse song metadata")?;
         Ok(Some(metadata))
+    }
+
+    pub(crate) async fn get_song_info_by_title(&self, title: &str) -> Result<Option<SongInfo>> {
+        let url = format!(
+            "{}/api/songs/by-title/{}",
+            self.base_url,
+            urlencoding::encode(title)
+        );
+
+        let resp = self
+            .client
+            .get(&url)
+            .send()
+            .await
+            .wrap_err("fetch song info")?;
+        if resp.status() == reqwest::StatusCode::NOT_FOUND {
+            return Ok(None);
+        }
+        if !resp.status().is_success() {
+            return Err(eyre::eyre!(
+                "Failed to fetch song info: HTTP {}",
+                resp.status()
+            ));
+        }
+
+        let song_info = resp.json::<SongInfo>().await.wrap_err("parse song info")?;
+        Ok(Some(song_info))
     }
 }
 

@@ -158,6 +158,134 @@ pub(crate) async fn mai_score(
     Ok(())
 }
 
+/// Get full song info from song-info server
+#[poise::command(slash_command, rename = "mai-song-info")]
+pub(crate) async fn mai_song_info(
+    ctx: Context<'_>,
+    #[description = "Song title to search for"] title: String,
+) -> Result<(), Error> {
+    ctx.defer().await?;
+
+    let Some(song_info) = ctx
+        .data()
+        .song_info_client
+        .get_song_info_by_title(&title)
+        .await
+        .wrap_err("fetch song info")?
+    else {
+        ctx.send(
+            CreateReply::default()
+                .ephemeral(true)
+                .embed(embed_base("No song found").description("No exact title match.")),
+        )
+        .await?;
+        return Ok(());
+    };
+
+    let mut sheets = song_info.sheets.clone();
+    sheets.sort_by_key(|sheet| (sheet.chart_type.as_u8(), sheet.difficulty.as_u8()));
+
+    let std_version = sheets
+        .iter()
+        .find(|sheet| sheet.chart_type == models::ChartType::Std)
+        .and_then(|sheet| sheet.version.as_deref());
+    let dx_version = sheets
+        .iter()
+        .find(|sheet| sheet.chart_type == models::ChartType::Dx)
+        .and_then(|sheet| sheet.version.as_deref());
+
+    let format_levels = |chart_type: models::ChartType| -> Option<String> {
+        let ordered_difficulties = [
+            models::DifficultyCategory::Basic,
+            models::DifficultyCategory::Advanced,
+            models::DifficultyCategory::Expert,
+            models::DifficultyCategory::Master,
+            models::DifficultyCategory::ReMaster,
+        ];
+
+        let mut parts = Vec::new();
+        for difficulty in ordered_difficulties {
+            let Some(sheet) = sheets
+                .iter()
+                .find(|sheet| sheet.chart_type == chart_type && sheet.difficulty == difficulty)
+            else {
+                continue;
+            };
+
+            let short = match difficulty {
+                models::DifficultyCategory::Basic => "B",
+                models::DifficultyCategory::Advanced => "A",
+                models::DifficultyCategory::Expert => "E",
+                models::DifficultyCategory::Master => "M",
+                models::DifficultyCategory::ReMaster => "R",
+            };
+
+            let mut part = format!("{short} {}", sheet.level);
+            if let Some(internal) = sheet.internal_level {
+                part.push_str(&format!(" ({internal:.1})"));
+            }
+            parts.push(part);
+        }
+
+        if parts.is_empty() {
+            None
+        } else {
+            Some(parts.join(" / "))
+        }
+    };
+
+    let mut blocks = Vec::new();
+    let mut version_lines = Vec::new();
+    if let Some(version) = std_version {
+        version_lines.push(format!("Version (STD): {version}"));
+    }
+    if let Some(version) = dx_version {
+        version_lines.push(format!("Version (DX): {version}"));
+    }
+    if !version_lines.is_empty() {
+        blocks.push(version_lines.join("\n"));
+    }
+
+    if let Some(levels) = format_levels(models::ChartType::Std) {
+        blocks.push(format!("Level (STD)\n{levels}"));
+    }
+    if let Some(levels) = format_levels(models::ChartType::Dx) {
+        blocks.push(format!("Level (DX)\n{levels}"));
+    }
+
+    let mut base = embed_base(&song_info.title);
+    if !blocks.is_empty() {
+        base = base.description(blocks.join("\n\n"));
+    }
+
+    if let Some(image_name) = song_info.image_name.as_deref() {
+        base = base.thumbnail(format!("attachment://{image_name}"));
+    }
+    let embeds = vec![base];
+
+    let mut attachments = Vec::new();
+    if let Some(image_name) = song_info.image_name.as_deref() {
+        match ctx.data().song_info_client.get_cover(image_name).await {
+            Ok(bytes) => {
+                attachments.push(serenity::CreateAttachment::bytes(
+                    bytes,
+                    image_name.to_string(),
+                ));
+            }
+            Err(e) => tracing::warn!("failed to fetch cover image {image_name}: {e:?}"),
+        }
+    }
+
+    ctx.send(CreateReply {
+        embeds,
+        attachments,
+        ..Default::default()
+    })
+    .await?;
+
+    Ok(())
+}
+
 /// Get most recent credit records
 #[poise::command(slash_command, rename = "mai-recent")]
 pub(crate) async fn mai_recent(ctx: Context<'_>) -> Result<(), Error> {
