@@ -1,10 +1,7 @@
 #![allow(dead_code)]
 
 use eyre::{ContextCompat, WrapErr};
-use models::{
-    ChartType, DifficultyCategory, SongCatalog, SongCatalogChart, SongCatalogSong,
-    SongInternalLevelIndex,
-};
+use models::{ChartType, DifficultyCategory, SongCatalog, SongCatalogChart, SongCatalogSong};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::collections::HashMap;
@@ -224,11 +221,6 @@ impl SongDatabase {
             &self.internal_levels,
             Some(&self.user_tiers),
         ))
-    }
-
-    pub fn into_index(self) -> eyre::Result<SongInternalLevelIndex> {
-        let data_root = self.into_data_root()?;
-        Ok(SongInternalLevelIndex::from_catalog(data_root))
     }
 }
 
