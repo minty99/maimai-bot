@@ -45,6 +45,7 @@ pub(crate) struct RecentRecordView {
     pub(crate) title: String,
     pub(crate) chart_type: ChartType,
     pub(crate) diff_category: Option<DifficultyCategory>,
+    pub(crate) image_name: Option<String>,
     pub(crate) level: Option<String>,
     pub(crate) internal_level: Option<f32>,
     pub(crate) rating_points: Option<u32>,
@@ -136,7 +137,12 @@ pub(crate) fn build_mai_recent_embeds(
         } else if record.achievement_new_record {
             desc.push_str("\n[NEW RECORD]");
         }
-        embed_base(&track).description(desc)
+
+        let mut embed = embed_base(&track).description(desc);
+        if let Some(image_name) = record.image_name.as_deref() {
+            embed = embed.thumbnail(format!("attachment://{image_name}"));
+        }
+        embed
     }));
 
     embeds

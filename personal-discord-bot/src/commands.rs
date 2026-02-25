@@ -188,6 +188,7 @@ pub(crate) async fn mai_recent(ctx: Context<'_>) -> Result<(), Error> {
     recent.reverse();
 
     let mut records = Vec::with_capacity(recent.len());
+    let mut cover_image_names = std::collections::BTreeSet::new();
     for record in recent {
         let metadata = match record.diff_category {
             Some(diff_category) => {
@@ -210,12 +211,17 @@ pub(crate) async fn mai_recent(ctx: Context<'_>) -> Result<(), Error> {
             )),
             _ => None,
         };
+        let image_name = metadata.as_ref().and_then(|m| m.image_name.clone());
+        if let Some(name) = image_name.as_ref() {
+            cover_image_names.insert(name.clone());
+        }
         records.push(RecentRecordView {
             track: record.track.map(|t| t as i64),
             played_at: record.played_at,
             title: record.title,
             chart_type: record.chart_type,
             diff_category: record.diff_category,
+            image_name,
             level: metadata.as_ref().and_then(|m| m.level.clone()),
             internal_level,
             rating_points,
@@ -227,9 +233,19 @@ pub(crate) async fn mai_recent(ctx: Context<'_>) -> Result<(), Error> {
     }
 
     let embeds = build_mai_recent_embeds("Player", &records, None);
+    let mut attachments = Vec::new();
+    for image_name in cover_image_names {
+        match ctx.data().song_info_client.get_cover(&image_name).await {
+            Ok(bytes) => {
+                attachments.push(serenity::CreateAttachment::bytes(bytes, image_name));
+            }
+            Err(e) => tracing::warn!("failed to fetch cover image {image_name}: {e:?}"),
+        }
+    }
 
     ctx.send(CreateReply {
         embeds,
+        attachments,
         ..Default::default()
     })
     .await?;
