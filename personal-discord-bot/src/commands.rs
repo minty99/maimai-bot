@@ -1,14 +1,14 @@
 use eyre::{Result, WrapErr};
-use poise::serenity_prelude as serenity;
 use poise::CreateReply;
+use poise::serenity_prelude as serenity;
 use time::{Duration as TimeDuration, OffsetDateTime, UtcOffset};
 
-use crate::embeds::{
-    build_mai_recent_embeds, build_mai_today_detail_embed, build_mai_today_embed, embed_base,
-    embed_maintenance, format_level_with_internal, RecentRecordView,
-};
-use crate::rating_image::{render_rating_image, RatingImageEntry};
 use crate::BotData;
+use crate::embeds::{
+    RecentRecordView, build_mai_recent_embeds, build_mai_today_detail_embed, build_mai_today_embed,
+    embed_base, embed_maintenance, format_level_with_internal,
+};
+use crate::rating_image::{RatingImageEntry, render_rating_image};
 
 type Context<'a> = poise::Context<'a, BotData, Box<dyn std::error::Error + Send + Sync>>;
 type Error = Box<dyn std::error::Error + Send + Sync>;
@@ -21,46 +21,57 @@ pub(crate) async fn mai_score(
 ) -> Result<(), Error> {
     ctx.defer().await?;
 
-    let scores = ctx
-        .data()
-        .record_collector_client
-        .search_scores(&search)
-        .await
-        .wrap_err("search scores")?;
-
-    if scores.is_empty() {
+    let requested_title = search.trim();
+    if requested_title.is_empty() {
         ctx.send(
             CreateReply::default()
-                .embed(embed_base("No records found").description("No titles to match.")),
+                .ephemeral(true)
+                .embed(embed_base("No records found").description("Please provide a title.")),
         )
         .await?;
         return Ok(());
     }
 
-    let matched_title = scores
-        .iter()
-        .find(|score| score.title.trim() == search.trim())
-        .map(|score| score.title.clone());
-    let Some(matched_title) = matched_title else {
-        ctx.send(
-            CreateReply::default()
-                .ephemeral(true)
-                .embed(embed_base("No records found").description("No titles to match.")),
-        )
-        .await?;
-        return Ok(());
-    };
-
     let detailed_scores = match ctx
         .data()
         .record_collector_client
-        .get_song_detail_scores(&matched_title)
+        .get_song_detail_scores(requested_title)
         .await
     {
         Ok(v) => v,
         Err(e) => {
+            if let Some(api_error) = e.downcast_ref::<crate::client::ApiError>() {
+                match api_error.code() {
+                    "MAINTENANCE" => {
+                        ctx.send(
+                            CreateReply::default()
+                                .ephemeral(true)
+                                .embed(embed_maintenance()),
+                        )
+                        .await?;
+                        return Ok(());
+                    }
+                    "AMBIGUOUS_SONG_TITLE" => {
+                        let description = duplicate_title_error_description(api_error.message());
+                        ctx.send(CreateReply::default().ephemeral(true).embed(
+                            embed_base("정확한 장르 지정이 필요해요").description(description),
+                        ))
+                        .await?;
+                        return Ok(());
+                    }
+                    "NOT_FOUND" => {
+                        ctx.send(CreateReply::default().ephemeral(true).embed(
+                            embed_base("No records found").description("No scores for this title."),
+                        ))
+                        .await?;
+                        return Ok(());
+                    }
+                    _ => {}
+                }
+            }
+
             let msg = e.to_string();
-            if msg.contains("MAINTENANCE") || msg.contains("maintenance") {
+            if msg.contains("maintenance") {
                 ctx.send(
                     CreateReply::default()
                         .ephemeral(true)
@@ -83,7 +94,11 @@ pub(crate) async fn mai_score(
         return Ok(());
     }
 
-    let mut embed = embed_base(&matched_title);
+    let embed_title = detailed_scores
+        .first()
+        .map(|score| score.title.as_str())
+        .unwrap_or(requested_title);
+    let mut embed = embed_base(embed_title);
     let mut has_rows = false;
     let mut first_image_name = None::<String>;
 
@@ -827,6 +842,25 @@ async fn fetch_song_metadata(
             None
         }
     }
+}
+
+fn duplicate_title_error_description(server_error: &str) -> String {
+    let default_message =
+        "동일 제목 곡이 있어서 장르를 함께 지정해야 합니다.\n형식: `<title> [[genre]]`".to_string();
+
+    let Some((_, candidates)) = server_error.split_once("Candidates:") else {
+        return default_message;
+    };
+
+    let candidates = candidates.trim();
+    if candidates.is_empty() {
+        return default_message;
+    }
+
+    format!(
+        "동일 제목 곡이 있어서 장르를 함께 지정해야 합니다.\n가능한 후보: {}\n형식: `<title> [[genre]]`",
+        candidates
+    )
 }
 
 fn is_ap_like(fc: Option<&models::FcStatus>) -> bool {

@@ -9,6 +9,7 @@ pub fn parse_song_detail_html(html: &str) -> eyre::Result<ParsedSongDetail> {
     let document = Html::parse_document(html);
 
     let title_selector = Selector::parse("div.basic_block div.f_15.break").unwrap();
+    let genre_selector = Selector::parse("div.basic_block div.f_12.blue").unwrap();
     let page_kind_selector = Selector::parse("div.basic_block img").unwrap();
     let detail_selector =
         Selector::parse(r#"div[id][class*="music_"][class*="_score_back"]"#).unwrap();
@@ -25,6 +26,17 @@ pub fn parse_song_detail_html(html: &str) -> eyre::Result<ParsedSongDetail> {
         .unwrap_or_default()
         .trim()
         .to_string();
+
+    let genre = document
+        .select(&genre_selector)
+        .next()
+        .map(|e| {
+            e.text()
+                .map(str::trim)
+                .filter(|value| !value.is_empty())
+                .collect::<String>()
+        })
+        .filter(|value| !value.is_empty());
 
     let page_chart_type = document
         .select(&page_kind_selector)
@@ -52,18 +64,18 @@ pub fn parse_song_detail_html(html: &str) -> eyre::Result<ParsedSongDetail> {
         let mut play_count: Option<u32> = None;
         for block in section.select(&score_block_selector) {
             let text = collect_text(&block);
-            if achievement_percent.is_none() {
-                if let Some(p) = parse_percent(&text) {
-                    achievement_percent = Some(p);
-                    continue;
-                }
+            if achievement_percent.is_none()
+                && let Some(p) = parse_percent(&text)
+            {
+                achievement_percent = Some(p);
+                continue;
             }
-            if dx_score.is_none() {
-                if let Some((cur, max)) = parse_dx_score_pair(&text) {
-                    dx_score = Some(cur);
-                    dx_score_max = Some(max);
-                    continue;
-                }
+            if dx_score.is_none()
+                && let Some((cur, max)) = parse_dx_score_pair(&text)
+            {
+                dx_score = Some(cur);
+                dx_score_max = Some(max);
+                continue;
             }
         }
         for row in section.select(&detail_row_selector) {
@@ -133,6 +145,7 @@ pub fn parse_song_detail_html(html: &str) -> eyre::Result<ParsedSongDetail> {
 
     Ok(ParsedSongDetail {
         title,
+        genre,
         chart_type: page_chart_type,
         difficulties,
     })

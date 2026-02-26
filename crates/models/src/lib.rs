@@ -3,6 +3,7 @@ pub mod config;
 pub mod game_domain;
 pub mod parser_models;
 pub mod song_catalog;
+pub mod song_title;
 pub mod storage_models;
 
 pub use api_models::{PlayRecordApiResponse, ScoreApiResponse, SongDetailScoreApiResponse};
@@ -14,4 +15,5 @@ pub use parser_models::{
     ParsedScoreEntry, ParsedSongChartDetail, ParsedSongDetail,
 };
 pub use song_catalog::{SongCatalog, SongCatalogChart, SongCatalogSong, SongInternalLevelIndex};
+pub use song_title::{DUPLICATE_CAPABLE_BASE_TITLES, SongTitle};
 pub use storage_models::{StoredPlayRecord, StoredScoreEntry};

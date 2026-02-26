@@ -1,7 +1,9 @@
 #![allow(dead_code)]
 
 use eyre::{ContextCompat, WrapErr};
-use models::{ChartType, DifficultyCategory, SongCatalog, SongCatalogChart, SongCatalogSong};
+use models::{
+    ChartType, DifficultyCategory, SongCatalog, SongCatalogChart, SongCatalogSong, SongTitle,
+};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::collections::HashMap;
@@ -267,17 +269,17 @@ fn build_data_root(
             .as_ref()
             .and_then(|k| user_tiers.and_then(|map| map.get(k)));
 
-        if let (Some(internal), Some(user_tier_value)) = (internal_level.as_deref(), user_tier) {
-            if internal != user_tier_value.source_internal_level {
-                tracing::warn!(
-                    title = %song.title,
-                    chart_type = %sheet.sheet_type,
-                    difficulty = %sheet.difficulty.as_str(),
-                    chart_internal_level = %internal,
-                    user_tier_internal_level = %user_tier_value.source_internal_level,
-                    "user tier internal level mismatch"
-                );
-            }
+        if let (Some(internal), Some(user_tier_value)) = (internal_level.as_deref(), user_tier)
+            && internal != user_tier_value.source_internal_level
+        {
+            tracing::warn!(
+                title = %song.title,
+                chart_type = %sheet.sheet_type,
+                difficulty = %sheet.difficulty.as_str(),
+                chart_internal_level = %internal,
+                user_tier_internal_level = %user_tier_value.source_internal_level,
+                "user tier internal level mismatch"
+            );
         }
 
         song.sheets.push(SongCatalogChart {
@@ -463,13 +465,8 @@ fn derive_song_id(raw_song: &RawSong) -> String {
         return raw_song.title.clone();
     }
 
-    if raw_song.title == "Link" {
-        if raw_song.catcode == "maimai" {
-            return "Link".to_string();
-        }
-        if raw_song.catcode == "niconico＆ボーカロイド" {
-            return "Link (2)".to_string();
-        }
+    if SongTitle::requires_qualifier_for(&raw_song.title) {
+        return SongTitle::from_parts(&raw_song.title, Some(&raw_song.catcode)).canonical();
     }
 
     if raw_song.title == "Bad Apple!! feat nomico" {
@@ -695,10 +692,10 @@ mod tests {
         raw_song.catcode = "niconico＆ボーカロイド".to_string();
         raw_song.title = "Link".to_string();
         raw_song.comment = None;
-        assert_eq!(derive_song_id(&raw_song), "Link (2)");
+        assert_eq!(derive_song_id(&raw_song), "Link [[niconico＆VOCALOID™]]");
 
         raw_song.catcode = "maimai".to_string();
-        assert_eq!(derive_song_id(&raw_song), "Link");
+        assert_eq!(derive_song_id(&raw_song), "Link [[maimai]]");
 
         raw_song.title = "Bad Apple!! feat nomico".to_string();
         assert_eq!(derive_song_id(&raw_song), "Bad Apple!! feat.nomico");

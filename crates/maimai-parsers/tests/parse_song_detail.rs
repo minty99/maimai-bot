@@ -15,6 +15,12 @@ fn parse_song_detail_example1() {
     let parsed = parse_song_detail_html(&html).unwrap();
 
     assert!(!parsed.title.trim().is_empty());
+    assert!(
+        parsed
+            .genre
+            .as_deref()
+            .is_some_and(|value| !value.trim().is_empty())
+    );
     assert_eq!(format!("{:?}", parsed.chart_type), "Dx");
     assert_eq!(
         parsed
@@ -24,23 +30,30 @@ fn parse_song_detail_example1() {
             .collect::<Vec<_>>(),
         vec![DifficultyCategory::Expert, DifficultyCategory::Master]
     );
-    assert!(parsed
-        .difficulties
-        .iter()
-        .all(|d| !d.level.trim().is_empty()));
-    assert!(parsed
-        .difficulties
-        .iter()
-        .filter(|d| d.dx_score.is_some())
-        .all(|d| d.dx_score_max.is_some()));
-    assert!(parsed.difficulties.iter().all(|d| d
-        .last_played_at
-        .as_ref()
-        .is_some_and(|v| !v.trim().is_empty())));
-    assert!(parsed
-        .difficulties
-        .iter()
-        .all(|d| d.play_count.is_some_and(|v| v > 0)));
+    assert!(
+        parsed
+            .difficulties
+            .iter()
+            .all(|d| !d.level.trim().is_empty())
+    );
+    assert!(
+        parsed
+            .difficulties
+            .iter()
+            .filter(|d| d.dx_score.is_some())
+            .all(|d| d.dx_score_max.is_some())
+    );
+    assert!(parsed.difficulties.iter().all(|d| {
+        d.last_played_at
+            .as_ref()
+            .is_some_and(|v| !v.trim().is_empty())
+    }));
+    assert!(
+        parsed
+            .difficulties
+            .iter()
+            .all(|d| d.play_count.is_some_and(|v| v > 0))
+    );
     assert_eq!(
         parsed.difficulties[0].last_played_at.as_deref(),
         Some("2025/10/23 00:15")
@@ -74,6 +87,12 @@ fn parse_song_detail_example2() {
     let parsed = parse_song_detail_html(&html).unwrap();
 
     assert!(!parsed.title.trim().is_empty());
+    assert!(
+        parsed
+            .genre
+            .as_deref()
+            .is_some_and(|value| !value.trim().is_empty())
+    );
     assert_eq!(format!("{:?}", parsed.chart_type), "Std");
     assert_eq!(
         parsed
@@ -88,23 +107,30 @@ fn parse_song_detail_example2() {
             DifficultyCategory::ReMaster,
         ]
     );
-    assert!(parsed
-        .difficulties
-        .iter()
-        .all(|d| !d.level.trim().is_empty()));
-    assert!(parsed
-        .difficulties
-        .iter()
-        .filter(|d| d.dx_score.is_some())
-        .all(|d| d.dx_score_max.is_some()));
-    assert!(parsed.difficulties.iter().all(|d| d
-        .last_played_at
-        .as_ref()
-        .is_some_and(|v| !v.trim().is_empty())));
-    assert!(parsed
-        .difficulties
-        .iter()
-        .all(|d| d.play_count.is_some_and(|v| v > 0)));
+    assert!(
+        parsed
+            .difficulties
+            .iter()
+            .all(|d| !d.level.trim().is_empty())
+    );
+    assert!(
+        parsed
+            .difficulties
+            .iter()
+            .filter(|d| d.dx_score.is_some())
+            .all(|d| d.dx_score_max.is_some())
+    );
+    assert!(parsed.difficulties.iter().all(|d| {
+        d.last_played_at
+            .as_ref()
+            .is_some_and(|v| !v.trim().is_empty())
+    }));
+    assert!(
+        parsed
+            .difficulties
+            .iter()
+            .all(|d| d.play_count.is_some_and(|v| v > 0))
+    );
     assert_eq!(
         parsed.difficulties[0].last_played_at.as_deref(),
         Some("2025/09/17 22:46")

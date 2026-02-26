@@ -1,6 +1,6 @@
 use axum::{
-    extract::{Path, Query, State},
     Json,
+    extract::{Path, Query, State},
 };
 use eyre::WrapErr;
 use maimai_parsers::{parse_scores_html, parse_song_detail_html};
@@ -10,11 +10,11 @@ use std::collections::HashSet;
 
 use crate::{
     error::{AppError, Result},
-    http_client::{is_maintenance_window_now, MaimaiClient},
-    routes::responses::{score_response_from_entry, ScoreApiResponse},
+    http_client::{MaimaiClient, is_maintenance_window_now},
+    routes::responses::{ScoreApiResponse, score_response_from_entry},
     state::AppState,
 };
-use models::{SongDetailScoreApiResponse, StoredScoreEntry};
+use models::{SongDetailScoreApiResponse, SongTitle, StoredScoreEntry};
 
 #[derive(Deserialize)]
 pub(crate) struct SearchQuery {
@@ -95,6 +95,8 @@ pub(crate) async fn get_song_detail_scores(
     State(state): State<AppState>,
     Path(title): Path<String>,
 ) -> Result<Json<Vec<SongDetailScoreApiResponse>>> {
+    let requested_title = SongTitle::parse(&title);
+
     if is_maintenance_window_now() {
         return Err(AppError::Maintenance(
             "maimai DX NET maintenance window (04:00-07:00 local time)".to_string(),
@@ -110,9 +112,10 @@ pub(crate) async fn get_song_detail_scores(
         .await
         .map_err(map_maintenance_or_http_client_error)?;
 
-    let detail_indices = find_song_detail_indices_by_title(&client, &title)
-        .await
-        .map_err(map_maintenance_or_http_client_error)?;
+    let detail_indices =
+        find_song_detail_indices_by_base_title(&client, requested_title.base_title())
+            .await
+            .map_err(map_maintenance_or_http_client_error)?;
     if detail_indices.is_empty() {
         return Err(AppError::NotFound(format!(
             "No song detail index found for title='{}'",
@@ -121,6 +124,7 @@ pub(crate) async fn get_song_detail_scores(
     }
 
     let mut responses = Vec::new();
+    let mut candidate_titles = HashSet::new();
     for detail_idx in detail_indices {
         let url = Url::parse_with_params(
             "https://maimaidx-eng.com/maimai-mobile/record/musicDetail/",
@@ -139,6 +143,20 @@ pub(crate) async fn get_song_detail_scores(
         let parsed = parse_song_detail_html(&html)
             .wrap_err("parse musicDetail html")
             .map_err(|e| AppError::InternalError(e.to_string()))?;
+        let parsed_title = SongTitle::from_parts(&parsed.title, parsed.genre.as_deref());
+        if parsed_title.is_ambiguous_unqualified() {
+            return Err(AppError::InternalError(format!(
+                "Failed to resolve qualifier for title '{}'",
+                parsed.title
+            )));
+        }
+        candidate_titles.insert(parsed_title.canonical());
+
+        if requested_title.qualifier().is_some()
+            && !parsed_title.equals_canonical_ignore_ascii_case(&requested_title)
+        {
+            continue;
+        }
 
         for difficulty in parsed.difficulties {
             let achievement_x10000 = difficulty
@@ -148,7 +166,7 @@ pub(crate) async fn get_song_detail_scores(
                 continue;
             }
             responses.push(SongDetailScoreApiResponse {
-                title: parsed.title.clone(),
+                title: parsed_title.canonical(),
                 chart_type: difficulty.chart_type,
                 diff_category: difficulty.diff_category,
                 achievement_x10000,
@@ -163,6 +181,16 @@ pub(crate) async fn get_song_detail_scores(
         }
     }
 
+    if requested_title.is_ambiguous_unqualified() && candidate_titles.len() > 1 {
+        let mut sorted_candidates = candidate_titles.into_iter().collect::<Vec<_>>();
+        sorted_candidates.sort();
+        return Err(AppError::AmbiguousSongTitle(format!(
+            "Ambiguous song title '{}'. Please specify genre in the format '<title> [[genre]]'. Candidates: {}",
+            requested_title.base_title(),
+            sorted_candidates.join(", ")
+        )));
+    }
+
     responses.sort_by_key(|score| (score.chart_type, score.diff_category));
 
     if responses.is_empty() {
@@ -175,11 +203,11 @@ pub(crate) async fn get_song_detail_scores(
     Ok(Json(responses))
 }
 
-async fn find_song_detail_indices_by_title(
+async fn find_song_detail_indices_by_base_title(
     client: &MaimaiClient,
-    title: &str,
+    base_title: &str,
 ) -> eyre::Result<Vec<String>> {
-    let target_norm = normalize_title_for_match(title);
+    let target_norm = normalize_title_for_match(base_title);
     let mut seen = HashSet::new();
     let mut indices = Vec::new();
 
@@ -208,7 +236,7 @@ fn normalize_title_for_match(s: &str) -> String {
     s.trim()
         .to_lowercase()
         .chars()
-        .filter(|c| c.is_alphanumeric())
+        .filter(|c| !c.is_whitespace())
         .collect()
 }
 

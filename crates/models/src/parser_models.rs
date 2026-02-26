@@ -40,6 +40,7 @@ pub struct ParsedPlayRecord {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ParsedSongDetail {
     pub title: String,
+    pub genre: Option<String>,
     pub chart_type: ChartType,
     pub difficulties: Vec<ParsedSongChartDetail>,
 }

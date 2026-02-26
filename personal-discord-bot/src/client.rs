@@ -5,7 +5,8 @@ use models::{
 };
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
-use tokio::time::{sleep, Duration};
+use std::fmt;
+use tokio::time::{Duration, sleep};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct RecordCollectorErrorResponse {
@@ -14,6 +15,54 @@ struct RecordCollectorErrorResponse {
     #[serde(default)]
     maintenance: Option<bool>,
 }
+
+#[derive(Debug, Clone)]
+pub(crate) struct ApiError {
+    status: reqwest::StatusCode,
+    code: String,
+    message: String,
+}
+
+impl ApiError {
+    fn from_record_collector(
+        status: reqwest::StatusCode,
+        error: RecordCollectorErrorResponse,
+    ) -> Self {
+        Self {
+            status,
+            code: error.code,
+            message: error.message,
+        }
+    }
+
+    fn from_http_text(status: reqwest::StatusCode, body: &str) -> Self {
+        Self {
+            status,
+            code: "HTTP_ERROR".to_string(),
+            message: body.trim().to_string(),
+        }
+    }
+
+    pub(crate) fn code(&self) -> &str {
+        &self.code
+    }
+
+    pub(crate) fn message(&self) -> &str {
+        &self.message
+    }
+}
+
+impl fmt::Display for ApiError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        if self.message.is_empty() {
+            write!(f, "HTTP {} [{}]", self.status, self.code)
+        } else {
+            write!(f, "HTTP {} [{}]: {}", self.status, self.code, self.message)
+        }
+    }
+}
+
+impl std::error::Error for ApiError {}
 
 pub(crate) enum PlayerDataResult {
     Ok(ParsedPlayerProfile),
@@ -332,12 +381,16 @@ impl RecordCollectorClient {
                 }
                 Ok(resp) => {
                     let status = resp.status();
-                    let body = resp.text().await.unwrap_or_default();
                     if attempt < 2 {
                         sleep(Duration::from_millis(100 * 2_u64.pow(attempt))).await;
                         continue;
                     }
-                    return Err(eyre::eyre!("HTTP {}: {}", status, body));
+                    let body = resp.text().await.unwrap_or_default();
+                    if let Ok(parsed) = serde_json::from_str::<RecordCollectorErrorResponse>(&body)
+                    {
+                        return Err(ApiError::from_record_collector(status, parsed).into());
+                    }
+                    return Err(ApiError::from_http_text(status, &body).into());
                 }
                 Err(e) if attempt < 2 => {
                     sleep(Duration::from_millis(100 * 2_u64.pow(attempt))).await;

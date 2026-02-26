@@ -5,9 +5,9 @@ use tokio::time::interval;
 use tracing::{debug, error, info};
 
 use crate::db::{get_app_state_u32, set_app_state_u32, upsert_playlogs};
-use crate::http_client::{is_maintenance_window_now, MaimaiClient};
+use crate::http_client::{MaimaiClient, is_maintenance_window_now};
 use maimai_parsers::{parse_player_data_html, parse_recent_html};
-use models::{ParsedPlayRecord, ParsedPlayerProfile};
+use models::{ParsedPlayRecord, ParsedPlayerProfile, SongTitle};
 
 use crate::state::AppState;
 use crate::tasks::scores_sync::rebuild_scores_with_client;
@@ -58,14 +58,14 @@ async fn poll_and_sync_if_needed(app_state: &AppState) -> Result<bool> {
         .ok()
         .flatten();
 
-    if let Some(stored_total) = stored_total {
-        if stored_total == player_data.total_play_count {
-            debug!(
-                "No play count change detected (stored={stored_total}, current={})",
-                player_data.total_play_count
-            );
-            return Ok(false);
-        }
+    if let Some(stored_total) = stored_total
+        && stored_total == player_data.total_play_count
+    {
+        debug!(
+            "No play count change detected (stored={stored_total}, current={})",
+            player_data.total_play_count
+        );
+        return Ok(false);
     }
 
     info!(
@@ -153,6 +153,9 @@ async fn annotate_first_play_flags(
 ) -> Result<()> {
     for entry in entries {
         if !entry.achievement_new_record {
+            continue;
+        }
+        if SongTitle::parse(&entry.title).is_ambiguous_unqualified() {
             continue;
         }
         let Some(diff_category) = entry.diff_category else {

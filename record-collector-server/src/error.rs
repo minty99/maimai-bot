@@ -1,4 +1,4 @@
-use axum::{http::StatusCode, response::IntoResponse, Json};
+use axum::{Json, http::StatusCode, response::IntoResponse};
 use serde::Serialize;
 
 #[derive(Debug)]
@@ -8,6 +8,7 @@ pub(crate) enum AppError {
     NotFound(String),
     InternalError(String),
     BadRequest(String),
+    AmbiguousSongTitle(String),
     Maintenance(String),
 }
 
@@ -39,6 +40,9 @@ impl IntoResponse for AppError {
                 None,
             ),
             AppError::BadRequest(msg) => (StatusCode::BAD_REQUEST, msg, "BAD_REQUEST", None),
+            AppError::AmbiguousSongTitle(msg) => {
+                (StatusCode::BAD_REQUEST, msg, "AMBIGUOUS_SONG_TITLE", None)
+            }
             AppError::Maintenance(msg) => (
                 StatusCode::SERVICE_UNAVAILABLE,
                 msg,

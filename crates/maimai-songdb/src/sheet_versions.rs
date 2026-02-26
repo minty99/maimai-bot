@@ -4,7 +4,7 @@ use std::time::Duration;
 use eyre::WrapErr;
 use maimai_auth::intl;
 use maimai_parsers::parse_scores_html;
-use models::{ChartType, MaimaiVersion};
+use models::{ChartType, MaimaiVersion, SongTitle};
 
 const INTL_VERSION_SEARCH_URL: &str =
     "https://maimaidx-eng.com/maimai-mobile/record/musicVersion/search/";
@@ -100,13 +100,8 @@ fn parse_rows(html: &str, version_name: &str) -> eyre::Result<Vec<(String, Chart
 }
 
 fn song_id_for_version_title(title: &str, version_name: &str) -> String {
-    if title == "Link" {
-        if version_name == "maimai PLUS" {
-            return "Link".to_string();
-        }
-        if version_name == "ORANGE" {
-            return "Link (2)".to_string();
-        }
+    if SongTitle::requires_qualifier_for(title) {
+        return SongTitle::from_parts(title, Some(version_name)).canonical();
     }
     if title == "Bad Apple!! feat nomico" {
         return "Bad Apple!! feat.nomico".to_string();
@@ -122,11 +117,11 @@ mod tests {
     fn song_id_special_cases_follow_arcade_songs_fetch_logic() {
         assert_eq!(
             song_id_for_version_title("Link", "maimai PLUS"),
-            "Link".to_string()
+            "Link [[maimai]]".to_string()
         );
         assert_eq!(
             song_id_for_version_title("Link", "ORANGE"),
-            "Link (2)".to_string()
+            "Link [[niconico＆VOCALOID™]]".to_string()
         );
         assert_eq!(
             song_id_for_version_title("Bad Apple!! feat nomico", "ORANGE"),
