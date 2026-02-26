@@ -44,18 +44,18 @@ pub fn parse_scores_html(html: &str, diff: u8) -> eyre::Result<Vec<ParsedScoreEn
         let mut dx_score_max: Option<i32> = None;
         for block in entry.select(&score_block_selector) {
             let text = collect_text(&block);
-            if achievement_percent.is_none() {
-                if let Some(p) = parse_percent(&text) {
-                    achievement_percent = Some(p);
-                    continue;
-                }
+            if achievement_percent.is_none()
+                && let Some(p) = parse_percent(&text)
+            {
+                achievement_percent = Some(p);
+                continue;
             }
-            if dx_score.is_none() {
-                if let Some((cur, max)) = parse_dx_score_pair(&text) {
-                    dx_score = Some(cur);
-                    dx_score_max = Some(max);
-                    continue;
-                }
+            if dx_score.is_none()
+                && let Some((cur, max)) = parse_dx_score_pair(&text)
+            {
+                dx_score = Some(cur);
+                dx_score_max = Some(max);
+                continue;
             }
         }
 

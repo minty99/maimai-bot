@@ -178,10 +178,10 @@ fn parse_subtitle_text(text: &str) -> (Option<u8>, Option<String>) {
 fn strip_level_from_title(raw: &str, level: &str) -> String {
     let mut s = raw.trim().to_string();
     let level = level.trim();
-    if !level.is_empty() {
-        if let Some(rest) = s.strip_prefix(level) {
-            s = rest.to_string();
-        }
+    if !level.is_empty()
+        && let Some(rest) = s.strip_prefix(level)
+    {
+        s = rest.to_string();
     }
     s.trim().to_string()
 }

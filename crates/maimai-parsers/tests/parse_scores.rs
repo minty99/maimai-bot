@@ -24,14 +24,17 @@ fn run_fixture_test(diff: u8, filename: &str) {
     };
     assert!(entries.iter().all(|e| e.diff_category == expected_category));
     assert!(entries.iter().all(|e| !e.level.trim().is_empty()));
-    assert!(entries
-        .iter()
-        .filter(|e| e.dx_score.is_some())
-        .all(|e| e.dx_score_max.is_some()));
-    assert!(entries.iter().any(|e| e
-        .source_idx
-        .as_ref()
-        .is_some_and(|idx| !idx.trim().is_empty())));
+    assert!(
+        entries
+            .iter()
+            .filter(|e| e.dx_score.is_some())
+            .all(|e| e.dx_score_max.is_some())
+    );
+    assert!(entries.iter().any(|e| {
+        e.source_idx
+            .as_ref()
+            .is_some_and(|idx| !idx.trim().is_empty())
+    }));
     if diff == 0 {
         assert!(entries.iter().any(|e| e.chart_type == ChartType::Std));
         assert!(entries.iter().any(|e| e.chart_type == ChartType::Dx));
@@ -41,8 +44,16 @@ fn run_fixture_test(diff: u8, filename: &str) {
     for e in entries.iter().take(5) {
         println!(
             "  chart={:?} title={:?} diff={:?} lv={:?} achv={:?} rank={:?} fc={:?} sync={:?} dx={:?}/{:?}",
-            e.chart_type, e.title, e.diff_category, e.level,
-            e.achievement_percent, e.rank, e.fc, e.sync, e.dx_score, e.dx_score_max,
+            e.chart_type,
+            e.title,
+            e.diff_category,
+            e.level,
+            e.achievement_percent,
+            e.rank,
+            e.fc,
+            e.sync,
+            e.dx_score,
+            e.dx_score_max,
         );
     }
 }
@@ -82,9 +93,11 @@ fn parse_scores_intl_version0_diff0_fixture() {
         43,
         "expected maimai version song count changed"
     );
-    assert!(entries
-        .iter()
-        .all(|e| e.diff_category == DifficultyCategory::Basic));
+    assert!(
+        entries
+            .iter()
+            .all(|e| e.diff_category == DifficultyCategory::Basic)
+    );
     assert!(entries.iter().all(|e| !e.title.trim().is_empty()));
     assert!(entries.iter().all(|e| !e.level.trim().is_empty()));
 }

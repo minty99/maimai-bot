@@ -548,17 +548,16 @@ fn resolve_key(
         return None;
     }
 
-    if candidates.len() > 1 {
-        if let Some(&(chart_type, difficulty)) = candidates
+    if candidates.len() > 1
+        && let Some(&(chart_type, difficulty)) = candidates
             .iter()
             .find(|(_, diff)| *diff == DifficultyCategory::Master)
-        {
-            return Some(UserTierKey {
-                title: song.title.clone(),
-                chart_type,
-                difficulty,
-            });
-        }
+    {
+        return Some(UserTierKey {
+            title: song.title.clone(),
+            chart_type,
+            difficulty,
+        });
     }
 
     let (chart_type, difficulty) = candidates[0];

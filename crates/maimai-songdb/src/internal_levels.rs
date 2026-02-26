@@ -7,7 +7,7 @@ use serde_json::Value;
 use std::collections::HashMap;
 use std::path::Path;
 use std::sync::LazyLock;
-use tokio::time::{sleep, Duration};
+use tokio::time::{Duration, sleep};
 
 #[derive(Debug, Clone, Deserialize)]
 struct ExtractSpec {
@@ -337,16 +337,14 @@ pub(crate) async fn fetch_internal_levels(
         let cache_file = cache_path_for_version(cache_dir, version);
         let is_latest = version == latest_version;
 
-        if !is_latest {
-            if let Ok(cached) = load_cached_rows(&cache_file) {
-                tracing::info!(
-                    "v{}: loaded {} rows from cache (frozen version)",
-                    version,
-                    cached.len()
-                );
-                all_rows.extend(cached);
-                continue;
-            }
+        if !is_latest && let Ok(cached) = load_cached_rows(&cache_file) {
+            tracing::info!(
+                "v{}: loaded {} rows from cache (frozen version)",
+                version,
+                cached.len()
+            );
+            all_rows.extend(cached);
+            continue;
         }
 
         let reason = if is_latest {

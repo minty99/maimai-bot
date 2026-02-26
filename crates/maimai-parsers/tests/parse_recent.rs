@@ -18,13 +18,17 @@ fn parse_recent_record_fixture() {
     assert!(entries.len() <= 50);
     assert!(entries.iter().all(|e| e.diff_category.is_some()));
     assert!(entries.iter().all(|e| e.level.is_some()));
-    assert!(entries
-        .iter()
-        .all(|e| e.played_at.as_deref().unwrap_or("").len() >= 10));
-    assert!(entries
-        .iter()
-        .filter(|e| e.dx_score.is_some())
-        .all(|e| e.dx_score_max.is_some()));
+    assert!(
+        entries
+            .iter()
+            .all(|e| e.played_at.as_deref().unwrap_or("").len() >= 10)
+    );
+    assert!(
+        entries
+            .iter()
+            .filter(|e| e.dx_score.is_some())
+            .all(|e| e.dx_score_max.is_some())
+    );
     assert!(entries.iter().any(|e| e.chart_type == ChartType::Std));
     assert!(entries.iter().any(|e| e.chart_type == ChartType::Dx));
     assert!(entries.iter().any(|e| e.achievement_new_record));
@@ -36,9 +40,20 @@ fn parse_recent_record_fixture() {
     for e in entries.iter().take(5) {
         println!(
             "  track={:?} played_at={:?} chart={:?} diff={:?} lv={:?} title={:?} achv={:?} newrec={} rank={:?} fc={:?} sync={:?} dx={:?}/{:?} played_at_unixtime={:?}",
-            e.track, e.played_at, e.chart_type, e.diff_category, e.level,
-            e.title, e.achievement_percent, e.achievement_new_record,
-            e.score_rank, e.fc, e.sync, e.dx_score, e.dx_score_max, e.played_at_unixtime
+            e.track,
+            e.played_at,
+            e.chart_type,
+            e.diff_category,
+            e.level,
+            e.title,
+            e.achievement_percent,
+            e.achievement_new_record,
+            e.score_rank,
+            e.fc,
+            e.sync,
+            e.dx_score,
+            e.dx_score_max,
+            e.played_at_unixtime
         );
     }
 

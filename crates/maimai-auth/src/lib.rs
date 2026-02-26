@@ -1,7 +1,7 @@
 pub mod intl {
     use eyre::WrapErr;
-    use reqwest::header::{HeaderMap, HeaderValue};
     use reqwest::Url;
+    use reqwest::header::{HeaderMap, HeaderValue};
 
     pub const MAIMAI_MOBILE_ROOT: &str = "https://maimaidx-eng.com/maimai-mobile/";
     pub const RECORD_URL: &str = "https://maimaidx-eng.com/maimai-mobile/record/";
