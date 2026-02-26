@@ -8,6 +8,7 @@ mod today;
 
 use axum::{Router, routing::get};
 use tower_http::LatencyUnit;
+use tower_http::cors::CorsLayer;
 use tower_http::trace::{DefaultMakeSpan, DefaultOnResponse, TraceLayer};
 
 use crate::state::AppState;
@@ -30,6 +31,7 @@ pub(crate) fn create_routes(state: AppState) -> Router {
         .route("/api/rating/targets", get(rating::get_rating_targets))
         .route("/api/recent", get(recent::get_recent))
         .route("/api/today", get(today::get_today))
+        .layer(CorsLayer::permissive())
         .layer(
             TraceLayer::new_for_http()
                 .make_span_with(DefaultMakeSpan::new().level(tracing::Level::INFO))
