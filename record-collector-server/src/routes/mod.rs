@@ -6,9 +6,9 @@ mod responses;
 mod scores;
 mod today;
 
-use axum::{routing::get, Router};
-use tower_http::trace::{DefaultMakeSpan, DefaultOnResponse, TraceLayer};
+use axum::{Router, routing::get};
 use tower_http::LatencyUnit;
+use tower_http::trace::{DefaultMakeSpan, DefaultOnResponse, TraceLayer};
 
 use crate::state::AppState;
 

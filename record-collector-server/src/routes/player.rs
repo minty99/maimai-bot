@@ -1,5 +1,5 @@
 use crate::http_client::is_maintenance_window_now;
-use axum::{extract::State, http::StatusCode, Json};
+use axum::{Json, extract::State, http::StatusCode};
 use eyre::WrapErr;
 use reqwest::Url;
 use tracing::debug;

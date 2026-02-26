@@ -2,10 +2,10 @@ mod cover;
 mod health;
 mod songs;
 
-use axum::{routing::get, Router};
+use axum::{Router, routing::get};
+use tower_http::LatencyUnit;
 use tower_http::cors::CorsLayer;
 use tower_http::trace::{DefaultMakeSpan, DefaultOnResponse, TraceLayer};
-use tower_http::LatencyUnit;
 
 use crate::state::AppState;
 

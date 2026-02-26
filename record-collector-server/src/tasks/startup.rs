@@ -3,9 +3,9 @@ use sqlx::SqlitePool;
 use tracing::info;
 
 use crate::db::{get_app_state_u32, set_app_state_u32, upsert_playlogs};
-use crate::http_client::{is_maintenance_window_now, MaimaiClient};
+use crate::http_client::{MaimaiClient, is_maintenance_window_now};
 use maimai_parsers::{parse_player_data_html, parse_recent_html};
-use models::{config::AppConfig, ParsedPlayRecord, ParsedPlayerProfile};
+use models::{ParsedPlayRecord, ParsedPlayerProfile, config::AppConfig};
 
 use crate::config::RecordCollectorConfig;
 use crate::tasks::scores_sync::rebuild_scores_with_client;
