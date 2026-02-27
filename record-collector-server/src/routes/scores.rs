@@ -28,7 +28,7 @@ pub(crate) async fn search_scores(
     let search_term = format!("%{}%", params.q);
 
     let rows = sqlx::query_as::<_, StoredScoreEntry>(
-        "SELECT title, chart_type, diff_category, achievement_x10000, rank, fc, sync, dx_score, dx_score_max
+        "SELECT title, chart_type, diff_category, achievement_x10000, rank, fc, sync, dx_score, dx_score_max, last_played_at, play_count
          FROM scores
          WHERE title LIKE ? AND achievement_x10000 IS NOT NULL
          ORDER BY title
@@ -51,7 +51,7 @@ pub(crate) async fn get_score(
     Path((title, chart_type, diff_category)): Path<(String, String, String)>,
 ) -> Result<Json<ScoreApiResponse>> {
     let score = sqlx::query_as::<_, StoredScoreEntry>(
-        "SELECT title, chart_type, diff_category, achievement_x10000, rank, fc, sync, dx_score, dx_score_max
+        "SELECT title, chart_type, diff_category, achievement_x10000, rank, fc, sync, dx_score, dx_score_max, last_played_at, play_count
          FROM scores
          WHERE title = ? AND chart_type = ? AND diff_category = ? AND achievement_x10000 IS NOT NULL"
     )
@@ -75,7 +75,7 @@ pub(crate) async fn get_all_rated_scores(
     State(state): State<AppState>,
 ) -> Result<Json<Vec<ScoreApiResponse>>> {
     let rows = sqlx::query_as::<_, StoredScoreEntry>(
-        "SELECT title, chart_type, diff_category, achievement_x10000, rank, fc, sync, dx_score, dx_score_max
+        "SELECT title, chart_type, diff_category, achievement_x10000, rank, fc, sync, dx_score, dx_score_max, last_played_at, play_count
          FROM scores
          WHERE achievement_x10000 IS NOT NULL
          ORDER BY title, chart_type, diff_category"

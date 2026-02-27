@@ -11,6 +11,8 @@ pub struct StoredScoreEntry {
     pub sync: Option<String>,
     pub dx_score: Option<i32>,
     pub dx_score_max: Option<i32>,
+    pub last_played_at: Option<String>,
+    pub play_count: Option<i64>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]

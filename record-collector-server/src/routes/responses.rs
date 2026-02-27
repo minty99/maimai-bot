@@ -32,6 +32,8 @@ pub(crate) fn score_response_from_entry(entry: StoredScoreEntry) -> Result<Score
         sync,
         dx_score: entry.dx_score,
         dx_score_max: entry.dx_score_max,
+        last_played_at: entry.last_played_at,
+        play_count: entry.play_count.and_then(|value| u32::try_from(value).ok()),
     })
 }
 

@@ -13,6 +13,10 @@ pub struct ScoreApiResponse {
     pub sync: Option<SyncStatus>,
     pub dx_score: Option<i32>,
     pub dx_score_max: Option<i32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub last_played_at: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub play_count: Option<u32>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
