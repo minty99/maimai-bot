@@ -1,12 +1,13 @@
 use eyre::{Result, WrapErr};
 use sqlx::SqlitePool;
-use tracing::info;
+use tracing::{info, warn};
 
 use crate::config::RecordCollectorConfig;
 use crate::db::{count_scores_rows, get_app_state_u32, upsert_playlogs};
 use crate::http_client::{MaimaiClient, is_maintenance_window_now};
 use crate::tasks::scores_sync::{
-    bootstrap_scores_with_client, refresh_outdated_scores_from_recent,
+    bootstrap_scores_with_client, refresh_incomplete_scores_with_client,
+    refresh_outdated_scores_from_recent,
 };
 use crate::tasks::sync_shared::{
     STATE_KEY_TOTAL_PLAY_COUNT, annotate_recent_entries_with_play_count,
@@ -40,6 +41,13 @@ pub(crate) async fn startup_sync(
             .await
             .wrap_err("bootstrap scores")?;
         info!("Scores bootstrap completed because table was empty: rows={bootstrap_count}");
+    }
+
+    match refresh_incomplete_scores_with_client(db_pool, &client).await {
+        Ok(backfilled_rows) => {
+            info!("Incomplete scores backfill at startup: rows={backfilled_rows}")
+        }
+        Err(e) => warn!("Incomplete scores backfill failed at startup; continuing: {e:#}"),
     }
 
     let player_data = fetch_player_data_logged_in(&client)

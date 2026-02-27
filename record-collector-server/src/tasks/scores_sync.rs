@@ -1,4 +1,5 @@
 use std::collections::{HashMap, HashSet};
+use std::str::FromStr;
 use std::time::Duration;
 
 use eyre::{Result, WrapErr};
@@ -167,6 +168,49 @@ pub(crate) async fn refresh_outdated_scores_from_recent(
     Ok(updated_rows)
 }
 
+pub(crate) async fn refresh_incomplete_scores_with_client(
+    pool: &SqlitePool,
+    client: &MaimaiClient,
+) -> Result<usize> {
+    let incomplete_keys = collect_incomplete_lookup_keys(pool)
+        .await
+        .wrap_err("collect incomplete score keys")?;
+    if incomplete_keys.is_empty() {
+        debug!("No incomplete score keys to backfill");
+        return Ok(0);
+    }
+
+    let indices_by_key = resolve_source_indices_for_lookup_keys(client, &incomplete_keys)
+        .await
+        .wrap_err("resolve source indices for incomplete keys")?;
+    let detail_targets = build_detail_targets(&incomplete_keys, &indices_by_key);
+    if detail_targets.is_empty() {
+        info!("No resolvable source_idx found for incomplete score keys");
+        return Ok(0);
+    }
+
+    let mut updates = Vec::new();
+    for target in detail_targets {
+        match fetch_song_detail_with_retry(client, &target.idx, &target.lookup).await {
+            Ok(parsed) => updates.extend(score_entries_from_song_detail(parsed)),
+            Err(e) => warn!(
+                "Skipping incomplete backfill for idx={} (title='{}'): {e:#}",
+                target.idx, target.lookup.title
+            ),
+        }
+    }
+
+    if updates.is_empty() {
+        return Ok(0);
+    }
+
+    let updated_rows = updates.len();
+    upsert_scores(pool, &updates)
+        .await
+        .wrap_err("upsert incomplete backfill scores")?;
+    Ok(updated_rows)
+}
+
 fn collect_bootstrap_detail_targets(entries: &[ParsedScoreEntry]) -> Vec<SongDetailTarget> {
     let mut targets = Vec::new();
     let mut seen_idx = HashSet::new();
@@ -223,6 +267,58 @@ async fn collect_outdated_lookup_keys(
     }
 
     Ok(keys)
+}
+
+async fn collect_incomplete_lookup_keys(pool: &SqlitePool) -> Result<Vec<SongLookupKey>> {
+    let rows = sqlx::query_as::<_, (String, String, String)>(
+        r#"
+        SELECT DISTINCT title, chart_type, diff_category
+        FROM scores
+        WHERE achievement_x10000 IS NOT NULL
+          AND (
+            last_played_at IS NULL OR
+            play_count IS NULL OR
+            rank IS NULL OR
+            dx_score IS NULL OR
+            dx_score_max IS NULL
+          )
+        "#,
+    )
+    .fetch_all(pool)
+    .await
+    .wrap_err("fetch incomplete score rows")?;
+
+    let mut out = Vec::with_capacity(rows.len());
+    for (title, chart_type_text, diff_category_text) in rows {
+        let chart_type = match ChartType::from_str(&chart_type_text) {
+            Ok(value) => value,
+            Err(err) => {
+                warn!(
+                    "Skipping invalid chart_type in scores row: title='{}' chart_type='{}' error={}",
+                    title, chart_type_text, err
+                );
+                continue;
+            }
+        };
+        let diff_category = match DifficultyCategory::from_str(&diff_category_text) {
+            Ok(value) => value,
+            Err(err) => {
+                warn!(
+                    "Skipping invalid diff_category in scores row: title='{}' diff_category='{}' error={}",
+                    title, diff_category_text, err
+                );
+                continue;
+            }
+        };
+
+        out.push(SongLookupKey {
+            title,
+            chart_type,
+            diff_category,
+        });
+    }
+
+    Ok(out)
 }
 
 async fn lookup_key_is_outdated(
@@ -480,9 +576,13 @@ async fn fetch_song_detail_with_retry(
     match fetch_song_detail_by_idx(client, initial_idx).await {
         Ok(parsed) => Ok(parsed),
         Err(first_err) => {
-            debug!(
-                "musicDetail idx={} failed for title='{}'; retrying with refreshed source_idx: {}",
-                initial_idx, lookup_key.title, first_err
+            warn!(
+                "musicDetail fetch failed: title='{}' chart='{}' diff='{}' idx={} error={:#}",
+                lookup_key.title,
+                lookup_key.chart_type.as_str(),
+                lookup_key.diff_category.as_str(),
+                initial_idx,
+                first_err
             );
 
             let retry_indices = resolve_source_indices_for_lookup_key(client, lookup_key)
@@ -496,13 +596,24 @@ async fn fetch_song_detail_with_retry(
 
                 sleep_between_detail_requests().await;
                 match fetch_song_detail_by_idx(client, &retry_idx).await {
-                    Ok(parsed) => return Ok(parsed),
-                    Err(retry_err) => {
-                        debug!(
-                            "musicDetail retry idx={} failed for title='{}': {}",
-                            retry_idx, lookup_key.title, retry_err
+                    Ok(parsed) => {
+                        info!(
+                            "Recovered musicDetail fetch with refreshed source_idx: title='{}' chart='{}' diff='{}' idx={}",
+                            lookup_key.title,
+                            lookup_key.chart_type.as_str(),
+                            lookup_key.diff_category.as_str(),
+                            retry_idx
                         );
+                        return Ok(parsed);
                     }
+                    Err(retry_err) => warn!(
+                        "musicDetail retry failed: title='{}' chart='{}' diff='{}' idx={} error={:#}",
+                        lookup_key.title,
+                        lookup_key.chart_type.as_str(),
+                        lookup_key.diff_category.as_str(),
+                        retry_idx,
+                        retry_err
+                    ),
                 }
             }
 
