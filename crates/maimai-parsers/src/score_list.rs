@@ -107,6 +107,8 @@ pub fn parse_scores_html(html: &str, diff: u8) -> eyre::Result<Vec<ParsedScoreEn
             sync,
             dx_score,
             dx_score_max,
+            last_played_at: None,
+            play_count: None,
             source_idx,
         });
     }

@@ -14,6 +14,8 @@ pub struct ParsedScoreEntry {
     pub sync: Option<SyncStatus>,
     pub dx_score: Option<i32>,
     pub dx_score_max: Option<i32>,
+    pub last_played_at: Option<String>,
+    pub play_count: Option<u32>,
     pub source_idx: Option<String>,
 }
 
