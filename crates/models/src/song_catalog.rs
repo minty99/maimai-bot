@@ -28,6 +28,13 @@ pub struct SongCatalogChart {
     pub internal_level: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub user_level: Option<String>,
+    pub region: SongChartRegion,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SongChartRegion {
+    pub jp: bool,
+    pub intl: bool,
 }
 
 #[derive(Debug, Clone)]

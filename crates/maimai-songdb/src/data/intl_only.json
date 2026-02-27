@@ -1,0 +1,36 @@
+{
+  "songs": [
+    {
+      "song_id": "全世界共通リズム感テスト",
+      "title": "全世界共通リズム感テスト",
+      "category": "maimai",
+      "image_url": "https://maimaidx-eng.com/maimai-mobile/img/Music/eabcf5ede00f256a.png",
+      "sheets": [
+        {
+          "type": "STD",
+          "difficulty": "BASIC",
+          "level": "6",
+          "version": "Splash"
+        },
+        {
+          "type": "STD",
+          "difficulty": "ADVANCED",
+          "level": "8",
+          "version": "Splash"
+        },
+        {
+          "type": "STD",
+          "difficulty": "EXPERT",
+          "level": "10",
+          "version": "Splash"
+        },
+        {
+          "type": "STD",
+          "difficulty": "MASTER",
+          "level": "12",
+          "version": "Splash"
+        }
+      ]
+    }
+  ]
+}

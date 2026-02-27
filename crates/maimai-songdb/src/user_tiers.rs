@@ -572,7 +572,7 @@ fn resolve_key(
 mod tests {
     use super::*;
     use image::{ImageBuffer, Rgb};
-    use models::{SongCatalogChart, SongCatalogSong};
+    use models::{SongCatalogChart, SongCatalogSong, SongChartRegion};
     use std::path::PathBuf;
 
     const LIVE_TEST_INTERNAL_LEVEL: &str = "13.0";
@@ -637,6 +637,10 @@ mod tests {
                         version_name: None,
                         internal_level: Some("13.0".to_string()),
                         user_level: None,
+                        region: SongChartRegion {
+                            jp: true,
+                            intl: true,
+                        },
                     },
                     SongCatalogChart {
                         chart_type: "std".to_string(),
@@ -645,6 +649,10 @@ mod tests {
                         version_name: None,
                         internal_level: Some("13.0".to_string()),
                         user_level: None,
+                        region: SongChartRegion {
+                            jp: true,
+                            intl: true,
+                        },
                     },
                 ],
             }],

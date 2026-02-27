@@ -14,6 +14,8 @@ pub use parser_models::{
     ParsedPlayRecord, ParsedPlayerProfile, ParsedRatingTargetEntry, ParsedRatingTargets,
     ParsedScoreEntry, ParsedSongChartDetail, ParsedSongDetail,
 };
-pub use song_catalog::{SongCatalog, SongCatalogChart, SongCatalogSong, SongInternalLevelIndex};
+pub use song_catalog::{
+    SongCatalog, SongCatalogChart, SongCatalogSong, SongChartRegion, SongInternalLevelIndex,
+};
 pub use song_title::{DUPLICATE_CAPABLE_BASE_TITLES, SongTitle};
 pub use storage_models::{StoredPlayRecord, StoredScoreEntry};

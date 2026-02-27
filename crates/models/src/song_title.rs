@@ -71,6 +71,28 @@ impl SongTitle {
     }
 }
 
+fn normalize_qualifier_for_title(base_title: &str, qualifier: &str) -> String {
+    let qualifier = qualifier.trim();
+    if !SongTitle::requires_qualifier_for(base_title) {
+        return qualifier.to_string();
+    }
+
+    if base_title.eq_ignore_ascii_case("Link") {
+        if matches!(
+            qualifier,
+            "niconico＆ボーカロイド" | "niconico＆VOCALOID™" | "ORANGE"
+        ) {
+            return "niconico＆VOCALOID™".to_string();
+        }
+        if qualifier.eq_ignore_ascii_case("maimai PLUS") || qualifier.eq_ignore_ascii_case("maimai")
+        {
+            return "maimai".to_string();
+        }
+    }
+
+    qualifier.to_string()
+}
+
 #[cfg(test)]
 mod tests {
     use super::SongTitle;
@@ -112,26 +134,4 @@ mod tests {
             "Link [[maimai]]"
         );
     }
-}
-
-fn normalize_qualifier_for_title(base_title: &str, qualifier: &str) -> String {
-    let qualifier = qualifier.trim();
-    if !SongTitle::requires_qualifier_for(base_title) {
-        return qualifier.to_string();
-    }
-
-    if base_title.eq_ignore_ascii_case("Link") {
-        if matches!(
-            qualifier,
-            "niconico＆ボーカロイド" | "niconico＆VOCALOID™" | "ORANGE"
-        ) {
-            return "niconico＆VOCALOID™".to_string();
-        }
-        if qualifier.eq_ignore_ascii_case("maimai PLUS") || qualifier.eq_ignore_ascii_case("maimai")
-        {
-            return "maimai".to_string();
-        }
-    }
-
-    qualifier.to_string()
 }

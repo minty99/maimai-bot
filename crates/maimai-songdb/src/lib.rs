@@ -2,19 +2,22 @@
 
 use eyre::{ContextCompat, WrapErr};
 use models::{
-    ChartType, DifficultyCategory, SongCatalog, SongCatalogChart, SongCatalogSong, SongTitle,
+    ChartType, DifficultyCategory, SongCatalog, SongCatalogChart, SongCatalogSong, SongChartRegion,
+    SongTitle,
 };
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::fmt;
 use std::path::Path;
 
 mod internal_levels;
+mod intl_only;
 mod sheet_versions;
 mod user_tiers;
 
 use internal_levels::{InternalLevelKey, InternalLevelRow};
+use intl_only::load_intl_only_rows;
 use sheet_versions::SheetVersionMap;
 use user_tiers::{UserTierKey, UserTierValue};
 
@@ -72,7 +75,7 @@ struct RawSong {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct SongRow {
     song_id: String,
-    category: Option<String>,
+    category: String,
     title: String,
     artist: Option<String>,
     image_name: String,
@@ -90,6 +93,24 @@ struct SheetRow {
     sheet_type: ChartType,
     difficulty: DifficultyCategory,
     level: String,
+    source: SheetSource,
+}
+
+#[derive(Debug, Clone)]
+enum SheetSource {
+    Official,
+    IntlOnly {
+        version_name: String,
+        internal_level: Option<String>,
+        user_level: Option<String>,
+    },
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+struct SheetKey<'a> {
+    song_id: &'a str,
+    chart_type: ChartType,
+    difficulty: DifficultyCategory,
 }
 
 #[derive(Clone)]
@@ -165,8 +186,13 @@ impl SongDatabase {
         let raw_songs = fetch_maimai_songs(&client).await?;
         ensure_unique_song_ids(&raw_songs)?;
 
-        let songs: Vec<SongRow> = raw_songs.iter().map(extract_song).collect();
-        let sheets: Vec<SheetRow> = raw_songs.iter().flat_map(extract_sheets).collect();
+        let mut songs: Vec<SongRow> = raw_songs.iter().map(extract_song).collect();
+        let mut sheets: Vec<SheetRow> = raw_songs.iter().flat_map(extract_sheets).collect();
+        let intl_only_rows = load_intl_only_rows().wrap_err("load intl_only.json")?;
+        songs.extend(intl_only_rows.songs);
+        sheets.extend(intl_only_rows.sheets);
+        ensure_unique_song_row_ids(&songs)?;
+        ensure_unique_sheet_keys(&sheets)?;
         tracing::info!(
             "Processing {} songs with {} sheets",
             songs.len(),
@@ -256,7 +282,7 @@ fn build_data_root(
 
         let il_key: InternalLevelKey = (sheet.song_id.clone(), sheet.sheet_type, sheet.difficulty);
 
-        let internal_level = internal_levels
+        let internal_level_from_map = internal_levels
             .get(&il_key)
             .map(|il| il.internal_level.trim().to_string());
 
@@ -269,29 +295,58 @@ fn build_data_root(
             .as_ref()
             .and_then(|k| user_tiers.and_then(|map| map.get(k)));
 
-        if let (Some(internal), Some(user_tier_value)) = (internal_level.as_deref(), user_tier)
-            && internal != user_tier_value.source_internal_level
-        {
-            tracing::warn!(
-                title = %song.title,
-                chart_type = %sheet.sheet_type,
-                difficulty = %sheet.difficulty.as_str(),
-                chart_internal_level = %internal,
-                user_tier_internal_level = %user_tier_value.source_internal_level,
-                "user tier internal level mismatch"
-            );
-        }
+        let (version_name, internal_level, user_level, region) = match &sheet.source {
+            SheetSource::Official => {
+                if let (Some(internal), Some(user_tier_value)) =
+                    (internal_level_from_map.as_deref(), user_tier)
+                    && internal != user_tier_value.source_internal_level
+                {
+                    tracing::warn!(
+                        title = %song.title,
+                        chart_type = %sheet.sheet_type,
+                        difficulty = %sheet.difficulty.as_str(),
+                        chart_internal_level = %internal,
+                        user_tier_internal_level = %user_tier_value.source_internal_level,
+                        "user tier internal level mismatch"
+                    );
+                }
+                let version_name = sheet_versions
+                    .get(&sheet.song_id)
+                    .and_then(|versions| versions.get(&sheet.sheet_type))
+                    .cloned();
+                (
+                    version_name.clone(),
+                    internal_level_from_map,
+                    user_tier.map(|v| v.grade.clone()),
+                    SongChartRegion {
+                        jp: true,
+                        intl: version_name.is_some(),
+                    },
+                )
+            }
+            SheetSource::IntlOnly {
+                version_name,
+                internal_level,
+                user_level,
+            } => (
+                Some(version_name.clone()),
+                internal_level.clone(),
+                user_level.clone(),
+                SongChartRegion {
+                    jp: false,
+                    intl: true,
+                },
+            ),
+        };
 
         song.sheets.push(SongCatalogChart {
             chart_type: sheet.sheet_type.as_lowercase().to_string(),
             difficulty: sheet.difficulty.as_lowercase().to_string(),
             level: sheet.level.clone(),
-            version_name: sheet_versions
-                .get(&sheet.song_id)
-                .and_then(|versions| versions.get(&sheet.sheet_type))
-                .cloned(),
+            version_name,
             internal_level,
-            user_level: user_tier.map(|v| v.grade.clone()),
+            user_level,
+            region,
         });
     }
 
@@ -333,7 +388,7 @@ fn filter_out_utage_entries(raw_songs: Vec<RawSong>) -> (Vec<RawSong>, usize) {
 }
 
 fn ensure_unique_song_ids(raw_songs: &[RawSong]) -> eyre::Result<()> {
-    let mut seen = std::collections::HashSet::new();
+    let mut seen = HashSet::new();
     let mut duplicates = Vec::new();
     for raw_song in raw_songs {
         let song_id = derive_song_id(raw_song);
@@ -344,6 +399,51 @@ fn ensure_unique_song_ids(raw_songs: &[RawSong]) -> eyre::Result<()> {
 
     if !duplicates.is_empty() {
         return Err(eyre::eyre!("duplicate song_id detected: {:?}", duplicates));
+    }
+    Ok(())
+}
+
+fn ensure_unique_song_row_ids(songs: &[SongRow]) -> eyre::Result<()> {
+    let mut seen = HashSet::new();
+    let mut duplicates = Vec::new();
+    for song in songs {
+        if !seen.insert(song.song_id.clone()) {
+            duplicates.push(song.song_id.clone());
+        }
+    }
+    if !duplicates.is_empty() {
+        return Err(eyre::eyre!(
+            "duplicate song_id in merged songs: {:?}",
+            duplicates
+        ));
+    }
+    Ok(())
+}
+
+fn ensure_unique_sheet_keys(sheets: &[SheetRow]) -> eyre::Result<()> {
+    let mut seen = HashSet::new();
+    let mut duplicates = Vec::new();
+    for sheet in sheets {
+        let key = SheetKey {
+            song_id: &sheet.song_id,
+            chart_type: sheet.sheet_type,
+            difficulty: sheet.difficulty,
+        };
+        if !seen.insert(key) {
+            duplicates.push(format!(
+                "{}|{}|{}",
+                sheet.song_id,
+                sheet.sheet_type.as_str(),
+                sheet.difficulty.as_str()
+            ));
+        }
+    }
+
+    if !duplicates.is_empty() {
+        return Err(eyre::eyre!(
+            "duplicate song/chart/difficulty key detected: {:?}",
+            duplicates
+        ));
     }
     Ok(())
 }
@@ -367,7 +467,7 @@ fn extract_song(raw_song: &RawSong) -> SongRow {
 
     SongRow {
         song_id: derive_song_id(raw_song),
-        category: Some(raw_song.catcode.clone()),
+        category: raw_song.catcode.clone(),
         title: raw_song.title.clone(),
         artist,
         image_name,
@@ -445,6 +545,7 @@ fn extract_sheets(raw_song: &RawSong) -> Vec<SheetRow> {
                 sheet_type,
                 difficulty,
                 level,
+                source: SheetSource::Official,
             })
         })
         .collect()
@@ -755,5 +856,138 @@ mod tests {
         let hash2 = sha256_hex(input);
         assert_eq!(hash1, hash2);
         assert_eq!(hash1.len(), 64);
+    }
+
+    #[test]
+    fn build_data_root_sets_region_flags_for_official_and_intl_only() {
+        let songs = vec![
+            SongRow {
+                song_id: "official-song".to_string(),
+                category: "maimai".to_string(),
+                title: "Official Song".to_string(),
+                artist: None,
+                image_name: "official.png".to_string(),
+                image_url: "https://example.com/official.png".to_string(),
+                release_date: None,
+                sort_order: None,
+                is_new: false,
+                is_locked: false,
+                comment: None,
+            },
+            SongRow {
+                song_id: "intl-song".to_string(),
+                category: "INTL_ONLY".to_string(),
+                title: "Intl Song".to_string(),
+                artist: None,
+                image_name: "intl.png".to_string(),
+                image_url: "https://example.com/intl.png".to_string(),
+                release_date: None,
+                sort_order: None,
+                is_new: false,
+                is_locked: false,
+                comment: None,
+            },
+        ];
+        let sheets = vec![
+            SheetRow {
+                song_id: "official-song".to_string(),
+                sheet_type: ChartType::Std,
+                difficulty: DifficultyCategory::Master,
+                level: "12+".to_string(),
+                source: SheetSource::Official,
+            },
+            SheetRow {
+                song_id: "official-song".to_string(),
+                sheet_type: ChartType::Dx,
+                difficulty: DifficultyCategory::Master,
+                level: "12+".to_string(),
+                source: SheetSource::Official,
+            },
+            SheetRow {
+                song_id: "intl-song".to_string(),
+                sheet_type: ChartType::Std,
+                difficulty: DifficultyCategory::Expert,
+                level: "10".to_string(),
+                source: SheetSource::IntlOnly {
+                    version_name: "Splash".to_string(),
+                    internal_level: None,
+                    user_level: None,
+                },
+            },
+        ];
+        let mut sheet_versions = SheetVersionMap::new();
+        sheet_versions.insert(
+            "official-song".to_string(),
+            HashMap::from([(ChartType::Std, "Splash".to_string())]),
+        );
+
+        let catalog = build_data_root(&songs, &sheets, &sheet_versions, &HashMap::new(), None);
+        let official = catalog
+            .songs
+            .iter()
+            .find(|song| song.title == "Official Song")
+            .expect("official song exists");
+        let official_std = official
+            .sheets
+            .iter()
+            .find(|sheet| sheet.chart_type == "std")
+            .expect("official std exists");
+        let official_dx = official
+            .sheets
+            .iter()
+            .find(|sheet| sheet.chart_type == "dx")
+            .expect("official dx exists");
+        assert!(official_std.region.jp);
+        assert!(official_std.region.intl);
+        assert!(official_dx.region.jp);
+        assert!(!official_dx.region.intl);
+
+        let intl = catalog
+            .songs
+            .iter()
+            .find(|song| song.title == "Intl Song")
+            .expect("intl song exists");
+        let intl_sheet = intl.sheets.first().expect("intl sheet exists");
+        assert!(!intl_sheet.region.jp);
+        assert!(intl_sheet.region.intl);
+    }
+
+    #[test]
+    fn load_intl_only_rows_hashes_cover_url() {
+        let rows = load_intl_only_rows().expect("load intl_only rows");
+        let intl_song = rows
+            .songs
+            .iter()
+            .find(|song| song.song_id == "全世界共通リズム感テスト")
+            .expect("intl song entry exists");
+        let expected = format!("{}.png", sha256_hex(&intl_song.image_url));
+        assert_eq!(intl_song.image_name, expected);
+    }
+
+    #[test]
+    fn ensure_unique_sheet_keys_detects_duplicates() {
+        let sheets = vec![
+            SheetRow {
+                song_id: "song-a".to_string(),
+                sheet_type: ChartType::Std,
+                difficulty: DifficultyCategory::Master,
+                level: "13".to_string(),
+                source: SheetSource::Official,
+            },
+            SheetRow {
+                song_id: "song-a".to_string(),
+                sheet_type: ChartType::Std,
+                difficulty: DifficultyCategory::Master,
+                level: "13+".to_string(),
+                source: SheetSource::IntlOnly {
+                    version_name: "Splash".to_string(),
+                    internal_level: None,
+                    user_level: None,
+                },
+            },
+        ];
+
+        let result = ensure_unique_sheet_keys(&sheets);
+        assert!(result.is_err());
     }
 }
