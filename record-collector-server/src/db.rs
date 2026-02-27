@@ -70,6 +70,13 @@ pub(crate) async fn clear_scores(pool: &SqlitePool) -> eyre::Result<()> {
     Ok(())
 }
 
+pub(crate) async fn count_scores_rows(pool: &SqlitePool) -> eyre::Result<i64> {
+    sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM scores")
+        .fetch_one(pool)
+        .await
+        .wrap_err("count scores rows")
+}
+
 pub(crate) async fn get_app_state_u32(pool: &SqlitePool, key: &str) -> eyre::Result<Option<u32>> {
     let value: Option<String> =
         sqlx::query_scalar::<_, Option<String>>("SELECT value FROM app_state WHERE key = ?")
@@ -119,16 +126,18 @@ async fn upsert_score(
 		INSERT INTO scores (
 		  title, chart_type, diff_category,
 		  achievement_x10000, rank, fc, sync,
-		  dx_score, dx_score_max
+		  dx_score, dx_score_max, last_played_at, play_count
 		)
-		VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)
+		VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)
 		ON CONFLICT(title, chart_type, diff_category) DO UPDATE SET
 		  achievement_x10000 = excluded.achievement_x10000,
 		  rank = excluded.rank,
 		  fc = excluded.fc,
 		  sync = excluded.sync,
 		  dx_score = excluded.dx_score,
-		  dx_score_max = excluded.dx_score_max
+		  dx_score_max = excluded.dx_score_max,
+		  last_played_at = excluded.last_played_at,
+		  play_count = excluded.play_count
 		"#,
     )
     .bind(&entry.title)
@@ -140,6 +149,8 @@ async fn upsert_score(
     .bind(entry.sync.map(|v| v.as_str()))
     .bind(entry.dx_score)
     .bind(entry.dx_score_max)
+    .bind(entry.last_played_at.as_deref())
+    .bind(entry.play_count.map(i64::from))
     .execute(&mut **tx)
     .await
     .wrap_err("upsert scores")?;
@@ -199,4 +210,75 @@ fn chart_type_str(t: ChartType) -> &'static str {
 
 fn percent_to_x10000(percent: Option<f32>) -> Option<i64> {
     percent.map(|p| (p as f64 * 10000.0).round() as i64)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use models::DifficultyCategory;
+
+    #[tokio::test]
+    async fn upsert_scores_overwrites_detail_fields() -> eyre::Result<()> {
+        let pool = connect("sqlite::memory:").await?;
+        migrate(&pool).await?;
+
+        let first = ParsedScoreEntry {
+            title: "Song A".to_string(),
+            chart_type: ChartType::Dx,
+            diff_category: DifficultyCategory::Master,
+            level: "12+".to_string(),
+            achievement_percent: Some(99.1234),
+            rank: None,
+            fc: None,
+            sync: None,
+            dx_score: Some(1000),
+            dx_score_max: Some(2000),
+            last_played_at: Some("2026/01/20 00:00".to_string()),
+            play_count: Some(3),
+            source_idx: None,
+        };
+        upsert_scores(&pool, &[first]).await?;
+
+        let second = ParsedScoreEntry {
+            title: "Song A".to_string(),
+            chart_type: ChartType::Dx,
+            diff_category: DifficultyCategory::Master,
+            level: "12+".to_string(),
+            achievement_percent: Some(100.5),
+            rank: None,
+            fc: None,
+            sync: None,
+            dx_score: Some(1234),
+            dx_score_max: Some(2345),
+            last_played_at: Some("2026/01/23 01:14".to_string()),
+            play_count: Some(7),
+            source_idx: None,
+        };
+        upsert_scores(&pool, &[second]).await?;
+
+        #[expect(clippy::type_complexity)]
+        let row: (
+            Option<i64>,
+            Option<i32>,
+            Option<i32>,
+            Option<String>,
+            Option<i64>,
+        ) = sqlx::query_as(
+            r#"
+                SELECT achievement_x10000, dx_score, dx_score_max, last_played_at, play_count
+                FROM scores
+                WHERE title = 'Song A' AND chart_type = 'DX' AND diff_category = 'MASTER'
+                "#,
+        )
+        .fetch_one(&pool)
+        .await?;
+
+        assert_eq!(row.0, Some(1_005_000));
+        assert_eq!(row.1, Some(1234));
+        assert_eq!(row.2, Some(2345));
+        assert_eq!(row.3.as_deref(), Some("2026/01/23 01:14"));
+        assert_eq!(row.4, Some(7));
+
+        Ok(())
+    }
 }
