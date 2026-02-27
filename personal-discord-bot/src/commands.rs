@@ -199,6 +199,7 @@ pub(crate) async fn mai_song_info(
 
     let mut sheets = song_info.sheets.clone();
     sheets.sort_by_key(|sheet| (sheet.chart_type.as_u8(), sheet.difficulty.as_u8()));
+    let region_unreleased_line = build_region_unreleased_line(&sheets);
 
     let std_version = sheets
         .iter()
@@ -250,6 +251,10 @@ pub(crate) async fn mai_song_info(
     };
 
     let mut blocks = Vec::new();
+    if let Some(region_line) = region_unreleased_line {
+        blocks.push(region_line);
+    }
+
     let mut version_lines = Vec::new();
     if let Some(version) = std_version {
         version_lines.push(format!("Version (STD): {version}"));
@@ -861,6 +866,17 @@ fn duplicate_title_error_description(server_error: &str) -> String {
         "동일 제목 곡이 있어서 장르를 함께 지정해야 합니다.\n가능한 후보: {}\n형식: `<title> [[genre]]`",
         candidates
     )
+}
+
+fn build_region_unreleased_line(sheets: &[crate::client::SongInfoSheet]) -> Option<String> {
+    let has_jp = sheets.iter().any(|sheet| sheet.region.jp);
+    let has_intl = sheets.iter().any(|sheet| sheet.region.intl);
+
+    match (has_jp, has_intl) {
+        (true, false) => Some("**INTL**: Unreleased".to_string()),
+        (false, true) => Some("**JP**: Unreleased".to_string()),
+        _ => None,
+    }
 }
 
 fn is_ap_like(fc: Option<&models::FcStatus>) -> bool {

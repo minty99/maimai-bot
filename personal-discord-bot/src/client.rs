@@ -1,7 +1,7 @@
 use eyre::{Result, WrapErr};
 use models::{
     ChartType, DifficultyCategory, ParsedPlayerProfile, ParsedRatingTargets, PlayRecordApiResponse,
-    ScoreApiResponse, SongDetailScoreApiResponse,
+    ScoreApiResponse, SongChartRegion, SongDetailScoreApiResponse,
 };
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
@@ -87,6 +87,7 @@ pub(crate) struct SongInfoSheet {
     pub(crate) version: Option<String>,
     pub(crate) internal_level: Option<f32>,
     pub(crate) user_level: Option<String>,
+    pub(crate) region: SongChartRegion,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
