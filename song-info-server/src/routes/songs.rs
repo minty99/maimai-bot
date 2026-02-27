@@ -2,7 +2,7 @@ use axum::{
     Json,
     extract::{Path, Query, State},
 };
-use models::{ChartType, DifficultyCategory, MaimaiVersion};
+use models::{ChartType, DifficultyCategory, MaimaiVersion, SongChartRegion};
 use serde::Serialize;
 use std::collections::{HashMap, HashSet};
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -19,6 +19,7 @@ pub(crate) struct SongSheetResponse {
     version: Option<String>,
     internal_level: Option<f32>,
     user_level: Option<String>,
+    region: SongChartRegion,
 }
 
 #[derive(Serialize)]
@@ -28,6 +29,7 @@ pub(crate) struct SongMetadataResponse {
     user_level: Option<String>,
     image_name: Option<String>,
     version: Option<String>,
+    region: SongChartRegion,
 }
 
 #[derive(Serialize)]
@@ -91,6 +93,10 @@ pub(crate) async fn random_song_by_level(
         let mut sheets = Vec::new();
 
         for sheet in &song.sheets {
+            if !is_intl_sheet(sheet) {
+                continue;
+            }
+
             let internal_level = sheet
                 .internal_level
                 .as_deref()
@@ -147,6 +153,7 @@ pub(crate) async fn random_song_by_level(
                 version: sheet_version,
                 internal_level,
                 user_level: sheet.user_level.clone(),
+                region: sheet.region.clone(),
             });
         }
 
@@ -197,11 +204,7 @@ pub(crate) async fn list_versions(
     for song in song_data_root.iter() {
         let mut seen_versions_for_song = HashSet::new();
         for sheet in &song.sheets {
-            let version_name = sheet.version_name.as_deref();
-            let Some(version_name) = version_name else {
-                continue;
-            };
-            let Some(version) = MaimaiVersion::from_name(version_name) else {
+            let Some(version) = parse_intl_sheet_version(sheet) else {
                 continue;
             };
             seen_versions_for_song.insert(version);
@@ -336,6 +339,18 @@ fn parse_chart_type_query_value(value: &str) -> Option<ChartType> {
     value.trim().parse::<ChartType>().ok()
 }
 
+fn is_intl_sheet(sheet: &models::SongCatalogChart) -> bool {
+    sheet.region.intl
+}
+
+fn parse_intl_sheet_version(sheet: &models::SongCatalogChart) -> Option<MaimaiVersion> {
+    if !is_intl_sheet(sheet) {
+        return None;
+    }
+    let version_name = sheet.version_name.as_deref()?;
+    MaimaiVersion::from_name(version_name)
+}
+
 fn select_random_index(len: usize) -> usize {
     let nanos = SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -389,6 +404,7 @@ pub(crate) async fn get_song_metadata(
                         user_level: sheet.user_level.clone(),
                         image_name: song.image_name.clone(),
                         version,
+                        region: sheet.region.clone(),
                     }));
                 }
             }
@@ -453,6 +469,7 @@ pub(crate) async fn get_song_info_by_title(
                     .as_deref()
                     .and_then(|value| value.trim().parse::<f32>().ok()),
                 user_level: sheet.user_level.clone(),
+                region: sheet.region.clone(),
             })
         })
         .collect::<Result<Vec<_>>>()?;
@@ -462,4 +479,75 @@ pub(crate) async fn get_song_info_by_title(
         image_name: song.image_name.clone(),
         sheets,
     }))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{is_intl_sheet, parse_intl_sheet_version};
+    use models::{MaimaiVersion, SongCatalogChart, SongChartRegion};
+
+    #[test]
+    fn intl_sheet_predicate_uses_region_flag() {
+        let intl_sheet = SongCatalogChart {
+            chart_type: "std".to_string(),
+            difficulty: "basic".to_string(),
+            level: "10".to_string(),
+            version_name: Some("Splash".to_string()),
+            internal_level: None,
+            user_level: None,
+            region: SongChartRegion {
+                jp: false,
+                intl: true,
+            },
+        };
+        let jp_only_sheet = SongCatalogChart {
+            chart_type: "std".to_string(),
+            difficulty: "basic".to_string(),
+            level: "10".to_string(),
+            version_name: Some("Splash".to_string()),
+            internal_level: None,
+            user_level: None,
+            region: SongChartRegion {
+                jp: true,
+                intl: false,
+            },
+        };
+
+        assert!(is_intl_sheet(&intl_sheet));
+        assert!(!is_intl_sheet(&jp_only_sheet));
+    }
+
+    #[test]
+    fn parse_intl_sheet_version_skips_non_intl_sheet() {
+        let jp_only_sheet = SongCatalogChart {
+            chart_type: "std".to_string(),
+            difficulty: "basic".to_string(),
+            level: "10".to_string(),
+            version_name: Some("Splash".to_string()),
+            internal_level: None,
+            user_level: None,
+            region: SongChartRegion {
+                jp: true,
+                intl: false,
+            },
+        };
+        let intl_sheet = SongCatalogChart {
+            chart_type: "std".to_string(),
+            difficulty: "basic".to_string(),
+            level: "10".to_string(),
+            version_name: Some("Splash".to_string()),
+            internal_level: None,
+            user_level: None,
+            region: SongChartRegion {
+                jp: true,
+                intl: true,
+            },
+        };
+
+        assert_eq!(parse_intl_sheet_version(&jp_only_sheet), None);
+        assert_eq!(
+            parse_intl_sheet_version(&intl_sheet),
+            Some(MaimaiVersion::Splash)
+        );
+    }
 }
