@@ -11,6 +11,12 @@ use maimai_auth::intl;
 use models::config::AppConfig;
 
 #[derive(Debug, Clone)]
+pub(crate) struct HtmlResponse {
+    pub(crate) final_url: Url,
+    pub(crate) html: String,
+}
+
+#[derive(Debug, Clone)]
 pub(crate) struct MaimaiClient {
     config: AppConfig,
     cookie_store: Arc<CookieStoreMutex>,
@@ -92,6 +98,30 @@ impl MaimaiClient {
             return Err(eyre::eyre!("non-success status: {status} url={final_url}"));
         }
         Ok(bytes.to_vec())
+    }
+
+    pub(crate) async fn get_html_response(&self, url: &Url) -> eyre::Result<HtmlResponse> {
+        ensure_not_maintenance_now()?;
+        let resp = self
+            .client
+            .as_ref()
+            .get(url.clone())
+            .send()
+            .await
+            .wrap_err("GET")?;
+        let status = resp.status();
+        let final_url = resp.url().clone();
+        let html = resp.text().await.wrap_err("read response text")?;
+        if !status.is_success() {
+            if status == reqwest::StatusCode::SERVICE_UNAVAILABLE {
+                return Err(eyre::eyre!(
+                    "site unavailable (503). maimai DX NET may be under maintenance. url={final_url}"
+                ));
+            }
+            return Err(eyre::eyre!("non-success status: {status} url={final_url}"));
+        }
+
+        Ok(HtmlResponse { final_url, html })
     }
 }
 

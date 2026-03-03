@@ -45,6 +45,25 @@ pub(crate) async fn upsert_scores(
     Ok(())
 }
 
+pub(crate) async fn replace_scores(
+    pool: &SqlitePool,
+    entries: &[ParsedScoreEntry],
+) -> eyre::Result<()> {
+    let mut tx = pool.begin().await.wrap_err("begin transaction")?;
+
+    sqlx::query("DELETE FROM scores")
+        .execute(&mut *tx)
+        .await
+        .wrap_err("clear scores before replace")?;
+
+    for entry in entries {
+        upsert_score(&mut tx, entry).await?;
+    }
+
+    tx.commit().await.wrap_err("commit transaction")?;
+    Ok(())
+}
+
 pub(crate) async fn upsert_playlogs(
     pool: &SqlitePool,
     entries: &[ParsedPlayRecord],
@@ -61,15 +80,6 @@ pub(crate) async fn upsert_playlogs(
     tx.commit().await.wrap_err("commit transaction")?;
     Ok(())
 }
-
-pub(crate) async fn clear_scores(pool: &SqlitePool) -> eyre::Result<()> {
-    sqlx::query("DELETE FROM scores")
-        .execute(pool)
-        .await
-        .wrap_err("clear scores")?;
-    Ok(())
-}
-
 pub(crate) async fn count_scores_rows(pool: &SqlitePool) -> eyre::Result<i64> {
     sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM scores")
         .fetch_one(pool)
@@ -276,6 +286,53 @@ mod tests {
         assert_eq!(row.2, Some(2345));
         assert_eq!(row.3.as_deref(), Some("2026/01/23 01:14"));
         assert_eq!(row.4, Some(7));
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn replace_scores_replaces_existing_rows_transactionally() -> eyre::Result<()> {
+        let pool = connect("sqlite::memory:").await?;
+        migrate(&pool).await?;
+
+        let initial = ParsedScoreEntry {
+            title: "Song A".to_string(),
+            chart_type: ChartType::Dx,
+            diff_category: DifficultyCategory::Master,
+            level: "12+".to_string(),
+            achievement_percent: Some(99.1234),
+            rank: None,
+            fc: None,
+            sync: None,
+            dx_score: Some(1000),
+            dx_score_max: Some(2000),
+            last_played_at: Some("2026/01/20 00:00".to_string()),
+            play_count: Some(3),
+            source_idx: None,
+        };
+        upsert_scores(&pool, &[initial]).await?;
+
+        let replacement = ParsedScoreEntry {
+            title: "Song B".to_string(),
+            chart_type: ChartType::Std,
+            diff_category: DifficultyCategory::Expert,
+            level: "11+".to_string(),
+            achievement_percent: Some(98.0),
+            rank: None,
+            fc: None,
+            sync: None,
+            dx_score: Some(900),
+            dx_score_max: Some(1900),
+            last_played_at: None,
+            play_count: None,
+            source_idx: None,
+        };
+        replace_scores(&pool, &[replacement]).await?;
+
+        let titles: Vec<String> = sqlx::query_scalar("SELECT title FROM scores ORDER BY title")
+            .fetch_all(&pool)
+            .await?;
+        assert_eq!(titles, vec!["Song B".to_string()]);
 
         Ok(())
     }
