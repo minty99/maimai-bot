@@ -376,8 +376,10 @@ button:hover {
 .table-wrap {
   border: 1px solid var(--line);
   border-radius: 12px;
-  overflow: auto;
+  overflow-x: auto;
+  overflow-y: auto;
   max-height: 70vh;
+  -webkit-overflow-scrolling: touch;
 }
 
 table {
@@ -655,6 +657,10 @@ tbody tr:hover {
     padding: 8px;
   }
 
+  .panel {
+    padding: 10px;
+  }
+
   .hero {
     padding: 14px;
   }
@@ -677,7 +683,45 @@ tbody tr:hover {
   }
 
   .table-wrap {
-    max-height: 62vh;
+    max-height: none;
+    overflow-y: visible;
+  }
+
+  table {
+    width: max-content;
+    min-width: 100%;
+    table-layout: auto;
+  }
+
+  .compact-table {
+    font-size: 11px;
+  }
+
+  .compact-table th,
+  .compact-table td {
+    padding: 6px 8px;
+  }
+
+  .score-table th:nth-child(2),
+  .score-table td:nth-child(2),
+  .playlog-table th:nth-child(4),
+  .playlog-table td:nth-child(4) {
+    min-width: 14rem;
+    width: 14rem;
+  }
+
+  .score-table th:nth-child(12),
+  .score-table td:nth-child(12),
+  .playlog-table th:nth-child(12),
+  .playlog-table td:nth-child(12) {
+    min-width: 11rem;
+  }
+
+  .score-table th:nth-child(13),
+  .score-table td:nth-child(13),
+  .playlog-table th:nth-child(2),
+  .playlog-table td:nth-child(2) {
+    min-width: 9rem;
   }
 
   .jacket {
