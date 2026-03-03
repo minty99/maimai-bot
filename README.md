@@ -35,6 +35,7 @@
 - 쿠키 기반 인증으로 SEGA ID 로그인 유지
 - SQLite 기반 로컬 데이터 저장
 - 자동 스코어 동기화 및 플레이 로그 추적
+- 선택적 S3 SQLite snapshot 백업
 - Discord 슬래시 커맨드 및 DM 알림
 
 ## 요구사항
@@ -67,6 +68,25 @@ cp .env.example .env
   - DB: `data/maimai.sqlite3`
   - 쿠키: `data/cookies.json`
 
+### Record Collector Server S3 백업
+
+`record-collector-server`는 선택적으로 SQLite snapshot을 S3에 업로드할 수 있습니다.
+
+- 활성화 조건:
+  - `BACKUP_S3_URL`
+  - `BACKUP_S3_REGION`
+- 예시:
+  - `BACKUP_S3_URL=s3://muhwan-maimai-backups/prod`
+  - `BACKUP_S3_REGION=ap-northeast-2`
+- 동작:
+  - `scores` / `playlogs`처럼 실제 기록 데이터가 바뀐 경우에만 백업을 시도합니다.
+  - 실행 중인 원본 `maimai.sqlite3`를 그대로 업로드하지 않고, `VACUUM INTO`로 생성한 단일 snapshot `.sqlite3` 파일을 업로드합니다.
+  - 같은 DB 상태가 다시 감지되면 SHA-256 기준으로 중복 업로드를 건너뜁니다.
+- 인증:
+  - AWS SDK 기본 credential chain을 사용합니다.
+  - 예: `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_SESSION_TOKEN`
+  - 또는 EC2/컨테이너 런타임 role
+
 ## 실행
 
 ### Standalone 실행 (로컬 개발)
@@ -90,6 +110,7 @@ cp .env.example .env
    cargo run --bin record-collector-server
    ```
    Record Collector Server는 `http://localhost:3000`에서 실행되며, `/health/ready` 엔드포인트를 제공합니다.
+   S3 백업을 함께 쓰려면 `BACKUP_S3_URL`, `BACKUP_S3_REGION`, AWS 자격 증명을 함께 설정하세요.
 
 4. **Discord 봇 실행** (터미널 3):
    ```bash
@@ -131,3 +152,12 @@ HTML/raw fetch (로그인 필요):
 
 - `scores` / `playlogs`에 `achievement_x10000`으로 저장합니다 (`percent * 10000`, 반올림).
 - 난이도/차트/랭크/FC/SYNC는 문자열 아이콘을 enum으로 파싱하지만, DB에는 표시용 문자열(TEXT)로 저장합니다.
+
+## 백업 복구
+
+S3에 올라간 객체는 단일 `.sqlite3` snapshot 파일입니다.
+
+1. S3에서 원하는 snapshot 파일을 다운로드합니다.
+2. `record-collector-server`를 중지합니다.
+3. 다운로드한 파일로 `data/maimai.sqlite3`를 교체합니다.
+4. 서버를 다시 시작합니다.

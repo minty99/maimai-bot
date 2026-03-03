@@ -48,18 +48,19 @@ pub(crate) async fn upsert_scores(
 pub(crate) async fn upsert_playlogs(
     pool: &SqlitePool,
     entries: &[ParsedPlayRecord],
-) -> eyre::Result<()> {
+) -> eyre::Result<usize> {
     let mut tx = pool.begin().await.wrap_err("begin transaction")?;
+    let mut inserted_rows = 0usize;
 
     for entry in entries {
         let Some(played_at_unixtime) = entry.played_at_unixtime else {
             continue;
         };
-        insert_playlog(&mut tx, played_at_unixtime, entry).await?;
+        inserted_rows += insert_playlog(&mut tx, played_at_unixtime, entry).await?;
     }
 
     tx.commit().await.wrap_err("commit transaction")?;
-    Ok(())
+    Ok(inserted_rows)
 }
 
 pub(crate) async fn clear_scores(pool: &SqlitePool) -> eyre::Result<()> {
@@ -78,12 +79,7 @@ pub(crate) async fn count_scores_rows(pool: &SqlitePool) -> eyre::Result<i64> {
 }
 
 pub(crate) async fn get_app_state_u32(pool: &SqlitePool, key: &str) -> eyre::Result<Option<u32>> {
-    let value: Option<String> =
-        sqlx::query_scalar::<_, Option<String>>("SELECT value FROM app_state WHERE key = ?")
-            .bind(key)
-            .fetch_one(pool)
-            .await
-            .wrap_err("get app_state value")?;
+    let value = get_app_state_string(pool, key).await?;
     let Some(value) = value else {
         return Ok(None);
     };
@@ -97,6 +93,26 @@ pub(crate) async fn set_app_state_u32(
     value: u32,
     updated_at: i64,
 ) -> eyre::Result<()> {
+    set_app_state_string(pool, key, &value.to_string(), updated_at).await
+}
+
+pub(crate) async fn get_app_state_string(
+    pool: &SqlitePool,
+    key: &str,
+) -> eyre::Result<Option<String>> {
+    sqlx::query_scalar::<_, Option<String>>("SELECT value FROM app_state WHERE key = ?")
+        .bind(key)
+        .fetch_one(pool)
+        .await
+        .wrap_err("get app_state value")
+}
+
+pub(crate) async fn set_app_state_string(
+    pool: &SqlitePool,
+    key: &str,
+    value: &str,
+    updated_at: i64,
+) -> eyre::Result<()> {
     sqlx::query(
         r#"
 INSERT INTO app_state (key, value, updated_at)
@@ -107,7 +123,7 @@ ON CONFLICT(key) DO UPDATE SET
 "#,
     )
     .bind(key)
-    .bind(value.to_string())
+    .bind(value)
     .bind(updated_at)
     .execute(pool)
     .await
@@ -161,12 +177,12 @@ async fn insert_playlog(
     tx: &mut sqlx::Transaction<'_, Sqlite>,
     played_at_unixtime: i64,
     entry: &ParsedPlayRecord,
-) -> eyre::Result<()> {
+) -> eyre::Result<usize> {
     let achievement_x10000 = percent_to_x10000(entry.achievement_percent);
 
     let achievement_new_record = i64::from(u8::from(entry.achievement_new_record));
     let first_play = i64::from(u8::from(entry.first_play));
-    sqlx::query(
+    let rows_affected = sqlx::query(
         r#"
 	INSERT INTO playlogs (
 	  played_at_unixtime,
@@ -197,8 +213,9 @@ async fn insert_playlog(
     .bind(entry.dx_score_max)
     .execute(&mut **tx)
     .await
-    .wrap_err("insert playlogs")?;
-    Ok(())
+    .wrap_err("insert playlogs")?
+    .rows_affected() as usize;
+    Ok(rows_affected)
 }
 
 fn chart_type_str(t: ChartType) -> &'static str {

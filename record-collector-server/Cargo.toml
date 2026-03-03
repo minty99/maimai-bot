@@ -8,12 +8,15 @@ name = "record-collector-server"
 path = "src/main.rs"
 
 [dependencies]
+aws-config = "1.8.14"
+aws-sdk-s3 = "1.124.0"
 axum = { workspace = true }
 chrono = { workspace = true }
 chrono-tz = { workspace = true }
 cookie_store = { workspace = true }
 dotenvy = { workspace = true }
 eyre = { workspace = true }
+hex.workspace = true
 maimai-auth = { path = "../crates/maimai-auth" }
 maimai-parsers = { path = "../crates/maimai-parsers" }
 models = { path = "../crates/models" }
@@ -22,7 +25,9 @@ reqwest = { workspace = true, features = ["json"] }
 reqwest_cookie_store = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
+sha2.workspace = true
 sqlx = { workspace = true }
+tempfile.workspace = true
 time = { workspace = true, features = ["macros", "local-offset"] }
 tokio = { workspace = true }
 tower-http = { workspace = true }

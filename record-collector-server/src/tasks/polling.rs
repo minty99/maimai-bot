@@ -4,6 +4,7 @@ use eyre::{Result, WrapErr};
 use tokio::time::interval;
 use tracing::{debug, error, info};
 
+use crate::backup::service::BackupReason;
 use crate::db::{count_scores_rows, get_app_state_u32, upsert_playlogs};
 use crate::http_client::{MaimaiClient, is_maintenance_window_now};
 use crate::state::AppState;
@@ -54,11 +55,13 @@ async fn poll_and_sync_if_needed(app_state: &AppState) -> Result<bool> {
     let score_rows = count_scores_rows(&app_state.db_pool)
         .await
         .wrap_err("count scores rows")?;
+    let mut should_request_backup = false;
     if score_rows == 0 {
         let bootstrap_count = bootstrap_scores_with_client(&app_state.db_pool, &client)
             .await
             .wrap_err("bootstrap scores")?;
         info!("Scores bootstrap completed because table was empty: rows={bootstrap_count}");
+        should_request_backup |= bootstrap_count > 0;
     }
 
     let player_data = fetch_player_data_logged_in(&client)
@@ -98,18 +101,27 @@ async fn poll_and_sync_if_needed(app_state: &AppState) -> Result<bool> {
             .wrap_err("classify first plays")?;
     }
 
-    upsert_playlogs(&app_state.db_pool, &entries)
+    let inserted_playlogs = upsert_playlogs(&app_state.db_pool, &entries)
         .await
         .wrap_err("upsert playlogs")?;
+    should_request_backup |= inserted_playlogs > 0;
 
     let refreshed_rows = refresh_outdated_scores_from_recent(&app_state.db_pool, &client, &entries)
         .await
         .wrap_err("refresh outdated scores from recent")?;
     info!("Outdated scores refreshed from recent: rows={refreshed_rows}");
+    should_request_backup |= refreshed_rows > 0;
 
     persist_player_snapshot(&app_state.db_pool, &player_data)
         .await
         .wrap_err("persist player snapshot")?;
+
+    if should_request_backup && let Some(backup_service) = &app_state.backup_service {
+        backup_service.request_backup(
+            BackupReason::PeriodicSync,
+            Some(player_data.total_play_count),
+        );
+    }
 
     if stored_total.is_some() {
         Ok(true)

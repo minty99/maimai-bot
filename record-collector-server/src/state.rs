@@ -1,12 +1,15 @@
+use crate::backup::service::BackupService;
 use crate::config::RecordCollectorConfig;
 use crate::http_client::MaimaiClient;
 use sqlx::SqlitePool;
 use std::path::PathBuf;
+use std::sync::Arc;
 
 #[derive(Clone)]
 pub(crate) struct AppState {
     pub(crate) db_pool: SqlitePool,
     pub(crate) config: RecordCollectorConfig,
+    pub(crate) backup_service: Option<Arc<BackupService>>,
 }
 
 impl AppState {

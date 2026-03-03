@@ -1,3 +1,4 @@
+mod backup;
 mod config;
 mod db;
 mod error;
@@ -43,17 +44,27 @@ async fn main() -> eyre::Result<()> {
         .wrap_err("Failed to run database migrations")?;
     tracing::info!("Database migrations completed successfully");
 
-    // Attempt startup sync, but allow server to start even if it fails
-    // (useful for testing with invalid credentials)
-    match tasks::startup::startup_sync(&db_pool, &config).await {
-        Ok(_) => tracing::info!("Startup sync completed successfully"),
-        Err(e) => tracing::warn!("Startup sync failed (server will still start): {}", e),
-    }
+    let backup_service = match &config.backup {
+        Some(backup_config) => Some(
+            backup::service::BackupService::new(backup_config.clone(), db_pool.clone())
+                .await
+                .wrap_err("Failed to initialize backup service")?,
+        ),
+        None => None,
+    };
 
     let app_state = state::AppState {
         db_pool,
         config: config.clone(),
+        backup_service,
     };
+
+    // Attempt startup sync, but allow server to start even if it fails
+    // (useful for testing with invalid credentials)
+    match tasks::startup::startup_sync(&app_state).await {
+        Ok(_) => tracing::info!("Startup sync completed successfully"),
+        Err(e) => tracing::warn!("Startup sync failed (server will still start): {}", e),
+    }
 
     // Start background polling task
     tasks::polling::start_background_polling(app_state.clone());
