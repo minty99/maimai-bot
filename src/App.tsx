@@ -233,6 +233,7 @@ function App() {
   const [playlogSortDesc, setPlaylogSortDesc] = useState(true);
 
   const loadAbortRef = useRef<AbortController | null>(null);
+  const loadedExplorerKeyRef = useRef<string | null>(null);
 
   const scoreData = useMemo(
     () => buildScoreRows(scoreRecords, songMetadata),
@@ -269,12 +270,20 @@ function App() {
     }
 
     if (!songInfoUrl.trim() || !recordCollectorUrl.trim()) {
+      loadedExplorerKeyRef.current = null;
       setIsLoading(false);
       setScoreRecords([]);
       setPlaylogRecords([]);
       setVersionsResponse([]);
       setSongMetadata(new Map<string, SongInfoResponse>());
       setLoadingError('Scores와 Playlogs 페이지는 Song Info와 Record Collector URL이 모두 필요합니다.');
+      return;
+    }
+
+    const requestKey = `${songInfoUrl.trim()}::${recordCollectorUrl.trim()}`;
+    if (loadedExplorerKeyRef.current === requestKey) {
+      setIsLoading(false);
+      setLoadingError(null);
       return;
     }
 
@@ -305,10 +314,12 @@ function App() {
           .map((version) => version.version_name)
           .filter((name) => name.length > 0) ?? [],
       );
+      loadedExplorerKeyRef.current = requestKey;
     } catch (error) {
       if (controller.signal.aborted) {
         return;
       }
+      loadedExplorerKeyRef.current = null;
       const message = error instanceof Error ? error.message : String(error);
       setLoadingError(message);
       setScoreRecords([]);
