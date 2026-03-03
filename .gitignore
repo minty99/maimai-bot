@@ -1,6 +1,9 @@
 node_modules/
 dist/
 .env
+.wrangler/
+.dev.vars
+.dev.vars.*
 .DS_Store
 *.tsbuildinfo
 npm-debug.log*

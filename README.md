@@ -92,11 +92,14 @@ npm run preview
 - Build output directory: `dist`
 - Root directory: `/`
 - `NODE_VERSION=20`
+- Deploy command: `npx wrangler deploy`
 
 환경 변수:
 
 - Production과 Preview 모두에 `SONG_INFO_SERVER_URL`, `RECORD_COLLECTOR_SERVER_URL` 설정
 - 필요하면 custom domain 연결
+
+이 저장소는 `@cloudflare/vite-plugin`과 `wrangler.jsonc`를 포함하므로 `wrangler deploy` 기준 배포도 지원합니다.
 
 운영 방식:
 
