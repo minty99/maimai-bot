@@ -189,6 +189,13 @@ async fn hydrate_targets(
         }
     }
 
+    for failed in &failed_targets {
+        warn!(
+            "detail hydration failed: title='{}' idx={} error={}",
+            failed.title, failed.idx, failed.error
+        );
+    }
+
     if !updates.is_empty() {
         upsert_scores(pool, &updates)
             .await

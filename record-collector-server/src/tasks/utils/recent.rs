@@ -7,9 +7,7 @@ use crate::tasks::utils::auth::{ExpectedPage, fetch_html_with_auth_recovery};
 use crate::tasks::utils::detail_hydration::{
     DetailHydrationReport, refresh_outdated_scores_from_recent,
 };
-use crate::tasks::utils::player::{
-    fetch_player_data_logged_in, load_stored_total_play_count, persist_player_snapshot,
-};
+use crate::tasks::utils::player::{load_stored_total_play_count, persist_player_snapshot};
 use maimai_parsers::parse_recent_html;
 use models::{ParsedPlayRecord, ParsedPlayerProfile};
 
@@ -128,17 +126,6 @@ fn outcome_from_refresh_report(
             failed_targets,
         }
     }
-}
-
-pub(crate) async fn fetch_player_and_sync_recent(
-    pool: &SqlitePool,
-    client: &mut MaimaiClient,
-) -> Result<(ParsedPlayerProfile, RecentSyncOutcome)> {
-    let player_data = fetch_player_data_logged_in(client)
-        .await
-        .wrap_err("fetch player data before recent sync")?;
-    let recent_outcome = sync_recent_if_play_count_changed(pool, client, &player_data).await;
-    Ok((player_data, recent_outcome))
 }
 
 #[cfg(test)]

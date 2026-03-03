@@ -47,7 +47,6 @@ impl SongLookupKey {
 
 #[derive(Debug, Clone)]
 pub(crate) struct ScoreListSnapshot {
-    pub(crate) diff: u8,
     pub(crate) fetched_at: i64,
     pub(crate) entries: Vec<ParsedScoreEntry>,
 }
@@ -126,7 +125,6 @@ pub(crate) async fn fetch_score_list_snapshot(
     let entries = parse_scores_html(&html, diff).wrap_err("parse scores html")?;
 
     Ok(ScoreListSnapshot {
-        diff,
         fetched_at: unix_timestamp(),
         entries,
     })
@@ -608,7 +606,6 @@ mod tests {
         snapshots.insert(
             3,
             ScoreListSnapshot {
-                diff: 3,
                 fetched_at: 1,
                 entries,
             },

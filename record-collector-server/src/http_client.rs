@@ -10,6 +10,7 @@ use time::OffsetDateTime;
 use maimai_auth::intl;
 use models::config::AppConfig;
 
+#[allow(dead_code)]
 #[derive(Debug, Clone)]
 pub(crate) struct HtmlResponse {
     pub(crate) final_url: Url,
@@ -100,6 +101,7 @@ impl MaimaiClient {
         Ok(bytes.to_vec())
     }
 
+    #[allow(dead_code)]
     pub(crate) async fn get_html_response(&self, url: &Url) -> eyre::Result<HtmlResponse> {
         ensure_not_maintenance_now()?;
         let resp = self
