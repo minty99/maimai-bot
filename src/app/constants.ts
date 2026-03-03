@@ -112,6 +112,7 @@ export type ScoreSortKey =
   | 'rating'
   | 'internal'
   | 'dxRatio'
+  | 'playCount'
   | 'lastPlayed';
 
 export type PlaylogSortKey =

@@ -157,6 +157,9 @@ export function buildFilteredScoreRows({
       case 'dxRatio':
         result = compareNullableNumber(left.dxRatio, right.dxRatio);
         break;
+      case 'playCount':
+        result = compareNullableNumber(left.playCount, right.playCount);
+        break;
       case 'lastPlayed':
         result = compareNullableNumber(left.latestPlayedAtUnix, right.latestPlayedAtUnix);
         break;

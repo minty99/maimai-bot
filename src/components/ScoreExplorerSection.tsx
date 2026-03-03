@@ -342,7 +342,14 @@ export function ScoreExplorerSection({
                       </span>
                     </button>
                   </th>
-                  <th>Play count</th>
+                  <th className="sortable">
+                    <button type="button" className="th-sort-button" onClick={() => onSortBy('playCount')}>
+                      <span>Play count</span>
+                      <span className="sort-indicator">
+                        {sortIndicator(scoreSortKey === 'playCount', scoreSortDesc)}
+                      </span>
+                    </button>
+                  </th>
                   <th>Version</th>
                 </tr>
               </thead>
