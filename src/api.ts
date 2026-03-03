@@ -1,9 +1,12 @@
 import type {
   ApiErrorResponse,
   PlayRecordApiResponse,
+  RandomPickerSong,
+  RandomSongApiResponse,
   ScoreApiResponse,
   SongDetailScoreApiResponse,
   SongInfoResponse,
+  SongVersionResponse,
   SongVersionsListResponse,
 } from './types';
 
@@ -68,6 +71,22 @@ export async function fetchExplorerPayload(
     playlogs,
     versions: versionsResult,
   };
+}
+
+export async function fetchSongVersions(
+  songInfoBaseUrl: string,
+  signal?: AbortSignal,
+): Promise<SongVersionResponse[]> {
+  const songInfoBase = normalizeBaseUrl(songInfoBaseUrl);
+  if (!songInfoBase) {
+    return [];
+  }
+
+  const response = await getJson<SongVersionsListResponse>(
+    `${songInfoBase}/api/songs/versions`,
+    signal,
+  );
+  return response.versions;
 }
 
 interface MetadataProgress {
@@ -158,4 +177,113 @@ export async function fetchSongDetailScores(
     `${recordBase}/api/scores/detail/${encodedTitle}`,
     signal,
   );
+}
+
+interface FetchRandomPickerSongParams {
+  songInfoBaseUrl: string;
+  recordCollectorBaseUrl?: string;
+  minLevel: number;
+  maxLevel: number;
+  chartTypes: string[];
+  difficultyIndices: number[];
+  includeVersionIndices: number[] | null;
+  signal?: AbortSignal;
+}
+
+function toLevelQueryValue(value: number): string {
+  const normalized = Math.round(value * 10) / 10;
+  return normalized.toFixed(1);
+}
+
+function asNullableInt(value: number | null | undefined): number | null {
+  return typeof value === 'number' && Number.isFinite(value) ? Math.trunc(value) : null;
+}
+
+export async function fetchRandomPickerSong({
+  songInfoBaseUrl,
+  recordCollectorBaseUrl,
+  minLevel,
+  maxLevel,
+  chartTypes,
+  difficultyIndices,
+  includeVersionIndices,
+  signal,
+}: FetchRandomPickerSongParams): Promise<RandomPickerSong> {
+  const songInfoBase = normalizeBaseUrl(songInfoBaseUrl);
+  if (!songInfoBase) {
+    throw new Error('Song Info URL이 비어 있습니다.');
+  }
+
+  const params = new URLSearchParams({
+    min_level: toLevelQueryValue(minLevel),
+    max_level: toLevelQueryValue(maxLevel),
+  });
+
+  if (chartTypes.length > 0) {
+    params.set('chart_types', [...chartTypes].sort().join(','));
+  }
+  if (difficultyIndices.length > 0) {
+    params.set('include_difficulties', [...difficultyIndices].sort((a, b) => a - b).join(','));
+  }
+  if (includeVersionIndices !== null && includeVersionIndices.length > 0) {
+    params.set('include_versions', [...includeVersionIndices].sort((a, b) => a - b).join(','));
+  }
+
+  const song = await getJson<RandomSongApiResponse>(
+    `${songInfoBase}/api/songs/random?${params.toString()}`,
+    signal,
+  );
+
+  if (song.sheets.length === 0) {
+    throw new Error('선택된 곡에 sheet 정보가 없습니다.');
+  }
+
+  const inRangeSheets = song.sheets.filter((sheet) => {
+    if (sheet.internal_level === null) {
+      return false;
+    }
+    return sheet.internal_level >= minLevel && sheet.internal_level <= maxLevel;
+  });
+  const pool = inRangeSheets.length > 0 ? inRangeSheets : song.sheets;
+  const selectedSheet = pool[Math.floor(Math.random() * pool.length)];
+
+  let detailRow: SongDetailScoreApiResponse | undefined;
+  const recordBase = normalizeBaseUrl(recordCollectorBaseUrl ?? '');
+  if (recordBase) {
+    try {
+      const encodedTitle = encodeURIComponent(song.title);
+      const detailRows = await getJson<SongDetailScoreApiResponse[]>(
+        `${recordBase}/api/scores/detail/${encodedTitle}`,
+        signal,
+      );
+      detailRow = detailRows.find(
+        (row) =>
+          row.chart_type === selectedSheet.chart_type &&
+          row.diff_category === selectedSheet.difficulty,
+      );
+    } catch {
+      detailRow = undefined;
+    }
+  }
+
+  return {
+    title: song.title,
+    version: selectedSheet.version ?? song.version,
+    imageName: song.image_name,
+    chartType: selectedSheet.chart_type,
+    difficulty: selectedSheet.difficulty,
+    level: selectedSheet.level,
+    internalLevel: selectedSheet.internal_level,
+    userLevel: selectedSheet.user_level,
+    achievementX10000: detailRow?.achievement_x10000 ?? null,
+    rank: detailRow?.rank ?? null,
+    fc: detailRow?.fc ?? null,
+    sync: detailRow?.sync ?? null,
+    dxScore: detailRow?.dx_score ?? null,
+    dxScoreMax: detailRow?.dx_score_max ?? null,
+    lastPlayedAt: detailRow?.last_played_at ?? null,
+    playCount: asNullableInt(detailRow?.play_count),
+    levelSongCount: asNullableInt(song.selection_stats?.level_song_count),
+    filteredSongCount: asNullableInt(song.selection_stats?.filtered_song_count),
+  };
 }

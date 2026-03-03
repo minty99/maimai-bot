@@ -30,6 +30,14 @@ export interface StoredPlaylogFilters {
   achievementMax?: number;
 }
 
+export interface StoredRandomPickerFilters {
+  levelStart?: number;
+  levelEnd?: number;
+  chartTypes?: ChartType[];
+  difficultyIndices?: number[];
+  includeVersionIndices?: number[] | null;
+}
+
 export function readStoredValue(key: string, fallbackValue: string): string {
   const value = localStorage.getItem(key)?.trim();
   if (!value) {
@@ -62,6 +70,13 @@ export function coerceStringArray(value: unknown): string[] {
     return [];
   }
   return value.filter((item): item is string => typeof item === 'string');
+}
+
+export function coerceNumberArray(value: unknown): number[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  return value.filter((item): item is number => typeof item === 'number' && Number.isFinite(item));
 }
 
 export function coerceBoolean(value: unknown, fallbackValue: boolean): boolean {

@@ -49,6 +49,7 @@ import {
   computeSyncOptions,
 } from './app/filtering';
 import { PlaylogExplorerSection } from './components/PlaylogExplorerSection';
+import { RandomPickerPage } from './components/RandomPickerPage';
 import { ScoreExplorerSection } from './components/ScoreExplorerSection';
 import { ServerConnectionModal } from './components/ServerConnectionModal';
 import { SongDetailModal } from './components/SongDetailModal';
@@ -67,6 +68,12 @@ import type {
 const METADATA_BATCH_SIZE = 16;
 const METADATA_PREFETCH_ROWS = 60;
 
+type AppPage = 'explorer' | 'picker';
+
+function readPageFromHash(hash: string): AppPage {
+  return hash === '#picker' ? 'picker' : 'explorer';
+}
+
 function App() {
   const savedScoreFilters = useMemo(
     () => readStoredJson<StoredScoreFilters>(SCORE_FILTERS_STORAGE_KEY),
@@ -78,6 +85,7 @@ function App() {
   );
 
   const [activeTab, setActiveTab] = useState<ActiveTab>('scores');
+  const [activePage, setActivePage] = useState<AppPage>(() => readPageFromHash(window.location.hash));
 
   const [songInfoUrl, setSongInfoUrl] = useState<string>(() =>
     readStoredValue(SONG_INFO_STORAGE_KEY, DEFAULT_SONG_INFO_URL),
@@ -370,6 +378,25 @@ function App() {
   }, [scoreData, versionsResponse]);
 
   const loadData = useCallback(async () => {
+    if (activePage !== 'explorer') {
+      loadAbortRef.current?.abort();
+      setIsLoading(false);
+      setLoadingError(null);
+      setMetadataProgress({ done: 0, total: 0 });
+      return;
+    }
+
+    if (!songInfoUrl.trim() || !recordCollectorUrl.trim()) {
+      setIsLoading(false);
+      setScoreRecords([]);
+      setPlaylogRecords([]);
+      setVersionsResponse([]);
+      setSongMetadata(new Map<string, SongInfoResponse>());
+      setMetadataProgress({ done: 0, total: 0 });
+      setLoadingError('Scores / Playlogs Explorer는 Song Info와 Record Collector URL이 모두 필요합니다.');
+      return;
+    }
+
     loadAbortRef.current?.abort();
     const controller = new AbortController();
     loadAbortRef.current = controller;
@@ -420,7 +447,7 @@ function App() {
         setIsLoading(false);
       }
     }
-  }, [enqueueMetadataTitles, recordCollectorUrl, resetMetadataQueue, songInfoUrl]);
+  }, [activePage, enqueueMetadataTitles, recordCollectorUrl, resetMetadataQueue, songInfoUrl]);
 
   useEffect(() => {
     void loadData();
@@ -430,6 +457,15 @@ function App() {
       detailAbortRef.current?.abort();
     };
   }, [loadData]);
+
+  useEffect(() => {
+    const onHashChange = () => {
+      setActivePage(readPageFromHash(window.location.hash));
+    };
+
+    window.addEventListener('hashchange', onHashChange);
+    return () => window.removeEventListener('hashchange', onHashChange);
+  }, []);
 
   useEffect(() => {
     if (
@@ -732,7 +768,7 @@ function App() {
     const nextSongInfoUrl = songInfoUrlDraft.trim();
     const nextRecordUrl = recordCollectorUrlDraft.trim();
 
-    if (!nextSongInfoUrl || !nextRecordUrl) {
+    if (!nextSongInfoUrl) {
       return;
     }
 
@@ -740,6 +776,15 @@ function App() {
     setRecordCollectorUrl(nextRecordUrl);
     setIsServerModalOpen(false);
   };
+
+  const handleNavigatePage = useCallback((page: AppPage) => {
+    const nextHash = page === 'picker' ? '#picker' : '#explorer';
+    if (window.location.hash !== nextHash) {
+      window.location.hash = nextHash;
+      return;
+    }
+    setActivePage(page);
+  }, []);
 
   const openServerModal = useCallback(() => {
     setSongInfoUrlDraft(songInfoUrl);
@@ -752,7 +797,7 @@ function App() {
   const playlogCountLabel = `${filteredPlaylogRows.length.toLocaleString()}/${playlogData.length.toLocaleString()}`;
 
   return (
-    <div className="app-shell">
+    <div className={activePage === 'picker' ? 'app-shell page-picker' : 'app-shell'}>
       <header className="hero">
         <div className="hero-main">
           <div className="hero-title-row">
@@ -763,109 +808,139 @@ function App() {
               Server Connection
             </button>
           </div>
-          <p>
-            점수와 플레이로그를 합쳐서 오래된 곡, 높은 점수 곡, 재도전 우선순위를 자유롭게 정렬/필터링할 수 있는 분석 대시보드입니다.
-          </p>
-          <span className="meta-note">
-            메타데이터 로딩: {metadataCoverage}
-            {isLoading ? ' (로딩 중...)' : ''}
-          </span>
+          {activePage === 'explorer' ? (
+            <>
+              <p>
+                점수와 플레이로그를 합쳐서 오래된 곡, 높은 점수 곡, 재도전 우선순위를 자유롭게 정렬/필터링할 수 있는 분석 대시보드입니다.
+              </p>
+              <span className="meta-note">
+                메타데이터 로딩: {metadataCoverage}
+                {isLoading ? ' (로딩 중...)' : ''}
+              </span>
+            </>
+          ) : null}
         </div>
       </header>
-
-      {loadingError ? <section className="error-banner">에러: {loadingError}</section> : null}
 
       <section className="tabs">
         <button
           type="button"
-          className={activeTab === 'scores' ? 'active' : ''}
-          onClick={() => setActiveTab('scores')}
+          className={activePage === 'explorer' ? 'active' : ''}
+          onClick={() => handleNavigatePage('explorer')}
         >
-          Scores Explorer
+          Explorer
         </button>
         <button
           type="button"
-          className={activeTab === 'playlogs' ? 'active' : ''}
-          onClick={() => setActiveTab('playlogs')}
+          className={activePage === 'picker' ? 'active' : ''}
+          onClick={() => handleNavigatePage('picker')}
         >
-          Playlogs Explorer
+          Random Picker
         </button>
       </section>
 
-      {activeTab === 'scores' ? (
-        <ScoreExplorerSection
-          scoreCountLabel={scoreCountLabel}
-          query={query}
-          setQuery={setQuery}
-          chartTypes={CHART_TYPES}
-          chartFilter={chartFilter}
-          setChartFilter={setChartFilter}
-          difficulties={DIFFICULTIES}
-          difficultyFilter={difficultyFilter}
-          setDifficultyFilter={setDifficultyFilter}
-          versionOptions={versionOptions}
-          versionSelection={versionSelection}
-          setVersionSelection={setVersionSelection}
-          scoreRankOptions={rankFilterOptions}
-          rankFilter={selectedRankFilterOptions}
-          onToggleRankFilter={handleRankFilterToggle}
-          fcOptions={fcOptions}
-          fcFilter={fcFilter}
-          setFcFilter={setFcFilter}
-          syncOptions={syncOptions}
-          syncFilter={syncFilter}
-          setSyncFilter={setSyncFilter}
-          achievementMin={achievementMin}
-          setAchievementMin={setAchievementMin}
-          achievementMax={achievementMax}
-          setAchievementMax={setAchievementMax}
-          internalMin={internalMin}
-          setInternalMin={setInternalMin}
-          internalMax={internalMax}
-          setInternalMax={setInternalMax}
-          daysMin={daysMin}
-          setDaysMin={setDaysMin}
-          daysMax={daysMax}
-          setDaysMax={setDaysMax}
-          includeNoAchievement={includeNoAchievement}
-          setIncludeNoAchievement={setIncludeNoAchievement}
-          includeNoInternalLevel={includeNoInternalLevel}
-          setIncludeNoInternalLevel={setIncludeNoInternalLevel}
-          includeNeverPlayed={includeNeverPlayed}
-          setIncludeNeverPlayed={setIncludeNeverPlayed}
-          filteredScoreRows={filteredScoreRows}
-          songInfoUrl={songInfoUrl}
-          onOpenSongDetail={handleOpenSongDetail}
-          scoreSortKey={scoreSortKey}
-          scoreSortDesc={scoreSortDesc}
-          onSortBy={handleScoreSortBy}
-        />
+      {activePage === 'explorer' ? (
+        <>
+          {loadingError ? <section className="error-banner">에러: {loadingError}</section> : null}
+
+          <section className="tabs">
+            <button
+              type="button"
+              className={activeTab === 'scores' ? 'active' : ''}
+              onClick={() => setActiveTab('scores')}
+            >
+              Scores Explorer
+            </button>
+            <button
+              type="button"
+              className={activeTab === 'playlogs' ? 'active' : ''}
+              onClick={() => setActiveTab('playlogs')}
+            >
+              Playlogs Explorer
+            </button>
+          </section>
+
+          {activeTab === 'scores' ? (
+            <ScoreExplorerSection
+              scoreCountLabel={scoreCountLabel}
+              query={query}
+              setQuery={setQuery}
+              chartTypes={CHART_TYPES}
+              chartFilter={chartFilter}
+              setChartFilter={setChartFilter}
+              difficulties={DIFFICULTIES}
+              difficultyFilter={difficultyFilter}
+              setDifficultyFilter={setDifficultyFilter}
+              versionOptions={versionOptions}
+              versionSelection={versionSelection}
+              setVersionSelection={setVersionSelection}
+              scoreRankOptions={rankFilterOptions}
+              rankFilter={selectedRankFilterOptions}
+              onToggleRankFilter={handleRankFilterToggle}
+              fcOptions={fcOptions}
+              fcFilter={fcFilter}
+              setFcFilter={setFcFilter}
+              syncOptions={syncOptions}
+              syncFilter={syncFilter}
+              setSyncFilter={setSyncFilter}
+              achievementMin={achievementMin}
+              setAchievementMin={setAchievementMin}
+              achievementMax={achievementMax}
+              setAchievementMax={setAchievementMax}
+              internalMin={internalMin}
+              setInternalMin={setInternalMin}
+              internalMax={internalMax}
+              setInternalMax={setInternalMax}
+              daysMin={daysMin}
+              setDaysMin={setDaysMin}
+              daysMax={daysMax}
+              setDaysMax={setDaysMax}
+              includeNoAchievement={includeNoAchievement}
+              setIncludeNoAchievement={setIncludeNoAchievement}
+              includeNoInternalLevel={includeNoInternalLevel}
+              setIncludeNoInternalLevel={setIncludeNoInternalLevel}
+              includeNeverPlayed={includeNeverPlayed}
+              setIncludeNeverPlayed={setIncludeNeverPlayed}
+              filteredScoreRows={filteredScoreRows}
+              songInfoUrl={songInfoUrl}
+              onOpenSongDetail={handleOpenSongDetail}
+              scoreSortKey={scoreSortKey}
+              scoreSortDesc={scoreSortDesc}
+              onSortBy={handleScoreSortBy}
+            />
+          ) : (
+            <PlaylogExplorerSection
+              playlogCountLabel={playlogCountLabel}
+              playlogQuery={playlogQuery}
+              setPlaylogQuery={setPlaylogQuery}
+              chartTypes={CHART_TYPES}
+              playlogChartFilter={playlogChartFilter}
+              setPlaylogChartFilter={setPlaylogChartFilter}
+              difficulties={DIFFICULTIES}
+              playlogDifficultyFilter={playlogDifficultyFilter}
+              setPlaylogDifficultyFilter={setPlaylogDifficultyFilter}
+              playlogAchievementMin={playlogAchievementMin}
+              setPlaylogAchievementMin={setPlaylogAchievementMin}
+              playlogAchievementMax={playlogAchievementMax}
+              setPlaylogAchievementMax={setPlaylogAchievementMax}
+              playlogIncludeUnknownDiff={playlogIncludeUnknownDiff}
+              setPlaylogIncludeUnknownDiff={setPlaylogIncludeUnknownDiff}
+              playlogNewRecordOnly={playlogNewRecordOnly}
+              setPlaylogNewRecordOnly={setPlaylogNewRecordOnly}
+              playlogFirstPlayOnly={playlogFirstPlayOnly}
+              setPlaylogFirstPlayOnly={setPlaylogFirstPlayOnly}
+              filteredPlaylogRows={filteredPlaylogRows}
+              songInfoUrl={songInfoUrl}
+              playlogSortKey={playlogSortKey}
+              playlogSortDesc={playlogSortDesc}
+              onSortBy={handlePlaylogSortBy}
+            />
+          )}
+        </>
       ) : (
-        <PlaylogExplorerSection
-          playlogCountLabel={playlogCountLabel}
-          playlogQuery={playlogQuery}
-          setPlaylogQuery={setPlaylogQuery}
-          chartTypes={CHART_TYPES}
-          playlogChartFilter={playlogChartFilter}
-          setPlaylogChartFilter={setPlaylogChartFilter}
-          difficulties={DIFFICULTIES}
-          playlogDifficultyFilter={playlogDifficultyFilter}
-          setPlaylogDifficultyFilter={setPlaylogDifficultyFilter}
-          playlogAchievementMin={playlogAchievementMin}
-          setPlaylogAchievementMin={setPlaylogAchievementMin}
-          playlogAchievementMax={playlogAchievementMax}
-          setPlaylogAchievementMax={setPlaylogAchievementMax}
-          playlogIncludeUnknownDiff={playlogIncludeUnknownDiff}
-          setPlaylogIncludeUnknownDiff={setPlaylogIncludeUnknownDiff}
-          playlogNewRecordOnly={playlogNewRecordOnly}
-          setPlaylogNewRecordOnly={setPlaylogNewRecordOnly}
-          playlogFirstPlayOnly={playlogFirstPlayOnly}
-          setPlaylogFirstPlayOnly={setPlaylogFirstPlayOnly}
-          filteredPlaylogRows={filteredPlaylogRows}
+        <RandomPickerPage
           songInfoUrl={songInfoUrl}
-          playlogSortKey={playlogSortKey}
-          playlogSortDesc={playlogSortDesc}
-          onSortBy={handlePlaylogSortBy}
+          recordCollectorUrl={recordCollectorUrl}
         />
       )}
 

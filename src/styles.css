@@ -19,6 +19,7 @@
 body {
   margin: 0;
   min-height: 100vh;
+  scrollbar-gutter: stable;
   color: var(--ink);
   font-family: 'IBM Plex Sans KR', 'Noto Sans KR', sans-serif;
   background:
@@ -455,6 +456,7 @@ tbody tr:hover {
 }
 
 .jacket {
+  display: block;
   width: 52px;
   height: 52px;
   border-radius: 9px;
@@ -633,8 +635,457 @@ tbody tr:hover {
   padding: 4px 2px 20px;
 }
 
+.app-shell.page-picker {
+  min-height: 100vh;
+  max-width: 840px;
+  padding-top: 8px;
+  padding-left: 8px;
+  padding-right: 8px;
+}
+
+.page-picker .hero {
+  padding: 10px 12px;
+  gap: 6px;
+}
+
+.page-picker .hero-main {
+  gap: 6px;
+}
+
+.page-picker .hero-title-row {
+  flex-wrap: nowrap;
+  align-items: center;
+}
+
+.picker-layout {
+  display: grid;
+  gap: 8px;
+}
+
+.picker-layout.compact {
+  min-height: auto;
+  grid-template-rows: auto auto auto;
+  align-content: start;
+}
+
+.picker-control-panel.compact {
+  gap: 10px;
+  padding: 10px;
+}
+
+.picker-toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+}
+
+.picker-toolbar h2 {
+  font-size: 1rem;
+}
+
+.picker-filter-launcher {
+  height: 32px;
+  min-width: 60px;
+  padding: 0 10px;
+}
+
+.picker-range-row {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.picker-range-card {
+  display: grid;
+  gap: 6px;
+  padding: 10px;
+  border: 1px solid #dbe8df;
+  border-radius: 12px;
+  background:
+    linear-gradient(160deg, rgba(231, 245, 236, 0.85), rgba(255, 239, 228, 0.62)),
+    #f7fbf8;
+}
+
+.picker-range-card span {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: #547064;
+}
+
+.picker-range-editor {
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr) 34px;
+  gap: 6px;
+  align-items: center;
+}
+
+.picker-range-editor button {
+  height: 34px;
+  padding: 0;
+  border-radius: 10px;
+  font-size: 18px;
+}
+
+.picker-range-editor input {
+  height: 34px;
+  padding: 0 8px;
+  text-align: center;
+  font-family: 'Space Grotesk', sans-serif;
+  font-size: 1.1rem;
+  border: 1px solid #cadecf;
+  background: rgba(255, 255, 255, 0.76);
+}
+
+.picker-filter-option.active {
+  background: #0f7a59;
+  border-color: #0f7a59;
+  color: #f7fffa;
+}
+
+.picker-random-button {
+  height: 52px;
+  border: 0;
+  border-radius: 14px;
+  font-family: 'Space Grotesk', sans-serif;
+  font-size: 1rem;
+  letter-spacing: 0.06em;
+  color: #f7fffa;
+  background: linear-gradient(135deg, #0f7a59 0%, #de6e2e 100%);
+  box-shadow: 0 12px 24px rgba(15, 122, 89, 0.2);
+}
+
+.picker-result-panel.compact {
+  display: grid;
+  align-items: start;
+  justify-items: center;
+  padding: 4px 0;
+  min-height: 0;
+}
+
+.picker-state-card,
+.picker-song-card {
+  min-height: 0;
+}
+
+.picker-state-card {
+  display: grid;
+  align-content: center;
+  justify-items: start;
+  gap: 10px;
+  padding: 18px;
+  border-radius: 18px;
+  background:
+    radial-gradient(circle at top left, rgba(220, 239, 229, 0.9), transparent 55%),
+    radial-gradient(circle at bottom right, rgba(255, 229, 214, 0.75), transparent 42%),
+    #f8fbf9;
+}
+
+.picker-state-card h3 {
+  font-size: clamp(1.5rem, 3vw, 2rem);
+}
+
+.picker-state-card p {
+  max-width: 32rem;
+  color: #456153;
+  line-height: 1.6;
+}
+
+.picker-state-card.error {
+  background: #fff1ea;
+}
+
+.picker-song-card {
+  --picker-accent: #0f7a59;
+  display: grid;
+  grid-template-rows: auto auto;
+  gap: 0;
+  width: min(100%, 430px, calc(100dvh - 320px));
+  padding: 0;
+  border-radius: 16px;
+  border: 1px solid color-mix(in srgb, var(--picker-accent) 32%, white);
+  background:
+    radial-gradient(circle at top left, color-mix(in srgb, var(--picker-accent) 12%, white), transparent 38%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(247, 251, 248, 0.94));
+  box-shadow: 0 18px 36px rgba(17, 36, 26, 0.08);
+  overflow: hidden;
+}
+
+.picker-song-stage {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 1;
+  overflow: hidden;
+  background: linear-gradient(160deg, rgba(16, 36, 25, 0.96), rgba(36, 79, 58, 0.92));
+}
+
+.picker-jacket {
+  width: 100%;
+  height: 100%;
+  border-radius: 0;
+  object-fit: contain;
+  background:
+    radial-gradient(circle at top left, rgba(255, 255, 255, 0.08), transparent 42%),
+    rgba(255, 255, 255, 0.02);
+  border: 0;
+}
+
+.picker-stage-gradient {
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(180deg, rgba(10, 24, 18, 0.02) 0%, rgba(10, 24, 18, 0.08) 62%, rgba(10, 24, 18, 0.78) 100%);
+  pointer-events: none;
+}
+
+.picker-stage-badges {
+  position: absolute;
+  left: 0;
+  right: 0;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  bottom: 10px;
+  padding: 0 10px;
+}
+
+.picker-badge {
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+  padding: 0 8px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.9);
+  color: #1d3c2d;
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.picker-badge.difficulty {
+  background: color-mix(in srgb, var(--picker-accent) 16%, white);
+  color: color-mix(in srgb, var(--picker-accent) 78%, black);
+}
+
+.picker-badge.muted {
+  color: #586b61;
+}
+
+.picker-song-info {
+  display: grid;
+  gap: 4px;
+  padding: 10px 12px 12px;
+  min-height: 118px;
+}
+
+.picker-song-info h3 {
+  font-size: clamp(1.1rem, 4.5vw, 1.4rem);
+  line-height: 1.2;
+}
+
+.picker-level-line {
+  color: #0f7a59;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.picker-pool-line,
+.picker-meta-line {
+  color: #66786f;
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.picker-achievement-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.picker-achievement-row strong {
+  font-family: 'Space Grotesk', sans-serif;
+  font-size: 1.35rem;
+}
+
+.picker-achievement-row span {
+  font-size: 0.95rem;
+  font-weight: 700;
+}
+
+.picker-achievement-row.is-empty strong,
+.picker-achievement-row.is-empty span,
+.picker-meta-line.is-empty {
+  color: #7a8b83;
+}
+
+.picker-tag-row {
+  display: flex;
+  gap: 6px;
+  margin-left: auto;
+}
+
+.picker-tag-row em {
+  font-style: normal;
+  min-height: 22px;
+  display: inline-flex;
+  align-items: center;
+  padding: 0 6px;
+  border-radius: 8px;
+  background: rgba(15, 122, 89, 0.12);
+  border: 1px solid rgba(15, 122, 89, 0.3);
+  color: #0f7a59;
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.picker-filter-modal {
+  width: min(720px, 100%);
+}
+
+.picker-song-card--placeholder .picker-song-stage {
+  background:
+    radial-gradient(circle at 25% 20%, rgba(255, 255, 255, 0.08), transparent 22%),
+    linear-gradient(160deg, rgba(16, 36, 25, 0.96), rgba(36, 79, 58, 0.92));
+}
+
+.picker-stage-placeholder {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  display: grid;
+  place-items: center;
+  padding: 18px;
+}
+
+.picker-stage-placeholder h3 {
+  color: rgba(247, 255, 250, 0.92);
+  font-size: clamp(1.2rem, 4vw, 1.5rem);
+  text-align: center;
+  text-shadow: 0 6px 20px rgba(0, 0, 0, 0.24);
+}
+
+.picker-song-info--placeholder {
+  align-content: start;
+}
+
+.picker-song-info--placeholder p {
+  margin-top: 4px;
+  color: #52675c;
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.picker-skeleton {
+  border-radius: 999px;
+  background: linear-gradient(90deg, #e8efe9 0%, #f5f8f6 50%, #e8efe9 100%);
+  background-size: 200% 100%;
+  animation: picker-skeleton-shimmer 1.6s linear infinite;
+}
+
+.picker-skeleton-title {
+  width: 72%;
+  height: 24px;
+  border-radius: 10px;
+}
+
+.picker-skeleton-subtitle {
+  width: 52%;
+  height: 16px;
+}
+
+.picker-skeleton-pool {
+  width: 68%;
+  height: 15px;
+}
+
+.picker-skeleton-meta {
+  width: 64%;
+  height: 15px;
+}
+
+.picker-skeleton-stats {
+  width: 88%;
+  height: 24px;
+  border-radius: 12px;
+}
+
+@keyframes picker-skeleton-shimmer {
+  0% {
+    background-position: 200% 0;
+  }
+  100% {
+    background-position: -200% 0;
+  }
+}
+
+.picker-filter-menu {
+  width: min(420px, 100%);
+}
+
+.picker-filter-menu-grid {
+  display: grid;
+  gap: 8px;
+}
+
+.picker-filter-menu-grid button {
+  height: auto;
+  min-height: 62px;
+  display: grid;
+  justify-items: start;
+  gap: 4px;
+  padding: 10px 12px;
+}
+
+.picker-filter-menu-grid span {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #5c7468;
+}
+
+.picker-filter-menu-grid strong {
+  font-size: 14px;
+}
+
+.picker-filter-toolbar {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+.picker-filter-option-list {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+}
+
+.picker-filter-option {
+  height: auto;
+  min-height: 70px;
+  padding: 12px;
+  display: grid;
+  justify-items: start;
+  gap: 4px;
+  text-align: left;
+}
+
+.picker-filter-option small {
+  color: inherit;
+  opacity: 0.76;
+}
+
 @media (max-width: 1200px) {
   .explorer-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .picker-layout {
     grid-template-columns: 1fr;
   }
 
@@ -727,5 +1178,71 @@ tbody tr:hover {
   .jacket {
     width: 44px;
     height: 44px;
+  }
+
+  .picker-jacket {
+    width: 100%;
+    height: 100%;
+  }
+
+  .page-picker .hero {
+    padding: 8px;
+  }
+
+  .page-picker .hero-title-row {
+    align-items: center;
+  }
+
+  .page-picker .hero h1 {
+    font-size: 1.1rem;
+  }
+
+  .picker-layout.compact {
+    min-height: auto;
+  }
+
+  .picker-control-panel.compact {
+    padding: 8px;
+  }
+
+  .picker-toolbar h2 {
+    font-size: 0.95rem;
+  }
+
+  .picker-range-row {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 6px;
+  }
+
+  .picker-range-card {
+    padding: 8px;
+  }
+
+  .picker-range-editor {
+    grid-template-columns: 30px minmax(0, 1fr) 30px;
+    gap: 4px;
+  }
+
+  .picker-range-editor button,
+  .picker-range-editor input {
+    height: 30px;
+  }
+
+  .picker-range-editor input {
+    padding: 0 4px;
+    font-size: 1rem;
+  }
+
+  .app-shell.page-picker {
+    padding-left: 4px;
+    padding-right: 4px;
+  }
+
+  .picker-result-panel.compact {
+    padding: 2px 0;
+  }
+
+  .picker-song-card {
+    width: min(calc(100vw - 12px), calc(100dvh - 250px), 430px);
   }
 }

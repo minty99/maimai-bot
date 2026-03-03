@@ -7,9 +7,11 @@ interface JacketProps {
   songInfoUrl: string;
   imageName: string | null;
   title: string;
+  className?: string;
 }
 
-export function Jacket({ songInfoUrl, imageName, title }: JacketProps) {
+export function Jacket({ songInfoUrl, imageName, title, className }: JacketProps) {
+  const jacketClassName = ['jacket', className].filter(Boolean).join(' ');
   const coverUrl = imageName ? buildCoverUrl(songInfoUrl, imageName) : null;
   const containerRef = useRef<HTMLDivElement | null>(null);
   const [shouldLoad, setShouldLoad] = useState(() => coverUrl === null);
@@ -73,21 +75,21 @@ export function Jacket({ songInfoUrl, imageName, title }: JacketProps) {
   }, [coverUrl, shouldLoad]);
 
   if (!imageName || hasError) {
-    return <div className="jacket fallback">{title.slice(0, 1).toUpperCase()}</div>;
+    return <div className={`${jacketClassName} fallback`}>{title.slice(0, 1).toUpperCase()}</div>;
   }
 
   return (
     <div ref={containerRef}>
       {resolvedSrc ? (
         <img
-          className="jacket"
+          className={jacketClassName}
           src={resolvedSrc}
           alt={`${title} jacket`}
           referrerPolicy="no-referrer"
           onError={() => setHasError(true)}
         />
       ) : (
-        <div className="jacket fallback">{title.slice(0, 1).toUpperCase()}</div>
+        <div className={`${jacketClassName} fallback`}>{title.slice(0, 1).toUpperCase()}</div>
       )}
     </div>
   );

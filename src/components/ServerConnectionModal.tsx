@@ -59,7 +59,7 @@ export function ServerConnectionModal({
         </div>
         <div className="server-meta">
           <span>현재 Song Info: {songInfoUrl}</span>
-          <span>현재 Record Collector: {recordCollectorUrl}</span>
+          <span>현재 Record Collector: {recordCollectorUrl || '미설정 (Random Picker에서는 선택 사항)'}</span>
         </div>
       </section>
     </div>

@@ -96,6 +96,17 @@ export interface SongInfoResponse {
   sheets: SongSheetResponse[];
 }
 
+export interface RandomSongApiResponse {
+  title: string;
+  version: string | null;
+  image_name: string | null;
+  sheets: SongSheetResponse[];
+  selection_stats?: {
+    level_song_count?: number | null;
+    filtered_song_count?: number | null;
+  } | null;
+}
+
 export interface SongVersionResponse {
   version_index: number;
   version_name: string;
@@ -104,6 +115,27 @@ export interface SongVersionResponse {
 
 export interface SongVersionsListResponse {
   versions: SongVersionResponse[];
+}
+
+export interface RandomPickerSong {
+  title: string;
+  version: string | null;
+  imageName: string | null;
+  chartType: ChartType;
+  difficulty: DifficultyCategory;
+  level: string;
+  internalLevel: number | null;
+  userLevel: string | null;
+  achievementX10000: number | null;
+  rank: ScoreRank | null;
+  fc: FcStatus | null;
+  sync: SyncStatus | null;
+  dxScore: number | null;
+  dxScoreMax: number | null;
+  lastPlayedAt: string | null;
+  playCount: number | null;
+  levelSongCount: number | null;
+  filteredSongCount: number | null;
 }
 
 export interface ScoreRow {
