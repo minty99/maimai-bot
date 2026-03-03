@@ -457,14 +457,7 @@ pub(crate) async fn mai_today(ctx: Context<'_>) -> Result<(), Error> {
 
     let display_name = "Player";
 
-    let embed = build_mai_today_embed(
-        display_name,
-        &start,
-        &end,
-        credits,
-        tracks,
-        new_records,
-    );
+    let embed = build_mai_today_embed(display_name, &start, &end, credits, tracks, new_records);
 
     ctx.send(CreateReply::default().embed(embed)).await?;
     Ok(())
