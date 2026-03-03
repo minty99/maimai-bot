@@ -367,49 +367,92 @@ async fn attach_duplicate_title_qualifiers(
     snapshots: &mut HashMap<u8, ScoreListSnapshot>,
     detail_cache: &mut DetailPageCache,
 ) -> Result<()> {
-    let requests = collect_qualifier_resolution_requests(snapshots)?;
-    let mut canonical_title_cache: HashMap<String, String> = HashMap::new();
+    let mut canonical_title_cache: HashMap<(u8, String), String> = HashMap::new();
+    let mut diffs = snapshots.keys().copied().collect::<Vec<_>>();
+    diffs.sort_unstable();
 
-    for request in requests {
-        let canonical = if let Some(cached) = canonical_title_cache.get(&request.source_idx) {
-            cached.clone()
-        } else {
-            let target = DetailTarget {
-                lookup_key: request.lookup_key.clone(),
-                idx: request.source_idx.clone(),
-                resolved_from_snapshot_at: request.resolved_from_snapshot_at,
+    for diff in diffs {
+        while let Some(request) = next_qualifier_resolution_request(snapshots, diff)? {
+            let cache_key = (request.diff, request.source_idx.clone());
+            let canonical = if let Some(cached) = canonical_title_cache.get(&cache_key) {
+                cached.clone()
+            } else {
+                let target = DetailTarget {
+                    lookup_key: request.lookup_key.clone(),
+                    idx: request.source_idx.clone(),
+                    resolved_from_snapshot_at: request.resolved_from_snapshot_at,
+                };
+                let detail = fetch_song_detail_for_target(client, &target, snapshots, detail_cache)
+                    .await
+                    .wrap_err_with(|| {
+                        format!(
+                            "resolve title qualifier from idx '{}' for '{}'",
+                            request.source_idx, request.lookup_key.title
+                        )
+                    })?;
+
+                let resolved = SongTitle::from_parts(&detail.title, detail.genre.as_deref());
+                if resolved.is_ambiguous_unqualified() {
+                    return Err(eyre::eyre!(
+                        "missing qualifier for duplicate-capable title '{}'",
+                        detail.title
+                    ));
+                }
+
+                let canonical = resolved.canonical();
+                canonical_title_cache.insert(cache_key, canonical.clone());
+                canonical
             };
-            let detail = fetch_song_detail_for_target(client, &target, snapshots, detail_cache)
-                .await
-                .wrap_err_with(|| {
-                    format!(
-                        "resolve title qualifier from idx '{}' for '{}'",
-                        request.source_idx, request.lookup_key.title
-                    )
-                })?;
 
-            let resolved = SongTitle::from_parts(&detail.title, detail.genre.as_deref());
-            if resolved.is_ambiguous_unqualified() {
-                return Err(eyre::eyre!(
-                    "missing qualifier for duplicate-capable title '{}'",
-                    detail.title
-                ));
-            }
-
-            let canonical = resolved.canonical();
-            canonical_title_cache.insert(request.source_idx.clone(), canonical.clone());
-            canonical
-        };
-
-        let snapshot = snapshots
-            .get_mut(&request.diff)
-            .ok_or_else(|| eyre::eyre!("missing snapshot for diff={}", request.diff))?;
-        let entry = resolve_qualifier_entry_mut(snapshot, &request)
-            .wrap_err_with(|| format!("locate qualifier row for '{}'", request.lookup_key.title))?;
-        entry.title = canonical;
+            let snapshot = snapshots
+                .get_mut(&request.diff)
+                .ok_or_else(|| eyre::eyre!("missing snapshot for diff={}", request.diff))?;
+            let entry = resolve_qualifier_entry_mut(snapshot, &request).wrap_err_with(|| {
+                format!("locate qualifier row for '{}'", request.lookup_key.title)
+            })?;
+            entry.title = canonical;
+        }
     }
 
     Ok(())
+}
+
+fn next_qualifier_resolution_request(
+    snapshots: &HashMap<u8, ScoreListSnapshot>,
+    diff: u8,
+) -> Result<Option<QualifierResolutionRequest>> {
+    let Some(snapshot) = snapshots.get(&diff) else {
+        return Ok(None);
+    };
+
+    for (entry_index, entry) in snapshot.entries.iter().enumerate() {
+        let parsed_title = SongTitle::parse(&entry.title);
+        if !parsed_title.is_ambiguous_unqualified() {
+            continue;
+        }
+
+        let source_idx = entry
+            .source_idx
+            .as_deref()
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .ok_or_else(|| {
+                eyre::eyre!(
+                    "missing source_idx for duplicate-capable title '{}'",
+                    entry.title
+                )
+            })?;
+
+        return Ok(Some(QualifierResolutionRequest {
+            diff,
+            entry_index,
+            source_idx: source_idx.to_string(),
+            lookup_key: SongLookupKey::from_score_entry(entry),
+            resolved_from_snapshot_at: snapshot.fetched_at,
+        }));
+    }
+
+    Ok(None)
 }
 
 fn resolve_qualifier_entry_mut<'a>(
@@ -477,49 +520,6 @@ fn qualifier_entry_matches_lookup(
         && entry.diff_category == request.lookup_key.diff_category
         && normalize_title_for_match(&entry.title)
             == normalize_title_for_match(SongTitle::parse(&request.lookup_key.title).base_title())
-}
-
-fn collect_qualifier_resolution_requests(
-    snapshots: &HashMap<u8, ScoreListSnapshot>,
-) -> Result<Vec<QualifierResolutionRequest>> {
-    let mut requests = Vec::new();
-    let mut diffs = snapshots.keys().copied().collect::<Vec<_>>();
-    diffs.sort_unstable();
-
-    for diff in diffs {
-        let Some(snapshot) = snapshots.get(&diff) else {
-            continue;
-        };
-
-        for (entry_index, entry) in snapshot.entries.iter().enumerate() {
-            let parsed_title = SongTitle::parse(&entry.title);
-            if !parsed_title.requires_qualifier() {
-                continue;
-            }
-
-            let source_idx = entry
-                .source_idx
-                .as_deref()
-                .map(str::trim)
-                .filter(|value| !value.is_empty())
-                .ok_or_else(|| {
-                    eyre::eyre!(
-                        "missing source_idx for duplicate-capable title '{}'",
-                        entry.title
-                    )
-                })?;
-
-            requests.push(QualifierResolutionRequest {
-                diff,
-                entry_index,
-                source_idx: source_idx.to_string(),
-                lookup_key: SongLookupKey::from_score_entry(entry),
-                resolved_from_snapshot_at: snapshot.fetched_at,
-            });
-        }
-    }
-
-    Ok(requests)
 }
 
 async fn lookup_key_is_outdated(
@@ -780,6 +780,28 @@ mod tests {
 
         let entry = resolve_qualifier_entry_mut(&mut snapshot, &request)?;
         assert_eq!(entry.source_idx.as_deref(), Some("202"));
+
+        Ok(())
+    }
+
+    #[test]
+    fn next_qualifier_resolution_request_skips_already_qualified_title() -> eyre::Result<()> {
+        let mut snapshots = HashMap::new();
+        snapshots.insert(
+            3,
+            ScoreListSnapshot {
+                fetched_at: 1,
+                entries: vec![score_entry(
+                    "Link [[maimai]]",
+                    ChartType::Dx,
+                    DifficultyCategory::Master,
+                    Some("101"),
+                )],
+            },
+        );
+
+        let request = next_qualifier_resolution_request(&snapshots, 3)?;
+        assert!(request.is_none());
 
         Ok(())
     }
