@@ -1,6 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
-import { fetchExplorerPayload, fetchSongDetailScores, fetchSongMetadataBatch } from './api';
+import {
+  fetchExplorerPayload,
+  fetchSongDetailScores,
+  fetchSongMetadataBatch,
+  normalizeTitleKey,
+} from './api';
 import {
   AAA_OR_BELOW_RANKS,
   ActiveTab,
@@ -51,12 +56,16 @@ import type {
   ChartType,
   DifficultyCategory,
   FcStatus,
-  PlaylogRow,
+  PlayRecordApiResponse,
+  ScoreApiResponse,
   ScoreRank,
-  ScoreRow,
   SongDetailScoreApiResponse,
+  SongInfoResponse,
   SyncStatus,
 } from './types';
+
+const METADATA_BATCH_SIZE = 16;
+const METADATA_PREFETCH_ROWS = 60;
 
 function App() {
   const savedScoreFilters = useMemo(
@@ -84,9 +93,12 @@ function App() {
   const [loadingError, setLoadingError] = useState<string | null>(null);
   const [metadataProgress, setMetadataProgress] = useState({ done: 0, total: 0 });
 
-  const [scoreData, setScoreData] = useState<ScoreRow[]>([]);
-  const [playlogData, setPlaylogData] = useState<PlaylogRow[]>([]);
-  const [versionOptions, setVersionOptions] = useState<string[]>([]);
+  const [scoreRecords, setScoreRecords] = useState<ScoreApiResponse[]>([]);
+  const [playlogRecords, setPlaylogRecords] = useState<PlayRecordApiResponse[]>([]);
+  const [songMetadata, setSongMetadata] = useState<Map<string, SongInfoResponse>>(
+    () => new Map(),
+  );
+  const [versionsResponse, setVersionsResponse] = useState<string[]>([]);
 
   const [query, setQuery] = useState('');
   const [chartFilter, setChartFilter] = useState<ChartType[]>(() => {
@@ -186,15 +198,188 @@ function App() {
 
   const loadAbortRef = useRef<AbortController | null>(null);
   const detailAbortRef = useRef<AbortController | null>(null);
+  const metadataMapRef = useRef<Map<string, SongInfoResponse>>(new Map());
+  const metadataHighPriorityQueueRef = useRef<string[]>([]);
+  const metadataBackgroundQueueRef = useRef<string[]>([]);
+  const metadataQueuedRef = useRef<Set<string>>(new Set());
+  const metadataInflightRef = useRef<Set<string>>(new Set());
+  const metadataPumpActiveRef = useRef(false);
+
+  const resetMetadataQueue = useCallback(() => {
+    metadataHighPriorityQueueRef.current = [];
+    metadataBackgroundQueueRef.current = [];
+    metadataQueuedRef.current = new Set();
+    metadataInflightRef.current = new Set();
+    metadataPumpActiveRef.current = false;
+  }, []);
+
+  const takeMetadataBatch = useCallback((): string[] => {
+    const nextBatch: string[] = [];
+
+    while (
+      nextBatch.length < METADATA_BATCH_SIZE &&
+      metadataHighPriorityQueueRef.current.length > 0
+    ) {
+      const title = metadataHighPriorityQueueRef.current.shift();
+      if (!title) {
+        continue;
+      }
+      metadataQueuedRef.current.delete(title);
+      nextBatch.push(title);
+    }
+
+    while (
+      nextBatch.length < METADATA_BATCH_SIZE &&
+      metadataBackgroundQueueRef.current.length > 0
+    ) {
+      const title = metadataBackgroundQueueRef.current.shift();
+      if (!title) {
+        continue;
+      }
+      metadataQueuedRef.current.delete(title);
+      nextBatch.push(title);
+    }
+
+    return nextBatch;
+  }, []);
+
+  const pumpMetadataQueue = useCallback(async () => {
+    if (metadataPumpActiveRef.current) {
+      return;
+    }
+
+    const controller = loadAbortRef.current;
+    if (!controller) {
+      return;
+    }
+
+    metadataPumpActiveRef.current = true;
+
+    try {
+      while (!controller.signal.aborted) {
+        const batch = takeMetadataBatch();
+        if (batch.length === 0) {
+          return;
+        }
+
+        batch.forEach((title) => {
+          metadataInflightRef.current.add(title);
+        });
+
+        try {
+          const nextMetadata = await fetchSongMetadataBatch({
+            songInfoBaseUrl: songInfoUrl,
+            titles: batch,
+            concurrency: 4,
+            signal: controller.signal,
+          });
+
+          if (controller.signal.aborted) {
+            return;
+          }
+
+          if (nextMetadata.size > 0) {
+            setSongMetadata((current) => {
+              const merged = new Map(current);
+              nextMetadata.forEach((value, key) => {
+                merged.set(key, value);
+              });
+              metadataMapRef.current = merged;
+              return merged;
+            });
+          }
+        } finally {
+          batch.forEach((title) => {
+            metadataInflightRef.current.delete(title);
+          });
+
+          setMetadataProgress((current) => ({
+            ...current,
+            done: Math.min(current.total, current.done + batch.length),
+          }));
+        }
+      }
+    } finally {
+      metadataPumpActiveRef.current = false;
+
+      if (
+        !controller.signal.aborted &&
+        (metadataHighPriorityQueueRef.current.length > 0 ||
+          metadataBackgroundQueueRef.current.length > 0)
+      ) {
+        void pumpMetadataQueue();
+      }
+    }
+  }, [songInfoUrl, takeMetadataBatch]);
+
+  const enqueueMetadataTitles = useCallback(
+    (titles: string[], priority: 'high' | 'background') => {
+      if (titles.length === 0) {
+        return;
+      }
+
+      const nextHigh = metadataHighPriorityQueueRef.current;
+      const nextBackground = metadataBackgroundQueueRef.current;
+      const queued = metadataQueuedRef.current;
+      const inflight = metadataInflightRef.current;
+      const metadata = metadataMapRef.current;
+
+      for (const rawTitle of titles) {
+        const title = rawTitle.trim();
+        if (title.length === 0) {
+          continue;
+        }
+
+        if (metadata.has(normalizeTitleKey(title)) || inflight.has(title) || queued.has(title)) {
+          continue;
+        }
+
+        queued.add(title);
+        if (priority === 'high') {
+          nextHigh.push(title);
+        } else {
+          nextBackground.push(title);
+        }
+      }
+
+      void pumpMetadataQueue();
+    },
+    [pumpMetadataQueue],
+  );
+
+  const scoreData = useMemo(
+    () => buildScoreRows(scoreRecords, songMetadata),
+    [scoreRecords, songMetadata],
+  );
+  const playlogData = useMemo(
+    () => buildPlaylogRows(playlogRecords, songMetadata),
+    [playlogRecords, songMetadata],
+  );
+
+  const versionOptions = useMemo(() => {
+    if (versionsResponse.length > 0) {
+      return sortByOrder(versionsResponse, VERSION_ORDER_MAP);
+    }
+
+    return sortByOrder(
+      Array.from(
+        new Set(scoreData.map((row) => row.version).filter((value): value is string => Boolean(value))),
+      ),
+      VERSION_ORDER_MAP,
+    );
+  }, [scoreData, versionsResponse]);
 
   const loadData = useCallback(async () => {
     loadAbortRef.current?.abort();
     const controller = new AbortController();
     loadAbortRef.current = controller;
+    metadataMapRef.current = new Map();
+    resetMetadataQueue();
 
     setIsLoading(true);
     setLoadingError(null);
     setMetadataProgress({ done: 0, total: 0 });
+    setSongMetadata(new Map<string, SongInfoResponse>());
 
     try {
       const payload = await fetchExplorerPayload(
@@ -209,44 +394,33 @@ function App() {
 
       setMetadataProgress({ done: 0, total: uniqueTitles.length });
 
-      const metadata = await fetchSongMetadataBatch({
-        songInfoBaseUrl: songInfoUrl,
-        titles: uniqueTitles,
-        signal: controller.signal,
-        onProgress: (progress) => setMetadataProgress(progress),
-      });
-
       if (controller.signal.aborted) {
         return;
       }
 
-      const nextScoreRows = buildScoreRows(payload.ratedScores, metadata);
-      const nextPlaylogRows = buildPlaylogRows(payload.playlogs, metadata);
-
-      setScoreData(nextScoreRows);
-      setPlaylogData(nextPlaylogRows);
-      const rawVersions =
+      setScoreRecords(payload.ratedScores);
+      setPlaylogRecords(payload.playlogs);
+      setVersionsResponse(
         payload.versions?.versions
           .map((version) => version.version_name)
-          .filter((name) => name.length > 0) ??
-        Array.from(
-          new Set(nextScoreRows.map((row) => row.version).filter((v): v is string => Boolean(v))),
-        );
-      setVersionOptions(sortByOrder(rawVersions, VERSION_ORDER_MAP));
+          .filter((name) => name.length > 0) ?? [],
+      );
+      enqueueMetadataTitles(uniqueTitles, 'background');
     } catch (error) {
       if (controller.signal.aborted) {
         return;
       }
       const message = error instanceof Error ? error.message : String(error);
       setLoadingError(message);
-      setScoreData([]);
-      setPlaylogData([]);
+      setScoreRecords([]);
+      setPlaylogRecords([]);
+      setVersionsResponse([]);
     } finally {
       if (!controller.signal.aborted) {
         setIsLoading(false);
       }
     }
-  }, [recordCollectorUrl, songInfoUrl]);
+  }, [enqueueMetadataTitles, recordCollectorUrl, resetMetadataQueue, songInfoUrl]);
 
   useEffect(() => {
     void loadData();
@@ -541,6 +715,18 @@ function App() {
       playlogSortKey,
     ],
   );
+
+  const metadataPriorityTitles = useMemo(
+    () =>
+      (activeTab === 'scores' ? filteredScoreRows : filteredPlaylogRows)
+        .slice(0, METADATA_PREFETCH_ROWS)
+        .map((row) => row.title),
+    [activeTab, filteredPlaylogRows, filteredScoreRows],
+  );
+
+  useEffect(() => {
+    enqueueMetadataTitles(metadataPriorityTitles, 'high');
+  }, [enqueueMetadataTitles, metadataPriorityTitles]);
 
   const handleApplyUrls = () => {
     const nextSongInfoUrl = songInfoUrlDraft.trim();
