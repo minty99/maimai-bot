@@ -2,7 +2,6 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import {
   fetchExplorerPayload,
-  fetchSongDetailScores,
 } from './api';
 import {
   AAA_OR_BELOW_RANKS,
@@ -19,6 +18,7 @@ import {
   SCORE_RANK_ORDER,
   SCORE_RANK_ORDER_MAP,
   SONG_INFO_STORAGE_KEY,
+  TABLE_LAYOUT_STORAGE_KEY,
   ScoreSortKey,
   SYNC_ORDER,
   VERSION_ORDER_MAP,
@@ -36,6 +36,7 @@ import {
 } from './app/storage';
 import {
   buildPlaylogRows,
+  buildSongDetailRows,
   buildScoreRows,
 } from './derive';
 import {
@@ -57,7 +58,6 @@ import type {
   PlayRecordApiResponse,
   ScoreApiResponse,
   ScoreRank,
-  SongDetailScoreApiResponse,
   SongInfoResponse,
   SyncStatus,
 } from './types';
@@ -72,6 +72,27 @@ function readPageFromHash(hash: string): AppPage {
     return 'picker';
   }
   return 'scores';
+}
+
+function readShowJacketsPreference(): boolean {
+  return localStorage.getItem(TABLE_LAYOUT_STORAGE_KEY) !== 'compact';
+}
+
+function LayoutToggleIcon({ showJackets }: { showJackets: boolean }) {
+  if (showJackets) {
+    return (
+      <svg viewBox="0 0 24 24" aria-hidden="true">
+        <rect x="3" y="5" width="6" height="14" rx="1.5" />
+        <path d="M12 7h9M12 12h9M12 17h9" />
+      </svg>
+    );
+  }
+
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M4 7h16M4 12h16M4 17h16" />
+    </svg>
+  );
 }
 
 function App() {
@@ -160,10 +181,8 @@ function App() {
   const [scoreSortDesc, setScoreSortDesc] = useState(true);
 
   const [selectedDetailTitle, setSelectedDetailTitle] = useState<string | null>(null);
-  const [selectedDetailRows, setSelectedDetailRows] = useState<SongDetailScoreApiResponse[]>([]);
-  const [detailLoading, setDetailLoading] = useState(false);
-  const [detailError, setDetailError] = useState<string | null>(null);
   const [isServerModalOpen, setIsServerModalOpen] = useState(false);
+  const [showJackets, setShowJackets] = useState<boolean>(readShowJacketsPreference);
 
   const [playlogQuery, setPlaylogQuery] = useState('');
   const [playlogChartFilter, setPlaylogChartFilter] = useState<ChartType[]>(() => {
@@ -193,11 +212,14 @@ function App() {
   const [playlogSortDesc, setPlaylogSortDesc] = useState(true);
 
   const loadAbortRef = useRef<AbortController | null>(null);
-  const detailAbortRef = useRef<AbortController | null>(null);
 
   const scoreData = useMemo(
     () => buildScoreRows(scoreRecords, songMetadata),
     [scoreRecords, songMetadata],
+  );
+  const selectedDetailRows = useMemo(
+    () => buildSongDetailRows(scoreData, selectedDetailTitle),
+    [scoreData, selectedDetailTitle],
   );
   const playlogData = useMemo(
     () => buildPlaylogRows(playlogRecords, songMetadata),
@@ -284,7 +306,6 @@ function App() {
 
     return () => {
       loadAbortRef.current?.abort();
-      detailAbortRef.current?.abort();
     };
   }, [loadData]);
 
@@ -370,55 +391,15 @@ function App() {
   }, [recordCollectorUrl]);
 
   useEffect(() => {
-    detailAbortRef.current?.abort();
-    setSelectedDetailTitle(null);
-    setSelectedDetailRows([]);
-    setDetailError(null);
-    setDetailLoading(false);
-  }, [recordCollectorUrl]);
+    localStorage.setItem(TABLE_LAYOUT_STORAGE_KEY, showJackets ? 'jacket' : 'compact');
+  }, [showJackets]);
 
-  const handleOpenSongDetail = useCallback(
-    async (title: string) => {
-      detailAbortRef.current?.abort();
-      const controller = new AbortController();
-      detailAbortRef.current = controller;
-
-      setSelectedDetailTitle(title);
-      setDetailLoading(true);
-      setDetailError(null);
-      setSelectedDetailRows([]);
-
-      try {
-        const detailRows = await fetchSongDetailScores(
-          recordCollectorUrl,
-          title,
-          controller.signal,
-        );
-        if (controller.signal.aborted) {
-          return;
-        }
-        setSelectedDetailRows(detailRows);
-      } catch (error) {
-        if (controller.signal.aborted) {
-          return;
-        }
-        const message = error instanceof Error ? error.message : String(error);
-        setDetailError(message);
-      } finally {
-        if (!controller.signal.aborted) {
-          setDetailLoading(false);
-        }
-      }
-    },
-    [recordCollectorUrl],
-  );
+  const handleOpenSongDetail = useCallback((title: string) => {
+    setSelectedDetailTitle(title);
+  }, []);
 
   const closeSongDetail = useCallback(() => {
-    detailAbortRef.current?.abort();
     setSelectedDetailTitle(null);
-    setSelectedDetailRows([]);
-    setDetailError(null);
-    setDetailLoading(false);
   }, []);
 
   const handleScoreSortBy = useCallback(
@@ -637,6 +618,19 @@ function App() {
         </div>
 
         <div className="app-toolbar-meta">
+          {activePage !== 'picker' ? (
+            <button
+              type="button"
+              className="toolbar-icon-button"
+              aria-label={showJackets ? 'Jacket 숨기기' : 'Jacket 표시하기'}
+              aria-pressed={!showJackets}
+              title={showJackets ? 'Compact mode' : 'Jacket mode'}
+              onClick={() => setShowJackets((current) => !current)}
+            >
+              <LayoutToggleIcon showJackets={showJackets} />
+              <span className="sr-only">{showJackets ? 'Jacket 숨기기' : 'Jacket 표시하기'}</span>
+            </button>
+          ) : null}
           <button type="button" className="server-open-button" onClick={openServerModal}>
             Connections
           </button>
@@ -649,6 +643,7 @@ function App() {
 
           <ScoreExplorerSection
             scoreCountLabel={scoreCountLabel}
+            showJackets={showJackets}
             query={query}
             setQuery={setQuery}
             chartTypes={CHART_TYPES}
@@ -695,6 +690,7 @@ function App() {
 
           <PlaylogExplorerSection
             playlogCountLabel={playlogCountLabel}
+            showJackets={showJackets}
             playlogQuery={playlogQuery}
             setPlaylogQuery={setPlaylogQuery}
             chartTypes={CHART_TYPES}
@@ -742,8 +738,7 @@ function App() {
       <SongDetailModal
         selectedDetailTitle={selectedDetailTitle}
         selectedDetailRows={selectedDetailRows}
-        detailLoading={detailLoading}
-        detailError={detailError}
+        songInfoUrl={songInfoUrl}
         onClose={closeSongDetail}
       />
     </div>

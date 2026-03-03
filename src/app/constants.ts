@@ -5,6 +5,7 @@ export const RECORD_STORAGE_KEY = 'maistats.record-url';
 export const SCORE_FILTERS_STORAGE_KEY = 'maistats.score-filters';
 export const PLAYLOG_FILTERS_STORAGE_KEY = 'maistats.playlog-filters';
 export const RANDOM_PICKER_FILTERS_STORAGE_KEY = 'maistats.random-picker-filters';
+export const TABLE_LAYOUT_STORAGE_KEY = 'maistats.table-layout';
 
 const ENV_SONG_INFO_URL = import.meta.env.SONG_INFO_SERVER_URL?.trim();
 const ENV_RECORD_COLLECTOR_URL =

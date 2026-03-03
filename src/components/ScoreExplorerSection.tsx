@@ -13,7 +13,6 @@ import {
   formatDifficultyShort,
   formatNumber,
   formatPercent,
-  formatRatio,
   sortIndicator,
   toggleArrayValue,
 } from '../app/utils';
@@ -22,6 +21,7 @@ import { ToggleGroup } from './ToggleGroup';
 
 interface ScoreExplorerSectionProps {
   scoreCountLabel: string;
+  showJackets: boolean;
   query: string;
   setQuery: Dispatch<SetStateAction<string>>;
   chartTypes: ChartType[];
@@ -56,7 +56,7 @@ interface ScoreExplorerSectionProps {
   setDaysMax: Dispatch<SetStateAction<number>>;
   filteredScoreRows: ScoreRow[];
   songInfoUrl: string;
-  onOpenSongDetail: (title: string) => Promise<void>;
+  onOpenSongDetail: (title: string) => void;
   scoreSortKey: ScoreSortKey;
   scoreSortDesc: boolean;
   onSortBy: (key: ScoreSortKey) => void;
@@ -64,6 +64,7 @@ interface ScoreExplorerSectionProps {
 
 export function ScoreExplorerSection({
   scoreCountLabel,
+  showJackets,
   query,
   setQuery,
   chartTypes,
@@ -279,17 +280,17 @@ export function ScoreExplorerSection({
             <table className="score-table compact-table">
               <thead>
                 <tr>
-                  <th>Jacket</th>
-                  <th className="sortable">
+                  {showJackets ? <th className="jacket-col">Jacket</th> : null}
+                  <th className="sortable title-col">
                     <button type="button" className="th-sort-button" onClick={() => onSortBy('title')}>
                       <span>Title</span>
                       <span className="sort-indicator">{sortIndicator(scoreSortKey === 'title', scoreSortDesc)}</span>
                     </button>
                   </th>
-                  <th>Chart</th>
-                  <th>Diff</th>
-                  <th>Lv</th>
-                  <th className="sortable">
+                  <th className="chart-col">Chart</th>
+                  <th className="diff-col">Diff</th>
+                  <th className="level-col">Lv</th>
+                  <th className="sortable internal-col">
                     <button type="button" className="th-sort-button" onClick={() => onSortBy('internal')}>
                       <span>IntLv</span>
                       <span className="sort-indicator">
@@ -297,7 +298,7 @@ export function ScoreExplorerSection({
                       </span>
                     </button>
                   </th>
-                  <th className="sortable">
+                  <th className="sortable achievement-col">
                     <button type="button" className="th-sort-button" onClick={() => onSortBy('achievement')}>
                       <span>Achv</span>
                       <span className="sort-indicator">
@@ -305,7 +306,7 @@ export function ScoreExplorerSection({
                       </span>
                     </button>
                   </th>
-                  <th className="sortable">
+                  <th className="sortable rating-col">
                     <button type="button" className="th-sort-button" onClick={() => onSortBy('rating')}>
                       <span>Rating</span>
                       <span className="sort-indicator">
@@ -313,10 +314,10 @@ export function ScoreExplorerSection({
                       </span>
                     </button>
                   </th>
-                  <th>Rank</th>
-                  <th>FC</th>
-                  <th>Sync</th>
-                  <th className="sortable">
+                  <th className="rank-col">Rank</th>
+                  <th className="fc-col">FC</th>
+                  <th className="sync-col">Sync</th>
+                  <th className="sortable dx-col">
                     <button type="button" className="th-sort-button" onClick={() => onSortBy('dxRatio')}>
                       <span>DX</span>
                       <span className="sort-indicator">
@@ -324,7 +325,7 @@ export function ScoreExplorerSection({
                       </span>
                     </button>
                   </th>
-                  <th className="sortable">
+                  <th className="sortable last-played-col">
                     <button type="button" className="th-sort-button" onClick={() => onSortBy('lastPlayed')}>
                       <span>Last Played</span>
                       <span className="sort-indicator">
@@ -332,7 +333,7 @@ export function ScoreExplorerSection({
                       </span>
                     </button>
                   </th>
-                  <th className="sortable">
+                  <th className="sortable play-count-col">
                     <button type="button" className="th-sort-button" onClick={() => onSortBy('playCount')}>
                       <span>Play count</span>
                       <span className="sort-indicator">
@@ -340,16 +341,18 @@ export function ScoreExplorerSection({
                       </span>
                     </button>
                   </th>
-                  <th>Version</th>
+                  <th className="version-col">Version</th>
                 </tr>
               </thead>
               <tbody>
                 {filteredScoreRows.map((row) => (
                   <tr key={row.key}>
-                    <td>
-                      <Jacket songInfoUrl={songInfoUrl} imageName={row.imageName} title={row.title} />
-                    </td>
-                    <td>
+                    {showJackets ? (
+                      <td className="jacket-col">
+                        <Jacket songInfoUrl={songInfoUrl} imageName={row.imageName} title={row.title} />
+                      </td>
+                    ) : null}
+                    <td className="title-col">
                       <div className="title-cell">
                         <button
                           type="button"
@@ -358,27 +361,28 @@ export function ScoreExplorerSection({
                         >
                           {row.title}
                         </button>
-                        {row.userLevel ? <span className="muted">유저레벨: {row.userLevel}</span> : null}
                       </div>
                     </td>
-                    <td>{row.chartType}</td>
-                    <td>{formatDifficultyShort(row.difficulty)}</td>
-                    <td>{row.level ?? '-'}</td>
-                    <td>{renderInternalLevel(row)}</td>
-                    <td>{formatPercent(row.achievementPercent)}</td>
-                    <td>{formatNumber(row.ratingPoints)}</td>
-                    <td>{row.rank ?? '-'}</td>
-                    <td>{row.fc ?? '-'}</td>
-                    <td>{row.sync ?? '-'}</td>
-                    <td>
+                    <td className="chart-col">{row.chartType}</td>
+                    <td className="diff-col">{formatDifficultyShort(row.difficulty)}</td>
+                    <td className="level-col">{row.level ?? '-'}</td>
+                    <td className="internal-col">{renderInternalLevel(row)}</td>
+                    <td className="achievement-col">{formatPercent(row.achievementPercent)}</td>
+                    <td className="rating-col">{formatNumber(row.ratingPoints)}</td>
+                    <td className="rank-col">{row.rank ?? '-'}</td>
+                    <td className="fc-col">{row.fc ?? '-'}</td>
+                    <td className="sync-col">{row.sync ?? '-'}</td>
+                    <td className="dx-col">
                       {formatNumber(row.dxScore)} / {formatNumber(row.dxScoreMax)}
-                      <div className="muted">{formatRatio(row.dxRatio)}</div>
                     </td>
-                    <td title={row.daysSinceLastPlayed === null ? undefined : `${row.daysSinceLastPlayed}일 전`}>
+                    <td
+                      className="last-played-col"
+                      title={row.daysSinceLastPlayed === null ? undefined : `${row.daysSinceLastPlayed}일 전`}
+                    >
                       {row.latestPlayedAtLabel ?? toDateLabel(row.latestPlayedAtUnix) ?? '-'}
                     </td>
-                    <td>{formatNumber(row.playCount)}</td>
-                    <td>{row.version ?? '-'}</td>
+                    <td className="play-count-col">{formatNumber(row.playCount)}</td>
+                    <td className="version-col">{row.version ?? '-'}</td>
                   </tr>
                 ))}
               </tbody>

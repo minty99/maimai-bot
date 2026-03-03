@@ -62,6 +62,27 @@ export interface SongDetailScoreApiResponse {
   play_count?: number | null;
 }
 
+export interface SongDetailRow {
+  key: string;
+  title: string;
+  imageName: string | null;
+  chartType: ChartType;
+  difficulty: DifficultyCategory;
+  level: string | null;
+  internalLevel: number | null;
+  isInternalLevelEstimated: boolean;
+  userLevel: string | null;
+  achievementPercent: number | null;
+  rank: ScoreRank | null;
+  fc: FcStatus | null;
+  sync: SyncStatus | null;
+  dxScore: number | null;
+  dxScoreMax: number | null;
+  lastPlayedAtLabel: string | null;
+  playCount: number | null;
+  version: string | null;
+}
+
 export interface PlayRecordApiResponse {
   played_at_unixtime: number;
   played_at: string | null;

@@ -5,10 +5,12 @@ import type {
   PlaylogRow,
   ScoreApiResponse,
   ScoreRow,
+  SongDetailRow,
   SongInfoResponse,
   SongSheetResponse,
 } from './types';
 import { normalizeTitleKey } from './api';
+import { CHART_TYPES, DIFFICULTIES } from './app/constants';
 
 export function chartKey(
   title: string,
@@ -324,6 +326,55 @@ export function buildPlaylogRows(
       imageName: songInfo?.image_name ?? null,
     };
   });
+}
+
+const chartOrder = new Map(CHART_TYPES.map((value, index) => [value, index]));
+const difficultyOrder = new Map(DIFFICULTIES.map((value, index) => [value, index]));
+
+export function buildSongDetailRows(
+  scoreRows: ScoreRow[],
+  title: string | null,
+): SongDetailRow[] {
+  if (!title) {
+    return [];
+  }
+
+  const normalizedTitle = normalizeTitleKey(title);
+
+  return scoreRows
+    .filter((row) => row.normalizedTitle === normalizedTitle)
+    .sort((left, right) => {
+      const chartDelta =
+        (chartOrder.get(left.chartType) ?? Number.MAX_SAFE_INTEGER) -
+        (chartOrder.get(right.chartType) ?? Number.MAX_SAFE_INTEGER);
+      if (chartDelta !== 0) {
+        return chartDelta;
+      }
+      return (
+        (difficultyOrder.get(left.difficulty) ?? Number.MAX_SAFE_INTEGER) -
+        (difficultyOrder.get(right.difficulty) ?? Number.MAX_SAFE_INTEGER)
+      );
+    })
+    .map((row) => ({
+      key: row.key,
+      title: row.title,
+      imageName: row.imageName,
+      chartType: row.chartType,
+      difficulty: row.difficulty,
+      level: row.level,
+      internalLevel: row.internalLevel,
+      isInternalLevelEstimated: row.isInternalLevelEstimated,
+      userLevel: row.userLevel,
+      achievementPercent: row.achievementPercent,
+      rank: row.rank,
+      fc: row.fc,
+      sync: row.sync,
+      dxScore: row.dxScore,
+      dxScoreMax: row.dxScoreMax,
+      lastPlayedAtLabel: row.latestPlayedAtLabel,
+      playCount: row.playCount,
+      version: row.version,
+    }));
 }
 
 export function clamp(value: number, min: number, max: number): number {

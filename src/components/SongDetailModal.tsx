@@ -1,24 +1,47 @@
-import type { SongDetailScoreApiResponse } from '../types';
-import { formatDifficultyShort, formatNumber, formatPercent } from '../app/utils';
+import { Jacket } from './Jacket';
+import type { SongDetailRow } from '../types';
+import {
+  formatDifficultyShort,
+  formatNumber,
+  formatPercent,
+} from '../app/utils';
 
 interface SongDetailModalProps {
   selectedDetailTitle: string | null;
-  selectedDetailRows: SongDetailScoreApiResponse[];
-  detailLoading: boolean;
-  detailError: string | null;
+  selectedDetailRows: SongDetailRow[];
+  songInfoUrl: string;
   onClose: () => void;
 }
 
 export function SongDetailModal({
   selectedDetailTitle,
   selectedDetailRows,
-  detailLoading,
-  detailError,
+  songInfoUrl,
   onClose,
 }: SongDetailModalProps) {
   if (!selectedDetailTitle) {
     return null;
   }
+
+  const imageName = selectedDetailRows[0]?.imageName ?? null;
+
+  const renderInternalLevel = (row: SongDetailRow) => {
+    if (row.internalLevel === null) {
+      return '-';
+    }
+
+    const [whole, fraction = '0'] = row.internalLevel.toFixed(1).split('.');
+    if (!row.isInternalLevelEstimated) {
+      return `${whole}.${fraction}`;
+    }
+
+    return (
+      <span className="estimated-level">
+        {whole}
+        <span className="estimated-level-fraction">.{fraction}</span>
+      </span>
+    );
+  };
 
   return (
     <div className="modal-backdrop" onClick={onClose}>
@@ -26,26 +49,32 @@ export function SongDetailModal({
         <h2>Song Detail</h2>
         <div className="detail-content">
           <div className="detail-header">
-            <strong>{selectedDetailTitle}</strong>
+            <div className="detail-song-summary">
+              <Jacket
+                songInfoUrl={songInfoUrl}
+                imageName={imageName}
+                title={selectedDetailTitle}
+                className="detail-jacket"
+              />
+              <strong>{selectedDetailTitle}</strong>
+            </div>
             <button type="button" onClick={onClose}>
               닫기
             </button>
           </div>
-          <p className="muted">
-            `play_count`는 playlogs 추정치가 아니라 maimai 상세 페이지 파싱 결과입니다.
-          </p>
-          {detailLoading ? <p>상세 정보를 불러오는 중...</p> : null}
-          {detailError ? <p className="error-inline">에러: {detailError}</p> : null}
-          {!detailLoading && !detailError && selectedDetailRows.length === 0 ? (
+          {selectedDetailRows.length === 0 ? (
             <p className="muted">조회 가능한 상세 데이터가 없습니다.</p>
           ) : null}
-          {!detailLoading && !detailError ? (
+          {selectedDetailRows.length > 0 ? (
             <div className="table-wrap">
               <table className="detail-table compact-table">
                 <thead>
                   <tr>
                     <th>Chart</th>
                     <th>Diff</th>
+                    <th>Lv</th>
+                    <th>IntLv</th>
+                    <th>User Lv</th>
                     <th>Achv</th>
                     <th>Rank</th>
                     <th>FC</th>
@@ -53,28 +82,27 @@ export function SongDetailModal({
                     <th>DX</th>
                     <th>Last Played</th>
                     <th>Play Count</th>
+                    <th>Version</th>
                   </tr>
                 </thead>
                 <tbody>
                   {selectedDetailRows.map((row) => (
-                    <tr key={`${row.chart_type}-${row.diff_category}`}>
-                      <td>{row.chart_type}</td>
-                      <td>{formatDifficultyShort(row.diff_category)}</td>
-                      <td>
-                        {formatPercent(
-                          row.achievement_x10000 === undefined || row.achievement_x10000 === null
-                            ? null
-                            : row.achievement_x10000 / 10000,
-                        )}
-                      </td>
+                    <tr key={row.key}>
+                      <td>{row.chartType}</td>
+                      <td>{formatDifficultyShort(row.difficulty)}</td>
+                      <td>{row.level ?? '-'}</td>
+                      <td>{renderInternalLevel(row)}</td>
+                      <td>{row.userLevel ?? '-'}</td>
+                      <td>{formatPercent(row.achievementPercent)}</td>
                       <td>{row.rank ?? '-'}</td>
                       <td>{row.fc ?? '-'}</td>
                       <td>{row.sync ?? '-'}</td>
                       <td>
-                        {formatNumber(row.dx_score ?? null)} / {formatNumber(row.dx_score_max ?? null)}
+                        {formatNumber(row.dxScore)} / {formatNumber(row.dxScoreMax)}
                       </td>
-                      <td>{row.last_played_at ?? '-'}</td>
-                      <td>{row.play_count ?? '-'}</td>
+                      <td>{row.lastPlayedAtLabel ?? '-'}</td>
+                      <td>{formatNumber(row.playCount)}</td>
+                      <td>{row.version ?? '-'}</td>
                     </tr>
                   ))}
                 </tbody>

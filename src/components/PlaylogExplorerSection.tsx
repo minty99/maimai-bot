@@ -5,7 +5,6 @@ import {
   formatDifficultyShort,
   formatNumber,
   formatPercent,
-  formatRatio,
   sortIndicator,
   toggleArrayValue,
 } from '../app/utils';
@@ -16,6 +15,7 @@ import { ToggleGroup } from './ToggleGroup';
 
 interface PlaylogExplorerSectionProps {
   playlogCountLabel: string;
+  showJackets: boolean;
   playlogQuery: string;
   setPlaylogQuery: Dispatch<SetStateAction<string>>;
   chartTypes: ChartType[];
@@ -43,6 +43,7 @@ interface PlaylogExplorerSectionProps {
 
 export function PlaylogExplorerSection({
   playlogCountLabel,
+  showJackets,
   playlogQuery,
   setPlaylogQuery,
   chartTypes,
@@ -171,8 +172,8 @@ export function PlaylogExplorerSection({
             <table className="playlog-table compact-table">
               <thead>
                 <tr>
-                  <th>Jacket</th>
-                  <th className="sortable">
+                  {showJackets ? <th className="jacket-col">Jacket</th> : null}
+                  <th className="sortable played-at-col">
                     <button type="button" className="th-sort-button" onClick={() => onSortBy('playedAt')}>
                       <span>Played At</span>
                       <span className="sort-indicator">
@@ -180,16 +181,16 @@ export function PlaylogExplorerSection({
                       </span>
                     </button>
                   </th>
-                  <th>Track</th>
-                  <th className="sortable">
+                  <th className="track-col">Track</th>
+                  <th className="sortable title-col">
                     <button type="button" className="th-sort-button" onClick={() => onSortBy('title')}>
                       <span>Title</span>
                       <span className="sort-indicator">{sortIndicator(playlogSortKey === 'title', playlogSortDesc)}</span>
                     </button>
                   </th>
-                  <th>Chart</th>
-                  <th>Diff</th>
-                  <th className="sortable">
+                  <th className="chart-col">Chart</th>
+                  <th className="diff-col">Diff</th>
+                  <th className="sortable achievement-col">
                     <button type="button" className="th-sort-button" onClick={() => onSortBy('achievement')}>
                       <span>Achv</span>
                       <span className="sort-indicator">
@@ -197,7 +198,7 @@ export function PlaylogExplorerSection({
                       </span>
                     </button>
                   </th>
-                  <th className="sortable">
+                  <th className="sortable rating-col">
                     <button type="button" className="th-sort-button" onClick={() => onSortBy('rating')}>
                       <span>Rating</span>
                       <span className="sort-indicator">
@@ -205,10 +206,10 @@ export function PlaylogExplorerSection({
                       </span>
                     </button>
                   </th>
-                  <th>Rank</th>
-                  <th>FC</th>
-                  <th>Sync</th>
-                  <th className="sortable">
+                  <th className="rank-col">Rank</th>
+                  <th className="fc-col">FC</th>
+                  <th className="sync-col">Sync</th>
+                  <th className="sortable dx-col">
                     <button type="button" className="th-sort-button" onClick={() => onSortBy('dxRatio')}>
                       <span>DX</span>
                       <span className="sort-indicator">
@@ -216,7 +217,7 @@ export function PlaylogExplorerSection({
                       </span>
                     </button>
                   </th>
-                  <th className="sortable">
+                  <th className="sortable play-count-col">
                     <button type="button" className="th-sort-button" onClick={() => onSortBy('playCount')}>
                       <span>Credit Count</span>
                       <span className="sort-indicator">
@@ -224,31 +225,32 @@ export function PlaylogExplorerSection({
                       </span>
                     </button>
                   </th>
-                  <th>Flags</th>
+                  <th className="flags-col">Flags</th>
                 </tr>
               </thead>
               <tbody>
                 {filteredPlaylogRows.map((row) => (
                   <tr key={row.key}>
-                    <td>
-                      <Jacket songInfoUrl={songInfoUrl} imageName={row.imageName} title={row.title} />
-                    </td>
-                    <td>{row.playedAtLabel ?? toDateLabel(row.playedAtUnix) ?? '-'}</td>
-                    <td>{row.track ?? '-'}</td>
-                    <td>{row.title}</td>
-                    <td>{row.chartType}</td>
-                    <td>{formatDifficultyShort(row.difficulty)}</td>
-                    <td>{formatPercent(row.achievementPercent)}</td>
-                    <td>{formatNumber(row.ratingPoints)}</td>
-                    <td>{row.rank ?? '-'}</td>
-                    <td>{row.fc ?? '-'}</td>
-                    <td>{row.sync ?? '-'}</td>
-                    <td>
+                    {showJackets ? (
+                      <td className="jacket-col">
+                        <Jacket songInfoUrl={songInfoUrl} imageName={row.imageName} title={row.title} />
+                      </td>
+                    ) : null}
+                    <td className="played-at-col">{row.playedAtLabel ?? toDateLabel(row.playedAtUnix) ?? '-'}</td>
+                    <td className="track-col">{row.track ?? '-'}</td>
+                    <td className="title-col">{row.title}</td>
+                    <td className="chart-col">{row.chartType}</td>
+                    <td className="diff-col">{formatDifficultyShort(row.difficulty)}</td>
+                    <td className="achievement-col">{formatPercent(row.achievementPercent)}</td>
+                    <td className="rating-col">{formatNumber(row.ratingPoints)}</td>
+                    <td className="rank-col">{row.rank ?? '-'}</td>
+                    <td className="fc-col">{row.fc ?? '-'}</td>
+                    <td className="sync-col">{row.sync ?? '-'}</td>
+                    <td className="dx-col">
                       {formatNumber(row.dxScore)} / {formatNumber(row.dxScoreMax)}
-                      <div className="muted">{formatRatio(row.dxRatio)}</div>
                     </td>
-                    <td>{row.creditPlayCount ?? '-'}</td>
-                    <td>
+                    <td className="play-count-col">{row.creditPlayCount ?? '-'}</td>
+                    <td className="flags-col">
                       {row.isNewRecord ? 'NEW ' : ''}
                       {row.isFirstPlay ? 'FIRST' : ''}
                       {!row.isNewRecord && !row.isFirstPlay ? '-' : ''}
