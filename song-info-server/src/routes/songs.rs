@@ -40,6 +40,11 @@ pub(crate) struct SongInfoResponse {
 }
 
 #[derive(Serialize)]
+pub(crate) struct SongCatalogResponse {
+    songs: Vec<SongInfoResponse>,
+}
+
+#[derive(Serialize)]
 pub(crate) struct SongSelectionStatsResponse {
     level_song_count: usize,
     filtered_song_count: usize,
@@ -227,6 +232,68 @@ pub(crate) async fn list_versions(
         .collect();
 
     Ok(Json(SongVersionsListResponse { versions }))
+}
+
+fn build_song_sheet_response(sheet: &models::SongCatalogChart) -> Result<SongSheetResponse> {
+    let chart_type = parse_sheet_chart_type(&sheet.chart_type).ok_or_else(|| {
+        AppError::JsonError(format!(
+            "unknown chart type in song data: {}",
+            sheet.chart_type
+        ))
+    })?;
+    let difficulty = parse_sheet_difficulty(&sheet.difficulty).ok_or_else(|| {
+        AppError::JsonError(format!(
+            "unknown difficulty in song data: {}",
+            sheet.difficulty
+        ))
+    })?;
+
+    Ok(SongSheetResponse {
+        chart_type,
+        difficulty,
+        level: sheet.level.clone(),
+        version: sheet
+            .version_name
+            .clone()
+            .map(|v| v.trim().to_string())
+            .filter(|v| !v.is_empty()),
+        internal_level: sheet
+            .internal_level
+            .as_deref()
+            .and_then(|value| value.trim().parse::<f32>().ok()),
+        user_level: sheet.user_level.clone(),
+        region: sheet.region.clone(),
+    })
+}
+
+fn build_song_info_response(song: &models::SongCatalogSong) -> Result<SongInfoResponse> {
+    let sheets = song
+        .sheets
+        .iter()
+        .map(build_song_sheet_response)
+        .collect::<Result<Vec<_>>>()?;
+
+    Ok(SongInfoResponse {
+        title: song.title.clone(),
+        image_name: song.image_name.clone(),
+        sheets,
+    })
+}
+
+pub(crate) async fn list_song_info(
+    State(state): State<AppState>,
+) -> Result<Json<SongCatalogResponse>> {
+    let song_data_root = state
+        .song_data_root
+        .read()
+        .map_err(|_| AppError::IoError("Failed to read song data".to_string()))?;
+
+    let songs = song_data_root
+        .iter()
+        .map(build_song_info_response)
+        .collect::<Result<Vec<_>>>()?;
+
+    Ok(Json(SongCatalogResponse { songs }))
 }
 
 fn parse_level_param(params: &HashMap<String, String>, key: &str) -> Result<f32> {
@@ -438,53 +505,13 @@ pub(crate) async fn get_song_info_by_title(
         return Err(AppError::NotFound(format!("Song not found: {}", title)));
     };
 
-    let sheets = song
-        .sheets
-        .iter()
-        .map(|sheet| -> Result<SongSheetResponse> {
-            let chart_type = parse_sheet_chart_type(&sheet.chart_type).ok_or_else(|| {
-                AppError::JsonError(format!(
-                    "unknown chart type in song data: {}",
-                    sheet.chart_type
-                ))
-            })?;
-            let difficulty = parse_sheet_difficulty(&sheet.difficulty).ok_or_else(|| {
-                AppError::JsonError(format!(
-                    "unknown difficulty in song data: {}",
-                    sheet.difficulty
-                ))
-            })?;
-
-            Ok(SongSheetResponse {
-                chart_type,
-                difficulty,
-                level: sheet.level.clone(),
-                version: sheet
-                    .version_name
-                    .clone()
-                    .map(|v| v.trim().to_string())
-                    .filter(|v| !v.is_empty()),
-                internal_level: sheet
-                    .internal_level
-                    .as_deref()
-                    .and_then(|value| value.trim().parse::<f32>().ok()),
-                user_level: sheet.user_level.clone(),
-                region: sheet.region.clone(),
-            })
-        })
-        .collect::<Result<Vec<_>>>()?;
-
-    Ok(Json(SongInfoResponse {
-        title: song.title.clone(),
-        image_name: song.image_name.clone(),
-        sheets,
-    }))
+    Ok(Json(build_song_info_response(song)?))
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{is_intl_sheet, parse_intl_sheet_version};
-    use models::{MaimaiVersion, SongCatalogChart, SongChartRegion};
+    use super::{build_song_info_response, is_intl_sheet, parse_intl_sheet_version};
+    use models::{MaimaiVersion, SongCatalogChart, SongCatalogSong, SongChartRegion};
 
     #[test]
     fn intl_sheet_predicate_uses_region_flag() {
@@ -549,5 +576,39 @@ mod tests {
             parse_intl_sheet_version(&intl_sheet),
             Some(MaimaiVersion::Splash)
         );
+    }
+
+    #[test]
+    fn build_song_info_response_normalizes_sheet_fields() {
+        let song = SongCatalogSong {
+            title: "Test Song".to_string(),
+            image_name: Some("cover.png".to_string()),
+            sheets: vec![SongCatalogChart {
+                chart_type: "dx".to_string(),
+                difficulty: "master".to_string(),
+                level: "14+".to_string(),
+                version_name: Some("  Buddies Plus  ".to_string()),
+                internal_level: Some("14.7".to_string()),
+                user_level: Some("14+".to_string()),
+                region: SongChartRegion {
+                    jp: true,
+                    intl: false,
+                },
+            }],
+        };
+
+        let response = build_song_info_response(&song).expect("song info should build");
+
+        assert_eq!(response.title, "Test Song");
+        assert_eq!(response.image_name.as_deref(), Some("cover.png"));
+        assert_eq!(response.sheets.len(), 1);
+
+        let sheet = &response.sheets[0];
+        assert_eq!(sheet.chart_type, models::ChartType::Dx);
+        assert_eq!(sheet.difficulty, models::DifficultyCategory::Master);
+        assert_eq!(sheet.version.as_deref(), Some("Buddies Plus"));
+        assert_eq!(sheet.internal_level, Some(14.7));
+        assert!(sheet.region.jp);
+        assert!(!sheet.region.intl);
     }
 }
