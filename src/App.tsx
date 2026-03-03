@@ -602,11 +602,6 @@ function App() {
   const scoreCountLabel = `${filteredScoreRows.length.toLocaleString()}/${scoreData.length.toLocaleString()}`;
   const playlogCountLabel = `${filteredPlaylogRows.length.toLocaleString()}/${playlogData.length.toLocaleString()}`;
   const activeExplorerCountLabel = activePage === 'scores' ? scoreCountLabel : playlogCountLabel;
-  const activeViewDescription = activePage === 'scores'
-    ? '점수와 차트 데이터를 빠르게 정렬하고 재도전 대상을 찾는 뷰'
-    : activePage === 'playlogs'
-      ? '플레이 이력과 기록 변화를 시간순으로 살펴보는 뷰'
-      : '';
 
   return (
     <div className="app-shell">
@@ -614,7 +609,6 @@ function App() {
         <div className="app-toolbar-main">
           <div className="brand-copy">
             <h1>maistats</h1>
-            {activeViewDescription ? <p>{activeViewDescription}</p> : null}
           </div>
 
           <div className="toolbar-switches">
