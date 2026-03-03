@@ -404,10 +404,79 @@ async fn attach_duplicate_title_qualifiers(
         let snapshot = snapshots
             .get_mut(&request.diff)
             .ok_or_else(|| eyre::eyre!("missing snapshot for diff={}", request.diff))?;
-        snapshot.entries[request.entry_index].title = canonical;
+        let entry = resolve_qualifier_entry_mut(snapshot, &request)
+            .wrap_err_with(|| format!("locate qualifier row for '{}'", request.lookup_key.title))?;
+        entry.title = canonical;
     }
 
     Ok(())
+}
+
+fn resolve_qualifier_entry_mut<'a>(
+    snapshot: &'a mut ScoreListSnapshot,
+    request: &QualifierResolutionRequest,
+) -> Result<&'a mut ParsedScoreEntry> {
+    let resolved_index = if snapshot.fetched_at == request.resolved_from_snapshot_at
+        && snapshot
+            .entries
+            .get(request.entry_index)
+            .is_some_and(|entry| qualifier_entry_matches_source_idx(entry, request))
+    {
+        Some(request.entry_index)
+    } else if let Some(index) = snapshot
+        .entries
+        .iter()
+        .position(|entry| qualifier_entry_matches_source_idx(entry, request))
+    {
+        Some(index)
+    } else {
+        let candidate_indices = snapshot
+            .entries
+            .iter()
+            .enumerate()
+            .filter_map(|(index, entry)| {
+                qualifier_entry_matches_lookup(entry, request).then_some(index)
+            })
+            .collect::<Vec<_>>();
+
+        match candidate_indices.as_slice() {
+            [index] => Some(*index),
+            [] => {
+                return Err(eyre::eyre!(
+                    "no qualifier row matched current snapshot for source_idx='{}' title='{}'",
+                    request.source_idx,
+                    request.lookup_key.title
+                ));
+            }
+            _ => {
+                return Err(eyre::eyre!(
+                    "multiple qualifier rows matched current snapshot for title='{}' chart='{}' diff='{}'",
+                    request.lookup_key.title,
+                    request.lookup_key.chart_type.as_str(),
+                    request.lookup_key.diff_category.as_str()
+                ));
+            }
+        }
+    };
+
+    Ok(&mut snapshot.entries[resolved_index.expect("resolved index must exist")])
+}
+
+fn qualifier_entry_matches_source_idx(
+    entry: &ParsedScoreEntry,
+    request: &QualifierResolutionRequest,
+) -> bool {
+    entry.source_idx.as_deref().map(str::trim) == Some(request.source_idx.as_str())
+}
+
+fn qualifier_entry_matches_lookup(
+    entry: &ParsedScoreEntry,
+    request: &QualifierResolutionRequest,
+) -> bool {
+    entry.chart_type == request.lookup_key.chart_type
+        && entry.diff_category == request.lookup_key.diff_category
+        && normalize_title_for_match(&entry.title)
+            == normalize_title_for_match(SongTitle::parse(&request.lookup_key.title).base_title())
 }
 
 fn collect_qualifier_resolution_requests(
@@ -647,5 +716,71 @@ mod tests {
         };
 
         assert_eq!(canonical_title_for_detail(&detail), "Link [[maimai]]");
+    }
+
+    #[test]
+    fn resolve_qualifier_entry_uses_current_source_idx_after_reload() -> eyre::Result<()> {
+        let mut snapshot = ScoreListSnapshot {
+            fetched_at: 2,
+            entries: vec![
+                score_entry(
+                    "Other Song",
+                    ChartType::Dx,
+                    DifficultyCategory::Master,
+                    Some("999"),
+                ),
+                score_entry(
+                    "Link",
+                    ChartType::Dx,
+                    DifficultyCategory::Master,
+                    Some("101"),
+                ),
+            ],
+        };
+        let request = QualifierResolutionRequest {
+            diff: 3,
+            entry_index: 0,
+            source_idx: "101".to_string(),
+            lookup_key: SongLookupKey {
+                title: "Link".to_string(),
+                chart_type: ChartType::Dx,
+                diff_category: DifficultyCategory::Master,
+            },
+            resolved_from_snapshot_at: 1,
+        };
+
+        let entry = resolve_qualifier_entry_mut(&mut snapshot, &request)?;
+        assert_eq!(entry.source_idx.as_deref(), Some("101"));
+
+        Ok(())
+    }
+
+    #[test]
+    fn resolve_qualifier_entry_falls_back_to_unique_lookup_match() -> eyre::Result<()> {
+        let mut snapshot = ScoreListSnapshot {
+            fetched_at: 2,
+            entries: vec![score_entry(
+                "Link",
+                ChartType::Dx,
+                DifficultyCategory::Master,
+                Some("202"),
+            )],
+        };
+        let request = QualifierResolutionRequest {
+            diff: 3,
+            entry_index: 0,
+            source_idx: "101".to_string(),
+            lookup_key: SongLookupKey {
+                title: "Link".to_string(),
+                chart_type: ChartType::Dx,
+                diff_category: DifficultyCategory::Master,
+            },
+            resolved_from_snapshot_at: 1,
+        };
+
+        let entry = resolve_qualifier_entry_mut(&mut snapshot, &request)?;
+        assert_eq!(entry.source_idx.as_deref(), Some("202"));
+
+        Ok(())
     }
 }
