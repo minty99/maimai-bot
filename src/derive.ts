@@ -2,6 +2,7 @@ import type {
   ChartType,
   DifficultyCategory,
   PlayRecordApiResponse,
+  ScoreHistoryPoint,
   PlaylogRow,
   ScoreApiResponse,
   ScoreRow,
@@ -331,6 +332,53 @@ export function buildPlaylogRows(
       imageName: songInfo?.image_name ?? null,
     };
   });
+}
+
+export function buildScoreHistoryPoints(
+  playlogRows: PlaylogRow[],
+  selectedRow: ScoreRow | null,
+): ScoreHistoryPoint[] {
+  if (!selectedRow) {
+    return [];
+  }
+
+  const matchingRows = playlogRows
+    .filter(
+      (row) =>
+        row.normalizedTitle === selectedRow.normalizedTitle &&
+        row.chartType === selectedRow.chartType &&
+        row.difficulty === selectedRow.difficulty &&
+        row.achievementX10000 !== null &&
+        row.achievementPercent !== null,
+    )
+    .sort((left, right) => {
+      if (left.playedAtUnix !== right.playedAtUnix) {
+        return left.playedAtUnix - right.playedAtUnix;
+      }
+      return left.key.localeCompare(right.key, 'ko');
+    });
+
+  const points: ScoreHistoryPoint[] = [];
+  let bestAchievementX10000 = Number.NEGATIVE_INFINITY;
+
+  for (const row of matchingRows) {
+    if (row.achievementX10000 === null || row.achievementPercent === null) {
+      continue;
+    }
+    if (row.achievementX10000 <= bestAchievementX10000) {
+      continue;
+    }
+
+    bestAchievementX10000 = row.achievementX10000;
+    points.push({
+      key: row.key,
+      playedAtUnix: row.playedAtUnix,
+      playedAtLabel: row.playedAtLabel,
+      achievementPercent: row.achievementPercent,
+    });
+  }
+
+  return points;
 }
 
 const chartOrder = new Map(CHART_TYPES.map((value, index) => [value, index]));

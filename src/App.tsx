@@ -35,6 +35,7 @@ import {
 } from './app/storage';
 import {
   buildPlaylogRows,
+  buildScoreHistoryPoints,
   buildSongDetailRows,
   buildScoreRows,
 } from './derive';
@@ -50,12 +51,14 @@ import { RandomPickerPage } from './components/RandomPickerPage';
 import { ScoreExplorerSection } from './components/ScoreExplorerSection';
 import { SettingsPage } from './components/SettingsPage';
 import { SongDetailModal } from './components/SongDetailModal';
+import { ScoreHistoryModal } from './components/ScoreHistoryModal';
 import type {
   ChartType,
   DifficultyCategory,
   FcStatus,
   PlayRecordApiResponse,
   ScoreApiResponse,
+  ScoreRow,
   ScoreRank,
   SongInfoResponse,
   SyncStatus,
@@ -229,6 +232,7 @@ function App() {
   const [scoreSortDesc, setScoreSortDesc] = useState(true);
 
   const [selectedDetailTitle, setSelectedDetailTitle] = useState<string | null>(null);
+  const [selectedHistoryKey, setSelectedHistoryKey] = useState<string | null>(null);
   const [showJackets, setShowJackets] = useState<boolean>(readShowJacketsPreference);
 
   const [playlogQuery, setPlaylogQuery] = useState('');
@@ -263,6 +267,14 @@ function App() {
   const playlogData = useMemo(
     () => buildPlaylogRows(playlogRecords, songMetadata),
     [playlogRecords, songMetadata],
+  );
+  const selectedHistoryRow = useMemo(
+    () => scoreData.find((row) => row.key === selectedHistoryKey) ?? null,
+    [scoreData, selectedHistoryKey],
+  );
+  const selectedHistoryPoints = useMemo(
+    () => buildScoreHistoryPoints(playlogData, selectedHistoryRow),
+    [playlogData, selectedHistoryRow],
   );
 
   const versionOptions = useMemo(() => {
@@ -481,6 +493,14 @@ function App() {
 
   const closeSongDetail = useCallback(() => {
     setSelectedDetailTitle(null);
+  }, []);
+
+  const handleOpenHistory = useCallback((row: ScoreRow) => {
+    setSelectedHistoryKey(row.key);
+  }, []);
+
+  const closeHistory = useCallback(() => {
+    setSelectedHistoryKey(null);
   }, []);
 
   const handleScoreSortBy = useCallback(
@@ -784,6 +804,7 @@ function App() {
               filteredScoreRows={filteredScoreRows}
               songInfoUrl={songInfoUrl}
               onOpenSongDetail={handleOpenSongDetail}
+              onOpenHistory={handleOpenHistory}
               scoreSortKey={scoreSortKey}
               scoreSortDesc={scoreSortDesc}
               onSortBy={handleScoreSortBy}
@@ -842,6 +863,12 @@ function App() {
         selectedDetailRows={selectedDetailRows}
         songInfoUrl={songInfoUrl}
         onClose={closeSongDetail}
+      />
+      <ScoreHistoryModal
+        selectedHistoryRow={selectedHistoryRow}
+        historyPoints={selectedHistoryPoints}
+        songInfoUrl={songInfoUrl}
+        onClose={closeHistory}
       />
     </div>
   );

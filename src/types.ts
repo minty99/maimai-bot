@@ -195,6 +195,13 @@ export interface ScoreRow {
   playCount: number | null;
 }
 
+export interface ScoreHistoryPoint {
+  key: string;
+  playedAtUnix: number;
+  playedAtLabel: string | null;
+  achievementPercent: number;
+}
+
 export interface PlaylogRow {
   key: string;
   title: string;

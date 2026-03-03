@@ -880,6 +880,22 @@ tbody tr:hover {
   text-decoration: underline;
 }
 
+.achievement-history-button {
+  height: auto;
+  min-height: 0;
+  border: 0;
+  padding: 0;
+  background: transparent;
+  color: var(--accent);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.achievement-history-button:hover {
+  text-decoration: underline;
+}
+
 .detail-content {
   display: grid;
   gap: 10px;
@@ -907,6 +923,110 @@ tbody tr:hover {
   width: 72px;
   height: 72px;
   flex-shrink: 0;
+}
+
+.history-modal {
+  width: min(1180px, 100%);
+}
+
+.history-summary-copy {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.history-badges {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+}
+
+.history-chart-panel {
+  position: relative;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(248, 251, 255, 0.96));
+  padding: 12px;
+}
+
+.history-chart-scroll {
+  overflow-x: auto;
+  overflow-y: visible;
+}
+
+.history-chart {
+  display: block;
+  width: 100%;
+  min-width: 760px;
+  height: auto;
+  overflow: visible;
+}
+
+.history-grid line {
+  stroke: rgba(148, 163, 184, 0.28);
+  stroke-width: 1;
+}
+
+.history-grid text {
+  fill: #64748b;
+  font-size: 11px;
+}
+
+.history-axis {
+  stroke: #475569;
+  stroke-width: 1.4;
+}
+
+.history-axis-label {
+  fill: #334155;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.history-line {
+  stroke: var(--accent);
+  stroke-width: 2.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.history-point {
+  fill: #fff;
+  stroke: var(--accent-2);
+  stroke-width: 2.5;
+  cursor: pointer;
+}
+
+.history-point:focus-visible {
+  outline: none;
+  stroke: #0f172a;
+}
+
+.history-tooltip {
+  position: absolute;
+  z-index: 2;
+  transform: translate(-50%, calc(-100% - 12px));
+  display: grid;
+  gap: 3px;
+  min-width: 150px;
+  padding: 9px 10px;
+  border: 1px solid rgba(15, 23, 42, 0.12);
+  border-radius: 10px;
+  background: rgba(15, 23, 42, 0.94);
+  color: #f8fafc;
+  box-shadow: 0 12px 30px rgba(15, 23, 42, 0.18);
+  pointer-events: none;
+}
+
+.history-tooltip strong {
+  font-size: 13px;
+}
+
+.history-tooltip span {
+  font-size: 11px;
+  color: rgba(248, 250, 252, 0.82);
 }
 
 .score-table .title-col,

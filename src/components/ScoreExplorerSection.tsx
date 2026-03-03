@@ -62,6 +62,7 @@ interface ScoreExplorerSectionProps {
   filteredScoreRows: ScoreRow[];
   songInfoUrl: string;
   onOpenSongDetail: (title: string) => void;
+  onOpenHistory: (row: ScoreRow) => void;
   scoreSortKey: ScoreSortKey;
   scoreSortDesc: boolean;
   onSortBy: (key: ScoreSortKey) => void;
@@ -108,6 +109,7 @@ export function ScoreExplorerSection({
   filteredScoreRows,
   songInfoUrl,
   onOpenSongDetail,
+  onOpenHistory,
   scoreSortKey,
   scoreSortDesc,
   onSortBy,
@@ -415,7 +417,19 @@ export function ScoreExplorerSection({
                       <ChartTypeLabel chartType={row.chartType} />
                     </td>
                     <td className="level-col">{renderLevelCell(row)}</td>
-                    <td className="achievement-col">{formatPercent(row.achievementPercent)}</td>
+                    <td className="achievement-col">
+                      {row.achievementPercent === null ? (
+                        '-'
+                      ) : (
+                        <button
+                          type="button"
+                          className="achievement-history-button"
+                          onClick={() => onOpenHistory(row)}
+                        >
+                          {formatPercent(row.achievementPercent)}
+                        </button>
+                      )}
+                    </td>
                     <td className="rating-col">{formatNumber(row.ratingPoints)}</td>
                     <td className="rank-col">{row.rank ?? '-'}</td>
                     <td className="fc-col">{row.fc ?? '-'}</td>
