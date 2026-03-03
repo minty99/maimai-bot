@@ -126,6 +126,21 @@ function SettingsIcon() {
   );
 }
 
+function ChevronDownIcon() {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M6 9l6 6 6-6" />
+    </svg>
+  );
+}
+
+const NAV_ITEMS: Array<{ page: AppPage; label: string; Icon: () => JSX.Element }> = [
+  { page: 'scores', label: 'Scores', Icon: ScoresIcon },
+  { page: 'playlogs', label: 'Playlogs', Icon: PlaylogsIcon },
+  { page: 'picker', label: 'Picker', Icon: PickerIcon },
+  { page: 'settings', label: 'Settings', Icon: SettingsIcon },
+];
+
 function App() {
   const savedScoreFilters = useMemo(
     () => readStoredJson<StoredScoreFilters>(SCORE_FILTERS_STORAGE_KEY),
@@ -137,6 +152,7 @@ function App() {
   );
 
   const [activePage, setActivePage] = useState<AppPage>(() => readPageFromHash(window.location.hash));
+  const [isMobileNavOpen, setIsMobileNavOpen] = useState(false);
 
   const [songInfoUrl, setSongInfoUrl] = useState<string>(() =>
     readStoredValue(SONG_INFO_STORAGE_KEY, DEFAULT_SONG_INFO_URL),
@@ -428,6 +444,10 @@ function App() {
     setRecordCollectorUrlDraft(recordCollectorUrl);
   }, [activePage, recordCollectorUrl, songInfoUrl]);
 
+  useEffect(() => {
+    setIsMobileNavOpen(false);
+  }, [activePage]);
+
   const handleOpenSongDetail = useCallback((title: string) => {
     setSelectedDetailTitle(title);
   }, []);
@@ -612,6 +632,8 @@ function App() {
 
   const scoreCountLabel = `${filteredScoreRows.length.toLocaleString()}/${scoreData.length.toLocaleString()}`;
   const playlogCountLabel = `${filteredPlaylogRows.length.toLocaleString()}/${playlogData.length.toLocaleString()}`;
+  const activeNavItem = NAV_ITEMS.find((item) => item.page === activePage) ?? NAV_ITEMS[0];
+  const ActiveNavIcon = activeNavItem.Icon;
 
   return (
     <div className="app-shell">
@@ -623,36 +645,32 @@ function App() {
         <nav className="app-nav" aria-label="Primary">
           <button
             type="button"
-            className={activePage === 'scores' ? 'active' : ''}
-            onClick={() => handleNavigatePage('scores')}
+            className="app-nav-trigger"
+            aria-expanded={isMobileNavOpen}
+            aria-label="페이지 목록 열기"
+            onClick={() => setIsMobileNavOpen((current) => !current)}
           >
-            <ScoresIcon />
-            <span>Scores</span>
+            <span className="app-nav-trigger-main">
+              <ActiveNavIcon />
+              <span>{activeNavItem.label}</span>
+            </span>
+            <span className={`app-nav-trigger-chevron ${isMobileNavOpen ? 'is-open' : ''}`}>
+              <ChevronDownIcon />
+            </span>
           </button>
-          <button
-            type="button"
-            className={activePage === 'playlogs' ? 'active' : ''}
-            onClick={() => handleNavigatePage('playlogs')}
-          >
-            <PlaylogsIcon />
-            <span>Playlogs</span>
-          </button>
-          <button
-            type="button"
-            className={activePage === 'picker' ? 'active' : ''}
-            onClick={() => handleNavigatePage('picker')}
-          >
-            <PickerIcon />
-            <span>Picker</span>
-          </button>
-          <button
-            type="button"
-            className={activePage === 'settings' ? 'active' : ''}
-            onClick={() => handleNavigatePage('settings')}
-          >
-            <SettingsIcon />
-            <span>Settings</span>
-          </button>
+          <div className={`app-nav-list ${isMobileNavOpen ? 'is-open' : ''}`}>
+            {NAV_ITEMS.filter(({ page }) => page !== activePage).map(({ page, label, Icon }) => (
+              <button
+                key={page}
+                type="button"
+                className={activePage === page ? 'active' : ''}
+                onClick={() => handleNavigatePage(page)}
+              >
+                <Icon />
+                <span>{label}</span>
+              </button>
+            ))}
+          </div>
         </nav>
       </aside>
 
