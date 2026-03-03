@@ -30,7 +30,7 @@ pub(crate) async fn get_recent(
     let rows = sqlx::query_as::<_, StoredPlayRecord>(
         "SELECT played_at_unixtime, played_at, track, title, chart_type, diff_category, 
                 achievement_x10000, score_rank, fc, sync, dx_score, dx_score_max, 
-                credit_play_count, achievement_new_record
+                credit_id, achievement_new_record
          FROM playlogs
          ORDER BY played_at_unixtime DESC
          LIMIT ?",

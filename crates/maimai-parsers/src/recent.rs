@@ -126,7 +126,7 @@ pub fn parse_recent_html(html: &str) -> eyre::Result<Vec<ParsedPlayRecord>> {
             played_at_unixtime,
             track,
             played_at,
-            credit_play_count: None,
+            credit_id: None,
             title,
             chart_type,
             diff_category,

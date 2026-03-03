@@ -84,7 +84,7 @@ pub(crate) async fn get_today(
             sync,
             dx_score,
             dx_score_max,
-            credit_play_count,
+            credit_id,
             achievement_new_record
          FROM playlogs
          WHERE played_at >= ? AND played_at < ?

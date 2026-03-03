@@ -29,6 +29,6 @@ pub struct StoredPlayRecord {
     pub sync: Option<String>,
     pub dx_score: Option<i32>,
     pub dx_score_max: Option<i32>,
-    pub credit_play_count: Option<i32>,
+    pub credit_id: Option<i32>,
     pub achievement_new_record: Option<i32>,
 }

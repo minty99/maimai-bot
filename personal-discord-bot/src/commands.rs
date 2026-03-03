@@ -439,7 +439,7 @@ pub(crate) async fn mai_today(ctx: Context<'_>) -> Result<(), Error> {
     let tracks = plays.len() as i64;
     let credits = plays
         .iter()
-        .filter_map(|p| p.credit_play_count)
+        .filter_map(|p| p.credit_id)
         .collect::<std::collections::HashSet<_>>()
         .len() as i64;
     let new_records = plays

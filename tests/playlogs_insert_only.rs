@@ -20,7 +20,7 @@ async fn insert_playlogs_does_not_overwrite_existing_row() -> eyre::Result<()> {
         played_at_unixtime: Some(id),
         track: Some(1),
         played_at: Some("2026/01/23 12:34".to_string()),
-        credit_play_count: Some(100),
+        credit_id: Some(100),
         title: "Song A".to_string(),
         chart_type: ChartType::Std,
         diff_category: None,
@@ -40,7 +40,7 @@ async fn insert_playlogs_does_not_overwrite_existing_row() -> eyre::Result<()> {
         played_at_unixtime: Some(id),
         track: Some(1),
         played_at: Some("2026/01/23 12:34".to_string()),
-        credit_play_count: Some(999),
+        credit_id: Some(999),
         title: "Song A - SHOULD NOT APPLY".to_string(),
         chart_type: ChartType::Std,
         diff_category: None,
@@ -55,21 +55,21 @@ async fn insert_playlogs_does_not_overwrite_existing_row() -> eyre::Result<()> {
     }];
     db::upsert_playlogs(&pool, scraped_at, &entries).await?;
 
-    let (title, credit_play_count, achievement_new_record, fc, sync): (
+    let (title, credit_id, achievement_new_record, fc, sync): (
         String,
         Option<i64>,
         i64,
         Option<String>,
         Option<String>,
     ) = sqlx::query_as(
-        "SELECT title, credit_play_count, achievement_new_record, fc, sync FROM playlogs WHERE played_at_unixtime = ?",
+        "SELECT title, credit_id, achievement_new_record, fc, sync FROM playlogs WHERE played_at_unixtime = ?",
     )
     .bind(id)
     .fetch_one(&pool)
     .await?;
 
     assert_eq!(title, "Song A");
-    assert_eq!(credit_play_count, Some(100));
+    assert_eq!(credit_id, Some(100));
     assert_eq!(achievement_new_record, 1);
     assert_eq!(fc.as_deref(), Some("FC"));
     assert_eq!(sync.as_deref(), Some("FS"));

@@ -28,5 +28,25 @@ WHERE name = 'first_play'
     .await?;
     assert_eq!(first_play_column, None);
 
+    let credit_play_count_column = sqlx::query_scalar::<_, Option<String>>(
+        r#"
+SELECT name FROM pragma_table_info('playlogs')
+WHERE name = 'credit_play_count'
+"#,
+    )
+    .fetch_one(&pool)
+    .await?;
+    assert_eq!(credit_play_count_column, None);
+
+    let credit_id_column = sqlx::query_scalar::<_, Option<String>>(
+        r#"
+SELECT name FROM pragma_table_info('playlogs')
+WHERE name = 'credit_id'
+"#,
+    )
+    .fetch_one(&pool)
+    .await?;
+    assert_eq!(credit_id_column.as_deref(), Some("credit_id"));
+
     Ok(())
 }

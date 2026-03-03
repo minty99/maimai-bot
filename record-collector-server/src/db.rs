@@ -169,7 +169,7 @@ async fn insert_playlog(
         r#"
 	INSERT INTO playlogs (
 	  played_at_unixtime,
-	  played_at, track, credit_play_count,
+	  played_at, track, credit_id,
 	  title, chart_type, diff_category,
 	  achievement_x10000, achievement_new_record,
 	  score_rank, fc, sync,
@@ -182,7 +182,7 @@ async fn insert_playlog(
     .bind(played_at_unixtime)
     .bind(entry.played_at.as_deref())
     .bind(entry.track.map(i64::from))
-    .bind(entry.credit_play_count.map(i64::from))
+    .bind(entry.credit_id.map(i64::from))
     .bind(&entry.title)
     .bind(chart_type_str(entry.chart_type))
     .bind(entry.diff_category.map(|d| d.as_str().to_string()))

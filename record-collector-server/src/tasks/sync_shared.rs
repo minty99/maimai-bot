@@ -60,7 +60,7 @@ pub(crate) fn annotate_recent_entries_with_play_count(
 
     let mut credit_idx: u32 = 0;
     for entry in &mut entries {
-        entry.credit_play_count = Some(total_play_count.saturating_sub(credit_idx));
+        entry.credit_id = Some(total_play_count.saturating_sub(credit_idx));
 
         if entry.track == Some(1) {
             credit_idx = credit_idx.saturating_add(1);

@@ -24,7 +24,7 @@ pub struct ParsedPlayRecord {
     pub played_at_unixtime: Option<i64>,
     pub track: Option<u8>,
     pub played_at: Option<String>,
-    pub credit_play_count: Option<u32>,
+    pub credit_id: Option<u32>,
     pub title: String,
     pub chart_type: ChartType,
     pub diff_category: Option<DifficultyCategory>,
