@@ -10,11 +10,10 @@ use time::OffsetDateTime;
 use maimai_auth::intl;
 use models::config::AppConfig;
 
-#[allow(dead_code)]
 #[derive(Debug, Clone)]
-pub(crate) struct HtmlResponse {
+pub(crate) struct HttpResponse {
     pub(crate) final_url: Url,
-    pub(crate) html: String,
+    pub(crate) body: Vec<u8>,
 }
 
 #[derive(Debug, Clone)]
@@ -78,7 +77,7 @@ impl MaimaiClient {
         Ok(())
     }
 
-    pub(crate) async fn get_bytes(&self, url: &Url) -> eyre::Result<Vec<u8>> {
+    pub(crate) async fn get_response(&self, url: &Url) -> eyre::Result<HttpResponse> {
         ensure_not_maintenance_now()?;
         let resp = self
             .client
@@ -98,32 +97,10 @@ impl MaimaiClient {
             }
             return Err(eyre::eyre!("non-success status: {status} url={final_url}"));
         }
-        Ok(bytes.to_vec())
-    }
-
-    #[allow(dead_code)]
-    pub(crate) async fn get_html_response(&self, url: &Url) -> eyre::Result<HtmlResponse> {
-        ensure_not_maintenance_now()?;
-        let resp = self
-            .client
-            .as_ref()
-            .get(url.clone())
-            .send()
-            .await
-            .wrap_err("GET")?;
-        let status = resp.status();
-        let final_url = resp.url().clone();
-        let html = resp.text().await.wrap_err("read response text")?;
-        if !status.is_success() {
-            if status == reqwest::StatusCode::SERVICE_UNAVAILABLE {
-                return Err(eyre::eyre!(
-                    "site unavailable (503). maimai DX NET may be under maintenance. url={final_url}"
-                ));
-            }
-            return Err(eyre::eyre!("non-success status: {status} url={final_url}"));
-        }
-
-        Ok(HtmlResponse { final_url, html })
+        Ok(HttpResponse {
+            final_url,
+            body: bytes.to_vec(),
+        })
     }
 }
 

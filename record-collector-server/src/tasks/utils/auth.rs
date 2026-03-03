@@ -45,11 +45,12 @@ pub(crate) async fn fetch_html_with_auth_recovery(
     expected_page: ExpectedPage,
 ) -> Result<String> {
     let first = client
-        .get_html_response(url)
+        .get_response(url)
         .await
         .wrap_err_with(|| format!("fetch {}", expected_page_label(&expected_page)))?;
-    if !intl::looks_like_login_or_expired(&first.final_url, &first.html) {
-        return Ok(first.html);
+    let first_html = String::from_utf8(first.body).wrap_err("response is not utf-8")?;
+    if !intl::looks_like_login_or_expired(&first.final_url, &first_html) {
+        return Ok(first_html);
     }
 
     client
@@ -58,10 +59,11 @@ pub(crate) async fn fetch_html_with_auth_recovery(
         .wrap_err("re-login after auth expiry")?;
 
     let second = client
-        .get_html_response(url)
+        .get_response(url)
         .await
         .wrap_err_with(|| format!("retry fetch {}", expected_page_label(&expected_page)))?;
-    if intl::looks_like_login_or_expired(&second.final_url, &second.html) {
+    let second_html = String::from_utf8(second.body).wrap_err("retry response is not utf-8")?;
+    if intl::looks_like_login_or_expired(&second.final_url, &second_html) {
         return Err(eyre::eyre!(
             "{} still looks unauthenticated after re-login: {}",
             expected_page_label(&expected_page),
@@ -69,7 +71,7 @@ pub(crate) async fn fetch_html_with_auth_recovery(
         ));
     }
 
-    Ok(second.html)
+    Ok(second_html)
 }
 
 fn expected_page_label(expected_page: &ExpectedPage) -> String {

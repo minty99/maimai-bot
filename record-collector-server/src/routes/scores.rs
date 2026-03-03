@@ -134,9 +134,10 @@ pub(crate) async fn get_song_detail_scores(
         .map_err(|e| AppError::InternalError(e.to_string()))?;
 
         let bytes = client
-            .get_bytes(&url)
+            .get_response(&url)
             .await
-            .map_err(map_maintenance_or_http_client_error)?;
+            .map_err(map_maintenance_or_http_client_error)?
+            .body;
         let html = String::from_utf8(bytes)
             .wrap_err("musicDetail response is not utf-8")
             .map_err(|e| AppError::InternalError(e.to_string()))?;
@@ -213,7 +214,11 @@ async fn find_song_detail_indices_by_base_title(
 
     let diff = 0u8;
     let url = scores_url(diff).wrap_err("build scores url")?;
-    let bytes = client.get_bytes(&url).await.wrap_err("fetch scores url")?;
+    let bytes = client
+        .get_response(&url)
+        .await
+        .wrap_err("fetch scores url")?
+        .body;
     let html = String::from_utf8(bytes).wrap_err("scores response is not utf-8")?;
     let entries = parse_scores_html(&html, diff).wrap_err("parse scores html")?;
 
