@@ -47,7 +47,7 @@ export function Jacket({ songInfoUrl, imageName, title, className }: JacketProps
         setShouldLoad(true);
         observer.disconnect();
       },
-      { rootMargin: '240px' },
+      { rootMargin: '0px' },
     );
 
     observer.observe(element);
@@ -85,6 +85,7 @@ export function Jacket({ songInfoUrl, imageName, title, className }: JacketProps
           className={jacketClassName}
           src={resolvedSrc}
           alt={`${title} jacket`}
+          loading="lazy"
           referrerPolicy="no-referrer"
           onError={() => setHasError(true)}
         />

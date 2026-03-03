@@ -81,6 +81,11 @@ export interface PlayRecordApiResponse {
   rating_points?: number | null;
 }
 
+export interface SongChartRegion {
+  jp: boolean;
+  intl: boolean;
+}
+
 export interface SongSheetResponse {
   chart_type: ChartType;
   difficulty: DifficultyCategory;
@@ -88,12 +93,17 @@ export interface SongSheetResponse {
   version: string | null;
   internal_level: number | null;
   user_level: string | null;
+  region: SongChartRegion;
 }
 
 export interface SongInfoResponse {
   title: string;
   image_name: string | null;
   sheets: SongSheetResponse[];
+}
+
+export interface SongInfoListResponse {
+  songs: SongInfoResponse[];
 }
 
 export interface RandomSongApiResponse {

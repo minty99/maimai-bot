@@ -17,6 +17,22 @@ export function chartKey(
   return `${normalizeTitleKey(title)}::${chartType}::${difficulty}`;
 }
 
+function findMatchingSheet(
+  songInfo: SongInfoResponse | undefined,
+  chartType: ChartType,
+  difficulty: DifficultyCategory,
+) {
+  if (!songInfo) {
+    return null;
+  }
+
+  const matches = songInfo.sheets.filter(
+    (item) => item.chart_type === chartType && item.difficulty === difficulty,
+  );
+
+  return matches.find((item) => item.region.intl) ?? matches[0] ?? null;
+}
+
 function toUnixMillis(unixtime: number): number {
   if (unixtime > 10_000_000_000) {
     return unixtime;
@@ -153,10 +169,7 @@ export function buildScoreRows(
     const key = chartKey(score.title, score.chart_type, score.diff_category);
 
     const songInfo = songInfoByTitle.get(normalizedTitle);
-    const sheet = songInfo?.sheets.find(
-      (item) =>
-        item.chart_type === score.chart_type && item.difficulty === score.diff_category,
-    );
+    const sheet = findMatchingSheet(songInfo, score.chart_type, score.diff_category);
 
     const latestPlayedAtUnix = parseMaimaiPlayedAtToUnix(score.last_played_at);
 
@@ -202,11 +215,7 @@ export function buildPlaylogRows(
     const sheet =
       log.diff_category === null
         ? null
-        : songInfo?.sheets.find(
-            (item) =>
-              item.chart_type === log.chart_type &&
-              item.difficulty === log.diff_category,
-          ) ?? null;
+        : findMatchingSheet(songInfo, log.chart_type, log.diff_category);
 
     return {
       key: `${log.played_at_unixtime}-${index}`,

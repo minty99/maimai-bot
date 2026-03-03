@@ -5,6 +5,7 @@ import type {
   RandomSongApiResponse,
   ScoreApiResponse,
   SongDetailScoreApiResponse,
+  SongInfoListResponse,
   SongInfoResponse,
   SongVersionResponse,
   SongVersionsListResponse,
@@ -13,6 +14,7 @@ import type {
 export interface ExplorerPayload {
   ratedScores: ScoreApiResponse[];
   playlogs: PlayRecordApiResponse[];
+  songMetadata: Map<string, SongInfoResponse>;
   versions: SongVersionsListResponse | null;
 }
 
@@ -50,6 +52,29 @@ async function getJson<T>(url: string, signal?: AbortSignal): Promise<T> {
   return data;
 }
 
+function indexSongMetadata(songs: SongInfoResponse[]): Map<string, SongInfoResponse> {
+  const metadata = new Map<string, SongInfoResponse>();
+
+  for (const song of songs) {
+    metadata.set(normalizeTitleKey(song.title), song);
+  }
+
+  return metadata;
+}
+
+export async function fetchAllSongMetadata(
+  songInfoBaseUrl: string,
+  signal?: AbortSignal,
+): Promise<Map<string, SongInfoResponse>> {
+  const songInfoBase = normalizeBaseUrl(songInfoBaseUrl);
+  if (!songInfoBase) {
+    return new Map();
+  }
+
+  const response = await getJson<SongInfoListResponse>(`${songInfoBase}/api/songs`, signal);
+  return indexSongMetadata(response.songs);
+}
+
 export async function fetchExplorerPayload(
   songInfoBaseUrl: string,
   recordCollectorBaseUrl: string,
@@ -58,17 +83,19 @@ export async function fetchExplorerPayload(
   const songInfoBase = normalizeBaseUrl(songInfoBaseUrl);
   const recordBase = normalizeBaseUrl(recordCollectorBaseUrl);
 
-  const [ratedScores, playlogs, versionsResult] = await Promise.all([
+  const [ratedScores, playlogs, versionsResult, songMetadata] = await Promise.all([
     getJson<ScoreApiResponse[]>(`${recordBase}/api/scores/rated`, signal),
     getJson<PlayRecordApiResponse[]>(`${recordBase}/api/recent?limit=${RECENT_LIMIT}`, signal),
     getJson<SongVersionsListResponse>(`${songInfoBase}/api/songs/versions`, signal).catch(
       () => null,
     ),
+    fetchAllSongMetadata(songInfoBase, signal).catch(() => new Map<string, SongInfoResponse>()),
   ]);
 
   return {
     ratedScores,
     playlogs,
+    songMetadata,
     versions: versionsResult,
   };
 }
@@ -87,75 +114,6 @@ export async function fetchSongVersions(
     signal,
   );
   return response.versions;
-}
-
-interface MetadataProgress {
-  done: number;
-  total: number;
-}
-
-interface FetchSongMetadataBatchParams {
-  songInfoBaseUrl: string;
-  titles: string[];
-  concurrency?: number;
-  signal?: AbortSignal;
-  onProgress?: (progress: MetadataProgress) => void;
-}
-
-export async function fetchSongMetadataBatch({
-  songInfoBaseUrl,
-  titles,
-  concurrency = 8,
-  signal,
-  onProgress,
-}: FetchSongMetadataBatchParams): Promise<Map<string, SongInfoResponse>> {
-  const songInfoBase = normalizeBaseUrl(songInfoBaseUrl);
-  const dedupedTitles = Array.from(new Set(titles));
-  const total = dedupedTitles.length;
-
-  if (total === 0) {
-    return new Map();
-  }
-
-  let index = 0;
-  let done = 0;
-  const metadata = new Map<string, SongInfoResponse>();
-
-  const workerCount = Math.max(1, Math.min(concurrency, total));
-
-  const worker = async () => {
-    while (true) {
-      if (signal?.aborted) {
-        return;
-      }
-
-      const currentIndex = index;
-      index += 1;
-      if (currentIndex >= total) {
-        return;
-      }
-
-      const title = dedupedTitles[currentIndex];
-      try {
-        const encoded = encodeURIComponent(title);
-        const info = await getJson<SongInfoResponse>(
-          `${songInfoBase}/api/songs/by-title/${encoded}`,
-          signal,
-        );
-        metadata.set(normalizeTitleKey(info.title), info);
-      } catch {
-        // Ignore unresolved songs; score/playlog rows still render without metadata.
-      } finally {
-        done += 1;
-        onProgress?.({ done, total });
-      }
-    }
-  };
-
-  const workers = Array.from({ length: workerCount }, () => worker());
-  await Promise.all(workers);
-
-  return metadata;
 }
 
 export function normalizeTitleKey(title: string): string {

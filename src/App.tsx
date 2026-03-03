@@ -3,8 +3,6 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   fetchExplorerPayload,
   fetchSongDetailScores,
-  fetchSongMetadataBatch,
-  normalizeTitleKey,
 } from './api';
 import {
   AAA_OR_BELOW_RANKS,
@@ -65,9 +63,6 @@ import type {
   SyncStatus,
 } from './types';
 
-const METADATA_BATCH_SIZE = 16;
-const METADATA_PREFETCH_ROWS = 60;
-
 type AppPage = 'explorer' | 'picker';
 
 function readPageFromHash(hash: string): AppPage {
@@ -99,7 +94,6 @@ function App() {
 
   const [isLoading, setIsLoading] = useState(false);
   const [loadingError, setLoadingError] = useState<string | null>(null);
-  const [metadataProgress, setMetadataProgress] = useState({ done: 0, total: 0 });
 
   const [scoreRecords, setScoreRecords] = useState<ScoreApiResponse[]>([]);
   const [playlogRecords, setPlaylogRecords] = useState<PlayRecordApiResponse[]>([]);
@@ -206,154 +200,6 @@ function App() {
 
   const loadAbortRef = useRef<AbortController | null>(null);
   const detailAbortRef = useRef<AbortController | null>(null);
-  const metadataMapRef = useRef<Map<string, SongInfoResponse>>(new Map());
-  const metadataHighPriorityQueueRef = useRef<string[]>([]);
-  const metadataBackgroundQueueRef = useRef<string[]>([]);
-  const metadataQueuedRef = useRef<Set<string>>(new Set());
-  const metadataInflightRef = useRef<Set<string>>(new Set());
-  const metadataPumpActiveRef = useRef(false);
-
-  const resetMetadataQueue = useCallback(() => {
-    metadataHighPriorityQueueRef.current = [];
-    metadataBackgroundQueueRef.current = [];
-    metadataQueuedRef.current = new Set();
-    metadataInflightRef.current = new Set();
-    metadataPumpActiveRef.current = false;
-  }, []);
-
-  const takeMetadataBatch = useCallback((): string[] => {
-    const nextBatch: string[] = [];
-
-    while (
-      nextBatch.length < METADATA_BATCH_SIZE &&
-      metadataHighPriorityQueueRef.current.length > 0
-    ) {
-      const title = metadataHighPriorityQueueRef.current.shift();
-      if (!title) {
-        continue;
-      }
-      metadataQueuedRef.current.delete(title);
-      nextBatch.push(title);
-    }
-
-    while (
-      nextBatch.length < METADATA_BATCH_SIZE &&
-      metadataBackgroundQueueRef.current.length > 0
-    ) {
-      const title = metadataBackgroundQueueRef.current.shift();
-      if (!title) {
-        continue;
-      }
-      metadataQueuedRef.current.delete(title);
-      nextBatch.push(title);
-    }
-
-    return nextBatch;
-  }, []);
-
-  const pumpMetadataQueue = useCallback(async () => {
-    if (metadataPumpActiveRef.current) {
-      return;
-    }
-
-    const controller = loadAbortRef.current;
-    if (!controller) {
-      return;
-    }
-
-    metadataPumpActiveRef.current = true;
-
-    try {
-      while (!controller.signal.aborted) {
-        const batch = takeMetadataBatch();
-        if (batch.length === 0) {
-          return;
-        }
-
-        batch.forEach((title) => {
-          metadataInflightRef.current.add(title);
-        });
-
-        try {
-          const nextMetadata = await fetchSongMetadataBatch({
-            songInfoBaseUrl: songInfoUrl,
-            titles: batch,
-            concurrency: 4,
-            signal: controller.signal,
-          });
-
-          if (controller.signal.aborted) {
-            return;
-          }
-
-          if (nextMetadata.size > 0) {
-            setSongMetadata((current) => {
-              const merged = new Map(current);
-              nextMetadata.forEach((value, key) => {
-                merged.set(key, value);
-              });
-              metadataMapRef.current = merged;
-              return merged;
-            });
-          }
-        } finally {
-          batch.forEach((title) => {
-            metadataInflightRef.current.delete(title);
-          });
-
-          setMetadataProgress((current) => ({
-            ...current,
-            done: Math.min(current.total, current.done + batch.length),
-          }));
-        }
-      }
-    } finally {
-      metadataPumpActiveRef.current = false;
-
-      if (
-        !controller.signal.aborted &&
-        (metadataHighPriorityQueueRef.current.length > 0 ||
-          metadataBackgroundQueueRef.current.length > 0)
-      ) {
-        void pumpMetadataQueue();
-      }
-    }
-  }, [songInfoUrl, takeMetadataBatch]);
-
-  const enqueueMetadataTitles = useCallback(
-    (titles: string[], priority: 'high' | 'background') => {
-      if (titles.length === 0) {
-        return;
-      }
-
-      const nextHigh = metadataHighPriorityQueueRef.current;
-      const nextBackground = metadataBackgroundQueueRef.current;
-      const queued = metadataQueuedRef.current;
-      const inflight = metadataInflightRef.current;
-      const metadata = metadataMapRef.current;
-
-      for (const rawTitle of titles) {
-        const title = rawTitle.trim();
-        if (title.length === 0) {
-          continue;
-        }
-
-        if (metadata.has(normalizeTitleKey(title)) || inflight.has(title) || queued.has(title)) {
-          continue;
-        }
-
-        queued.add(title);
-        if (priority === 'high') {
-          nextHigh.push(title);
-        } else {
-          nextBackground.push(title);
-        }
-      }
-
-      void pumpMetadataQueue();
-    },
-    [pumpMetadataQueue],
-  );
 
   const scoreData = useMemo(
     () => buildScoreRows(scoreRecords, songMetadata),
@@ -382,7 +228,6 @@ function App() {
       loadAbortRef.current?.abort();
       setIsLoading(false);
       setLoadingError(null);
-      setMetadataProgress({ done: 0, total: 0 });
       return;
     }
 
@@ -392,7 +237,6 @@ function App() {
       setPlaylogRecords([]);
       setVersionsResponse([]);
       setSongMetadata(new Map<string, SongInfoResponse>());
-      setMetadataProgress({ done: 0, total: 0 });
       setLoadingError('Scores / Playlogs Explorer는 Song Info와 Record Collector URL이 모두 필요합니다.');
       return;
     }
@@ -400,12 +244,9 @@ function App() {
     loadAbortRef.current?.abort();
     const controller = new AbortController();
     loadAbortRef.current = controller;
-    metadataMapRef.current = new Map();
-    resetMetadataQueue();
 
     setIsLoading(true);
     setLoadingError(null);
-    setMetadataProgress({ done: 0, total: 0 });
     setSongMetadata(new Map<string, SongInfoResponse>());
 
     try {
@@ -415,24 +256,18 @@ function App() {
         controller.signal,
       );
 
-      const uniqueTitles = Array.from(
-        new Set([...payload.ratedScores.map((row) => row.title), ...payload.playlogs.map((row) => row.title)]),
-      );
-
-      setMetadataProgress({ done: 0, total: uniqueTitles.length });
-
       if (controller.signal.aborted) {
         return;
       }
 
       setScoreRecords(payload.ratedScores);
       setPlaylogRecords(payload.playlogs);
+      setSongMetadata(payload.songMetadata);
       setVersionsResponse(
         payload.versions?.versions
           .map((version) => version.version_name)
           .filter((name) => name.length > 0) ?? [],
       );
-      enqueueMetadataTitles(uniqueTitles, 'background');
     } catch (error) {
       if (controller.signal.aborted) {
         return;
@@ -441,13 +276,14 @@ function App() {
       setLoadingError(message);
       setScoreRecords([]);
       setPlaylogRecords([]);
+      setSongMetadata(new Map<string, SongInfoResponse>());
       setVersionsResponse([]);
     } finally {
       if (!controller.signal.aborted) {
         setIsLoading(false);
       }
     }
-  }, [activePage, enqueueMetadataTitles, recordCollectorUrl, resetMetadataQueue, songInfoUrl]);
+  }, [activePage, recordCollectorUrl, songInfoUrl]);
 
   useEffect(() => {
     void loadData();
@@ -752,18 +588,6 @@ function App() {
     ],
   );
 
-  const metadataPriorityTitles = useMemo(
-    () =>
-      (activeTab === 'scores' ? filteredScoreRows : filteredPlaylogRows)
-        .slice(0, METADATA_PREFETCH_ROWS)
-        .map((row) => row.title),
-    [activeTab, filteredPlaylogRows, filteredScoreRows],
-  );
-
-  useEffect(() => {
-    enqueueMetadataTitles(metadataPriorityTitles, 'high');
-  }, [enqueueMetadataTitles, metadataPriorityTitles]);
-
   const handleApplyUrls = () => {
     const nextSongInfoUrl = songInfoUrlDraft.trim();
     const nextRecordUrl = recordCollectorUrlDraft.trim();
@@ -792,7 +616,7 @@ function App() {
     setIsServerModalOpen(true);
   }, [recordCollectorUrl, songInfoUrl]);
 
-  const metadataCoverage = `${metadataProgress.done}/${metadataProgress.total}`;
+  const metadataCoverage = `${songMetadata.size.toLocaleString()}곡`;
   const scoreCountLabel = `${filteredScoreRows.length.toLocaleString()}/${scoreData.length.toLocaleString()}`;
   const playlogCountLabel = `${filteredPlaylogRows.length.toLocaleString()}/${playlogData.length.toLocaleString()}`;
 
@@ -814,7 +638,7 @@ function App() {
                 점수와 플레이로그를 합쳐서 오래된 곡, 높은 점수 곡, 재도전 우선순위를 자유롭게 정렬/필터링할 수 있는 분석 대시보드입니다.
               </p>
               <span className="meta-note">
-                메타데이터 로딩: {metadataCoverage}
+                메타데이터: {metadataCoverage}
                 {isLoading ? ' (로딩 중...)' : ''}
               </span>
             </>
