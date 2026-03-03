@@ -31,7 +31,6 @@ pub struct ParsedPlayRecord {
     pub level: Option<String>,
     pub achievement_percent: Option<f32>,
     pub achievement_new_record: bool,
-    pub first_play: bool,
     pub score_rank: Option<ScoreRank>,
     pub fc: Option<FcStatus>,
     pub sync: Option<SyncStatus>,

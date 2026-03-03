@@ -375,7 +375,6 @@ pub(crate) async fn mai_recent(ctx: Context<'_>) -> Result<(), Error> {
             rating_points,
             achievement_percent: record.achievement_x10000.map(|x| x as f64 / 10000.0),
             achievement_new_record: record.achievement_new_record.unwrap_or(0) != 0,
-            first_play: record.first_play.unwrap_or(0) != 0,
             rank: record.score_rank,
         });
     }
@@ -443,15 +442,10 @@ pub(crate) async fn mai_today(ctx: Context<'_>) -> Result<(), Error> {
         .filter_map(|p| p.credit_play_count)
         .collect::<std::collections::HashSet<_>>()
         .len() as i64;
-    let first_plays = plays
-        .iter()
-        .filter(|p| p.first_play.unwrap_or(0) != 0)
-        .count() as i64;
-    let new_record_flags = plays
+    let new_records = plays
         .iter()
         .filter(|p| p.achievement_new_record.unwrap_or(0) != 0)
         .count() as i64;
-    let new_records_true = (new_record_flags - first_plays).max(0);
 
     let start = format!("{} 04:00", today_str);
     let end = format!(
@@ -469,8 +463,7 @@ pub(crate) async fn mai_today(ctx: Context<'_>) -> Result<(), Error> {
         &end,
         credits,
         tracks,
-        new_records_true,
-        first_plays,
+        new_records,
     );
 
     ctx.send(CreateReply::default().embed(embed)).await?;
@@ -567,7 +560,6 @@ pub(crate) async fn mai_today_detail(
             achievement_percent: play.achievement_x10000.map(|x| x as f64 / 10000.0),
             rating_points,
             achievement_new_record: play.achievement_new_record.unwrap_or(0) != 0,
-            first_play: play.first_play.unwrap_or(0) != 0,
         });
     }
 

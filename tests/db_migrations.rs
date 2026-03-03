@@ -18,5 +18,15 @@ WHERE type = 'table' AND name IN ('scores', 'playlogs', 'app_state')
     .await?;
     assert_eq!(count, 3);
 
+    let first_play_column = sqlx::query_scalar::<_, Option<String>>(
+        r#"
+SELECT name FROM pragma_table_info('playlogs')
+WHERE name = 'first_play'
+"#,
+    )
+    .fetch_one(&pool)
+    .await?;
+    assert_eq!(first_play_column, None);
+
     Ok(())
 }

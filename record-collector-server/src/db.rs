@@ -165,18 +165,17 @@ async fn insert_playlog(
     let achievement_x10000 = percent_to_x10000(entry.achievement_percent);
 
     let achievement_new_record = i64::from(u8::from(entry.achievement_new_record));
-    let first_play = i64::from(u8::from(entry.first_play));
     sqlx::query(
         r#"
 	INSERT INTO playlogs (
 	  played_at_unixtime,
 	  played_at, track, credit_play_count,
 	  title, chart_type, diff_category,
-	  achievement_x10000, achievement_new_record, first_play,
+	  achievement_x10000, achievement_new_record,
 	  score_rank, fc, sync,
 	  dx_score, dx_score_max
 	)
-	VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15)
+	VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)
 	ON CONFLICT(played_at_unixtime) DO NOTHING
 	"#,
     )
@@ -189,7 +188,6 @@ async fn insert_playlog(
     .bind(entry.diff_category.map(|d| d.as_str().to_string()))
     .bind(achievement_x10000)
     .bind(achievement_new_record)
-    .bind(first_play)
     .bind(entry.score_rank.map(|r| r.as_str()))
     .bind(entry.fc.map(|v| v.as_str()))
     .bind(entry.sync.map(|v| v.as_str()))

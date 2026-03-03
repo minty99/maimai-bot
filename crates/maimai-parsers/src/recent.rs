@@ -133,7 +133,6 @@ pub fn parse_recent_html(html: &str) -> eyre::Result<Vec<ParsedPlayRecord>> {
             level,
             achievement_percent,
             achievement_new_record,
-            first_play: false,
             score_rank,
             fc,
             sync,

@@ -51,7 +51,6 @@ pub(crate) struct RecentRecordView {
     pub(crate) rating_points: Option<u32>,
     pub(crate) achievement_percent: Option<f64>,
     pub(crate) achievement_new_record: bool,
-    pub(crate) first_play: bool,
     pub(crate) rank: Option<ScoreRank>,
 }
 
@@ -62,7 +61,6 @@ pub(crate) struct TodayDetailRowView {
     pub(crate) achievement_percent: Option<f64>,
     pub(crate) rating_points: Option<u32>,
     pub(crate) achievement_new_record: bool,
-    pub(crate) first_play: bool,
 }
 
 pub(crate) fn format_level_with_internal(level: &str, internal_level: Option<f32>) -> String {
@@ -132,9 +130,7 @@ pub(crate) fn build_mai_recent_embeds(
             "**{}**\n[{}] {diff} {level} — {achv} • {rank}{rating}",
             record.title, record.chart_type
         );
-        if record.first_play {
-            desc.push_str("\n[FIRST PLAY]");
-        } else if record.achievement_new_record {
+        if record.achievement_new_record {
             desc.push_str("\n[NEW RECORD]");
         }
 
@@ -155,15 +151,13 @@ pub(crate) fn build_mai_today_embed(
     credits: i64,
     tracks: i64,
     new_records: i64,
-    first_plays: i64,
 ) -> CreateEmbed {
     let mut e = embed_base(&format!("{}'s today", display_name));
     e = e
         .field("Window", format!("{} ~ {}", start, end), false)
         .field("Credits", credits.to_string(), true)
         .field("Tracks", tracks.to_string(), true)
-        .field("New records", new_records.to_string(), true)
-        .field("First plays", first_plays.to_string(), true);
+        .field("New records", new_records.to_string(), true);
     e
 }
 
@@ -183,9 +177,7 @@ pub(crate) fn build_mai_today_detail_embed(
         if let Some(pt) = row.rating_points {
             line.push_str(&format!(" • {pt}pt"));
         }
-        if row.first_play {
-            line.push_str(" [FIRST PLAY]");
-        } else if row.achievement_new_record {
+        if row.achievement_new_record {
             line.push_str(" [NEW RECORD]");
         }
         line.push('\n');

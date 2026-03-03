@@ -15,7 +15,6 @@ use crate::tasks::sync_shared::{
     fetch_player_data_logged_in, fetch_recent_entries_logged_in, persist_player_snapshot,
     to_app_config,
 };
-use models::{ParsedPlayRecord, SongTitle};
 
 pub(crate) fn start_background_polling(app_state: AppState) {
     tokio::spawn(async move {
@@ -89,14 +88,7 @@ async fn poll_and_sync_if_needed(app_state: &AppState) -> Result<bool> {
         .await
         .wrap_err("fetch recent")?;
 
-    let mut entries =
-        annotate_recent_entries_with_play_count(entries, player_data.total_play_count);
-
-    if stored_total.is_some() {
-        annotate_first_play_flags(&app_state.db_pool, &mut entries)
-            .await
-            .wrap_err("classify first plays")?;
-    }
+    let entries = annotate_recent_entries_with_play_count(entries, player_data.total_play_count);
 
     upsert_playlogs(&app_state.db_pool, &entries)
         .await
@@ -117,45 +109,4 @@ async fn poll_and_sync_if_needed(app_state: &AppState) -> Result<bool> {
         debug!("No stored total play count; seeded DB without triggering notification");
         Ok(false)
     }
-}
-
-async fn annotate_first_play_flags(
-    pool: &sqlx::SqlitePool,
-    entries: &mut [ParsedPlayRecord],
-) -> Result<()> {
-    for entry in entries {
-        if !entry.achievement_new_record {
-            continue;
-        }
-        if SongTitle::parse(&entry.title).is_ambiguous_unqualified() {
-            continue;
-        }
-        let Some(diff_category) = entry.diff_category else {
-            continue;
-        };
-
-        let existing = sqlx::query_scalar::<_, i64>(
-            r#"
-            SELECT 1
-            FROM scores
-            WHERE title = ?1
-              AND chart_type = ?2
-              AND diff_category = ?3
-              AND achievement_x10000 IS NOT NULL
-            LIMIT 1
-            "#,
-        )
-        .bind(&entry.title)
-        .bind(entry.chart_type.as_str())
-        .bind(diff_category.as_str())
-        .fetch_optional(pool)
-        .await
-        .wrap_err("check existing score")?;
-
-        if existing.is_none() {
-            entry.first_play = true;
-        }
-    }
-
-    Ok(())
 }

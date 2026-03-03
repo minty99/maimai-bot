@@ -58,5 +58,4 @@ pub struct PlayRecordApiResponse {
     pub dx_score_max: Option<i32>,
     pub credit_play_count: Option<i32>,
     pub achievement_new_record: Option<i32>,
-    pub first_play: Option<i32>,
 }

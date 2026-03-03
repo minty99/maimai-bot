@@ -27,7 +27,6 @@ async fn insert_playlogs_does_not_overwrite_existing_row() -> eyre::Result<()> {
         level: None,
         achievement_percent: Some(99.0000),
         achievement_new_record: true,
-        first_play: true,
         score_rank: None,
         fc: Some(FcStatus::Fc),
         sync: Some(SyncStatus::Fs),
@@ -48,7 +47,6 @@ async fn insert_playlogs_does_not_overwrite_existing_row() -> eyre::Result<()> {
         level: None,
         achievement_percent: Some(1.0000),
         achievement_new_record: false,
-        first_play: false,
         score_rank: None,
         fc: None,
         sync: None,
@@ -57,15 +55,14 @@ async fn insert_playlogs_does_not_overwrite_existing_row() -> eyre::Result<()> {
     }];
     db::upsert_playlogs(&pool, scraped_at, &entries).await?;
 
-    let (title, credit_play_count, first_play, achievement_new_record, fc, sync): (
+    let (title, credit_play_count, achievement_new_record, fc, sync): (
         String,
         Option<i64>,
-        i64,
         i64,
         Option<String>,
         Option<String>,
     ) = sqlx::query_as(
-        "SELECT title, credit_play_count, first_play, achievement_new_record, fc, sync FROM playlogs WHERE played_at_unixtime = ?",
+        "SELECT title, credit_play_count, achievement_new_record, fc, sync FROM playlogs WHERE played_at_unixtime = ?",
     )
     .bind(id)
     .fetch_one(&pool)
@@ -73,7 +70,6 @@ async fn insert_playlogs_does_not_overwrite_existing_row() -> eyre::Result<()> {
 
     assert_eq!(title, "Song A");
     assert_eq!(credit_play_count, Some(100));
-    assert_eq!(first_play, 1);
     assert_eq!(achievement_new_record, 1);
     assert_eq!(fc.as_deref(), Some("FC"));
     assert_eq!(sync.as_deref(), Some("FS"));

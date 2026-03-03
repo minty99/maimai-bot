@@ -85,8 +85,7 @@ pub(crate) async fn get_today(
             dx_score,
             dx_score_max,
             credit_play_count,
-            achievement_new_record,
-            first_play
+            achievement_new_record
          FROM playlogs
          WHERE played_at >= ? AND played_at < ?
          ORDER BY played_at_unixtime ASC",

@@ -73,7 +73,6 @@ pub(crate) fn play_record_response_from_record(
         dx_score_max: record.dx_score_max,
         credit_play_count: record.credit_play_count,
         achievement_new_record: record.achievement_new_record,
-        first_play: record.first_play,
     })
 }
 
