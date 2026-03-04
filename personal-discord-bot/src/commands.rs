@@ -1,6 +1,7 @@
 use eyre::{Result, WrapErr};
 use poise::CreateReply;
 use poise::serenity_prelude as serenity;
+use std::collections::BTreeMap;
 use time::{Duration as TimeDuration, OffsetDateTime, UtcOffset};
 
 use crate::BotData;
@@ -35,7 +36,79 @@ pub(crate) async fn mai_score(
     let detailed_scores = match ctx
         .data()
         .record_collector_client
-        .get_song_detail_scores(requested_title)
+        .search_scores(requested_title)
+        .await
+    {
+        Ok(v) => v,
+        Err(e) => {
+            if let Some(api_error) = e.downcast_ref::<crate::client::ApiError>()
+                && api_error.code() == "MAINTENANCE"
+            {
+                ctx.send(
+                    CreateReply::default()
+                        .ephemeral(true)
+                        .embed(embed_maintenance()),
+                )
+                .await?;
+                return Ok(());
+            }
+
+            let msg = e.to_string();
+            if msg.contains("maintenance") {
+                ctx.send(
+                    CreateReply::default()
+                        .ephemeral(true)
+                        .embed(embed_maintenance()),
+                )
+                .await?;
+                return Ok(());
+            }
+            return Err(e.wrap_err("search song scores").into());
+        }
+    };
+
+    let mut unique_songs = BTreeMap::new();
+    for score in &detailed_scores {
+        if !score.title.eq_ignore_ascii_case(requested_title) {
+            continue;
+        }
+        unique_songs
+            .entry((
+                score.title.clone(),
+                score.genre.clone(),
+                score.artist.clone(),
+            ))
+            .or_insert(());
+    }
+
+    if unique_songs.is_empty() {
+        ctx.send(
+            CreateReply::default()
+                .ephemeral(true)
+                .embed(embed_base("No records found").description("No scores for this title.")),
+        )
+        .await?;
+        return Ok(());
+    }
+
+    if unique_songs.len() > 1 {
+        let description = duplicate_song_candidates_description(&unique_songs);
+        ctx.send(
+            CreateReply::default()
+                .ephemeral(true)
+                .embed(embed_base("여러 곡이 검색됐어요").description(description)),
+        )
+        .await?;
+        return Ok(());
+    }
+
+    let (resolved_title, resolved_genre, resolved_artist) =
+        unique_songs.into_keys().next().expect("checked non-empty");
+
+    let detailed_scores = match ctx
+        .data()
+        .record_collector_client
+        .get_song_detail_scores(&resolved_title, &resolved_genre, &resolved_artist)
         .await
     {
         Ok(v) => v,
@@ -48,14 +121,6 @@ pub(crate) async fn mai_score(
                                 .ephemeral(true)
                                 .embed(embed_maintenance()),
                         )
-                        .await?;
-                        return Ok(());
-                    }
-                    "AMBIGUOUS_SONG_TITLE" => {
-                        let description = duplicate_title_error_description(api_error.message());
-                        ctx.send(CreateReply::default().ephemeral(true).embed(
-                            embed_base("정확한 장르 지정이 필요해요").description(description),
-                        ))
                         .await?;
                         return Ok(());
                     }
@@ -98,7 +163,9 @@ pub(crate) async fn mai_score(
         .first()
         .map(|score| score.title.as_str())
         .unwrap_or(requested_title);
-    let mut embed = embed_base(embed_title);
+    let mut embed = embed_base(embed_title)
+        .field("Genre", &resolved_genre, true)
+        .field("Artist", &resolved_artist, false);
     let mut has_rows = false;
     let mut first_image_name = None::<String>;
 
@@ -834,22 +901,18 @@ async fn fetch_song_metadata(
     }
 }
 
-fn duplicate_title_error_description(server_error: &str) -> String {
-    let default_message =
-        "동일 제목 곡이 있어서 장르를 함께 지정해야 합니다.\n형식: `<title> [[genre]]`".to_string();
-
-    let Some((_, candidates)) = server_error.split_once("Candidates:") else {
-        return default_message;
-    };
-
-    let candidates = candidates.trim();
-    if candidates.is_empty() {
-        return default_message;
-    }
+fn duplicate_song_candidates_description(
+    candidates: &BTreeMap<(String, String, String), ()>,
+) -> String {
+    let lines = candidates
+        .keys()
+        .take(8)
+        .map(|(title, genre, artist)| format!("`{title}` / `{genre}` / `{artist}`"))
+        .collect::<Vec<_>>();
 
     format!(
-        "동일 제목 곡이 있어서 장르를 함께 지정해야 합니다.\n가능한 후보: {}\n형식: `<title> [[genre]]`",
-        candidates
+        "검색어와 정확히 일치하는 곡이 여러 개 있습니다.\n후보:\n{}",
+        lines.join("\n")
     )
 }
 
