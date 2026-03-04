@@ -61,6 +61,7 @@ import type {
   ScoreRow,
   ScoreRank,
   SongInfoResponse,
+  SongVersionResponse,
   SyncStatus,
 } from './types';
 
@@ -177,6 +178,7 @@ function App() {
     () => new Map(),
   );
   const [versionsResponse, setVersionsResponse] = useState<string[]>([]);
+  const [pickerVersionOptions, setPickerVersionOptions] = useState<SongVersionResponse[]>([]);
 
   const [query, setQuery] = useState('');
   const [chartFilter, setChartFilter] = useState<ChartType[]>(() => {
@@ -291,19 +293,13 @@ function App() {
   }, [scoreData, versionsResponse]);
 
   const loadData = useCallback(async () => {
-    if (activePage === 'picker' || activePage === 'settings') {
-      loadAbortRef.current?.abort();
-      setIsLoading(false);
-      setLoadingError(null);
-      return;
-    }
-
     if (!songInfoUrl.trim() || !recordCollectorUrl.trim()) {
       loadedExplorerKeyRef.current = null;
       setIsLoading(false);
       setScoreRecords([]);
       setPlaylogRecords([]);
       setVersionsResponse([]);
+      setPickerVersionOptions([]);
       setSongMetadata(new Map<string, SongInfoResponse>());
       setLoadingError('Scores와 Playlogs 페이지는 Song Info와 Record Collector URL이 모두 필요합니다.');
       return;
@@ -343,6 +339,7 @@ function App() {
           .map((version) => version.version_name)
           .filter((name) => name.length > 0) ?? [],
       );
+      setPickerVersionOptions(payload.versions?.versions ?? []);
       loadedExplorerKeyRef.current = requestKey;
     } catch (error) {
       if (controller.signal.aborted) {
@@ -355,12 +352,13 @@ function App() {
       setPlaylogRecords([]);
       setSongMetadata(new Map<string, SongInfoResponse>());
       setVersionsResponse([]);
+      setPickerVersionOptions([]);
     } finally {
       if (!controller.signal.aborted) {
         setIsLoading(false);
       }
     }
-  }, [activePage, recordCollectorUrl, songInfoUrl]);
+  }, [recordCollectorUrl, songInfoUrl]);
 
   useEffect(() => {
     void loadData();
@@ -842,7 +840,9 @@ function App() {
           <RandomPickerPage
             sidebarTopContent={desktopSidebarTopContent}
             songInfoUrl={songInfoUrl}
-            recordCollectorUrl={recordCollectorUrl}
+            scoreRecords={scoreRecords}
+            songMetadata={songMetadata}
+            versionOptions={pickerVersionOptions}
           />
         ) : (
           <SettingsPage

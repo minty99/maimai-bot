@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent, type ReactNode } from 'react';
 
-import { fetchRandomPickerSong, fetchSongVersions } from '../api';
 import {
   CHART_TYPES,
   DIFFICULTIES,
@@ -21,7 +20,15 @@ import {
   type StoredRandomPickerFilters,
 } from '../app/storage';
 import { formatNumber, formatPercent, formatVersionLabel } from '../app/utils';
-import type { ChartType, DifficultyCategory, RandomPickerSong, SongVersionResponse } from '../types';
+import { normalizeTitleKey } from '../api';
+import type {
+  ChartType,
+  DifficultyCategory,
+  RandomPickerSong,
+  ScoreApiResponse,
+  SongInfoResponse,
+  SongVersionResponse,
+} from '../types';
 import { getChartTypeToneClass } from './ChartTypeLabel';
 import { DifficultyLabel, getDifficultyToneClass } from './DifficultyLabel';
 import { Jacket } from './Jacket';
@@ -29,7 +36,9 @@ import { Jacket } from './Jacket';
 interface RandomPickerPageProps {
   sidebarTopContent?: ReactNode;
   songInfoUrl: string;
-  recordCollectorUrl: string;
+  scoreRecords: ScoreApiResponse[];
+  songMetadata: Map<string, SongInfoResponse>;
+  versionOptions: SongVersionResponse[];
 }
 
 type ModalKind = 'filters' | 'versions' | null;
@@ -127,7 +136,7 @@ function buildCompactVersionSummary(includeVersionIndices: number[] | null): str
 }
 
 function getPickerResultMessage(error: Error): { empty: boolean; message: string } {
-  if (error.message.includes('HTTP 404')) {
+  if (error.message.includes('조건에 맞는 곡이 없습니다')) {
     return {
       empty: true,
       message: '조건에 맞는 곡이 없습니다. 범위를 넓히거나 필터를 완화해보세요.',
@@ -300,7 +309,9 @@ function FiltersMenu({
 export function RandomPickerPage({
   sidebarTopContent,
   songInfoUrl,
-  recordCollectorUrl,
+  scoreRecords,
+  songMetadata,
+  versionOptions,
 }: RandomPickerPageProps) {
   const storedFilters = useMemo(
     () => readStoredJson<StoredRandomPickerFilters>(RANDOM_PICKER_FILTERS_STORAGE_KEY),
@@ -339,9 +350,6 @@ export function RandomPickerPage({
     }
     return coerceNumberArray(storedFilters.includeVersionIndices).sort((left, right) => left - right);
   });
-  const [versionOptions, setVersionOptions] = useState<SongVersionResponse[]>([]);
-  const [isLoadingVersions, setIsLoadingVersions] = useState(false);
-  const [versionError, setVersionError] = useState<string | null>(null);
   const [activeModal, setActiveModal] = useState<ModalKind>(null);
   const [pickedSong, setPickedSong] = useState<RandomPickerSong | null>(null);
   const [pickerError, setPickerError] = useState<string | null>(null);
@@ -349,7 +357,6 @@ export function RandomPickerPage({
   const [isPicking, setIsPicking] = useState(false);
 
   const pickAbortRef = useRef<AbortController | null>(null);
-  const versionAbortRef = useRef<AbortController | null>(null);
 
   useEffect(() => {
     const payload: StoredRandomPickerFilters = {
@@ -362,52 +369,16 @@ export function RandomPickerPage({
     localStorage.setItem(RANDOM_PICKER_FILTERS_STORAGE_KEY, JSON.stringify(payload));
   }, [chartTypes, difficultyIndices, includeVersionIndices, rangeFrom, rangeTo]);
 
-  useEffect(() => {
-    versionAbortRef.current?.abort();
-
-    if (!songInfoUrl.trim()) {
-      setVersionOptions([]);
-      setVersionError('Song Info URL을 먼저 입력해야 버전 필터를 불러올 수 있습니다.');
-      setIsLoadingVersions(false);
-      return;
-    }
-
-    const controller = new AbortController();
-    versionAbortRef.current = controller;
-    setIsLoadingVersions(true);
-    setVersionError(null);
-
-    void fetchSongVersions(songInfoUrl, controller.signal)
-      .then((versions) => {
-        if (controller.signal.aborted) {
-          return;
-        }
-        const sortedVersions = [...versions].sort((left, right) => {
-          const leftOrder = VERSION_ORDER_MAP.get(left.version_name) ?? Number.MAX_SAFE_INTEGER;
-          const rightOrder = VERSION_ORDER_MAP.get(right.version_name) ?? Number.MAX_SAFE_INTEGER;
-          if (leftOrder !== rightOrder) {
-            return leftOrder - rightOrder;
-          }
-          return left.version_index - right.version_index;
-        });
-        setVersionOptions(sortedVersions);
-      })
-      .catch((error) => {
-        if (controller.signal.aborted) {
-          return;
-        }
-        const message = error instanceof Error ? error.message : String(error);
-        setVersionOptions([]);
-        setVersionError(`버전 목록을 불러오지 못했습니다: ${message}`);
-      })
-      .finally(() => {
-        if (!controller.signal.aborted) {
-          setIsLoadingVersions(false);
-        }
-      });
-
-    return () => controller.abort();
-  }, [songInfoUrl]);
+  const sortedVersionOptions = useMemo(() => {
+    return [...versionOptions].sort((left, right) => {
+      const leftOrder = VERSION_ORDER_MAP.get(left.version_name) ?? Number.MAX_SAFE_INTEGER;
+      const rightOrder = VERSION_ORDER_MAP.get(right.version_name) ?? Number.MAX_SAFE_INTEGER;
+      if (leftOrder !== rightOrder) {
+        return leftOrder - rightOrder;
+      }
+      return left.version_index - right.version_index;
+    });
+  }, [versionOptions]);
 
   useEffect(() => {
     if (includeVersionIndices === null || versionOptions.length === 0) {
@@ -423,9 +394,19 @@ export function RandomPickerPage({
   useEffect(() => {
     return () => {
       pickAbortRef.current?.abort();
-      versionAbortRef.current?.abort();
     };
   }, []);
+
+  const scoreMap = useMemo(() => {
+    const next = new Map<string, ScoreApiResponse>();
+    for (const score of scoreRecords) {
+      next.set(
+        `${normalizeTitleKey(score.title)}::${score.chart_type}::${score.diff_category}`,
+        score,
+      );
+    }
+    return next;
+  }, [scoreRecords]);
 
   const syncDrafts = useCallback((nextFrom: number, nextTo: number) => {
     setFromDraft(nextFrom.toFixed(1));
@@ -511,19 +492,77 @@ export function RandomPickerPage({
     setPickerEmpty(false);
 
     try {
-      const song = await fetchRandomPickerSong({
-        songInfoBaseUrl: songInfoUrl,
-        recordCollectorBaseUrl: recordCollectorUrl,
-        minLevel: rangeFrom,
-        maxLevel: rangeTo,
-        chartTypes,
-        difficultyIndices,
-        includeVersionIndices,
-        signal: controller.signal,
-      });
+      if (!songInfoUrl.trim()) {
+        throw new Error('Song Info URL이 비어 있습니다.');
+      }
+
+      const chartTypeSet = new Set(chartTypes);
+      const difficultySet = new Set(difficultyIndices.map((index) => DIFFICULTY_INDEX_LABELS[index]));
+      const versionSet = includeVersionIndices === null ? null : new Set(includeVersionIndices);
+
+      const candidates: RandomPickerSong[] = [];
+      const levelPoolSet = new Set<string>();
+
+      for (const song of songMetadata.values()) {
+        for (const sheet of song.sheets) {
+          if (sheet.internal_level === null || sheet.internal_level < rangeFrom || sheet.internal_level > rangeTo) {
+            continue;
+          }
+
+          const key = `${normalizeTitleKey(song.title)}::${sheet.chart_type}::${sheet.difficulty}`;
+          levelPoolSet.add(key);
+
+          if (!chartTypeSet.has(sheet.chart_type)) {
+            continue;
+          }
+          if (!difficultySet.has(sheet.difficulty)) {
+            continue;
+          }
+
+          const versionIndex = sortedVersionOptions.find(
+            (option) => option.version_name === (sheet.version ?? null),
+          )?.version_index;
+          if (versionSet && (versionIndex === undefined || !versionSet.has(versionIndex))) {
+            continue;
+          }
+
+          const score = scoreMap.get(key);
+          candidates.push({
+            title: song.title,
+            version: sheet.version,
+            imageName: song.image_name,
+            chartType: sheet.chart_type,
+            difficulty: sheet.difficulty,
+            level: sheet.level,
+            internalLevel: sheet.internal_level,
+            userLevel: sheet.user_level,
+            achievementX10000: score?.achievement_x10000 ?? null,
+            rank: score?.rank ?? null,
+            fc: score?.fc ?? null,
+            sync: score?.sync ?? null,
+            dxScore: score?.dx_score ?? null,
+            dxScoreMax: score?.dx_score_max ?? null,
+            lastPlayedAt: score?.last_played_at ?? null,
+            playCount: typeof score?.play_count === 'number' ? Math.trunc(score.play_count) : null,
+            levelSongCount: levelPoolSet.size,
+            filteredSongCount: null,
+          });
+        }
+      }
+
+      if (candidates.length === 0) {
+        throw new Error('조건에 맞는 곡이 없습니다');
+      }
+
+      const selected = candidates[Math.floor(Math.random() * candidates.length)];
+      const withStats: RandomPickerSong = {
+        ...selected,
+        filteredSongCount: candidates.length,
+        levelSongCount: levelPoolSet.size,
+      };
 
       if (!controller.signal.aborted) {
-        setPickedSong(song);
+        setPickedSong(withStats);
       }
     } catch (error) {
       if (controller.signal.aborted) {
@@ -544,8 +583,10 @@ export function RandomPickerPage({
     includeVersionIndices,
     rangeFrom,
     rangeTo,
-    recordCollectorUrl,
+    scoreMap,
     songInfoUrl,
+    songMetadata,
+    sortedVersionOptions,
   ]);
 
   const chartSummary = useMemo(() => buildChartSummary(chartTypes), [chartTypes]);
@@ -554,8 +595,8 @@ export function RandomPickerPage({
     [difficultyIndices],
   );
   const versionSummary = useMemo(
-    () => buildVersionSummary(includeVersionIndices, versionOptions),
-    [includeVersionIndices, versionOptions],
+    () => buildVersionSummary(includeVersionIndices, sortedVersionOptions),
+    [includeVersionIndices, sortedVersionOptions],
   );
   const compactVersionSummary = useMemo(
     () => buildCompactVersionSummary(includeVersionIndices),
@@ -563,19 +604,19 @@ export function RandomPickerPage({
   );
   const versionModalOptions = useMemo<FilterOption[]>(
     () =>
-      versionOptions.map((option) => ({
+      sortedVersionOptions.map((option) => ({
         value: String(option.version_index),
         label: formatVersionLabel(option.version_name),
         subtitle: `${option.song_count.toLocaleString()} songs`,
       })),
-    [versionOptions],
+    [sortedVersionOptions],
   );
   const selectedVersionValues = useMemo(() => {
     if (includeVersionIndices === null) {
-      return versionOptions.map((option) => String(option.version_index));
+      return sortedVersionOptions.map((option) => String(option.version_index));
     }
     return includeVersionIndices.map(String);
-  }, [includeVersionIndices, versionOptions]);
+  }, [includeVersionIndices, sortedVersionOptions]);
 
   const renderStateCard = useCallback((title: string, tone?: 'error') => {
     const stateClassName = tone === 'error'
@@ -706,8 +747,8 @@ export function RandomPickerPage({
           chartTypes={chartTypes}
           difficultyIndices={difficultyIndices}
           versionSummary={versionSummary}
-          isVersionLoading={isLoadingVersions}
-          versionError={versionError}
+          isVersionLoading={false}
+          versionError={null}
           onToggleChartType={toggleChartType}
           onToggleDifficulty={toggleDifficulty}
           onOpenVersions={() => setActiveModal('versions')}
@@ -766,7 +807,7 @@ export function RandomPickerPage({
              <span className="toolbar-pill">LV {rangeFrom.toFixed(1)} - {rangeTo.toFixed(1)}</span>
               <span className="toolbar-pill">{chartSummary}</span>
               <span className="toolbar-pill">{difficultySummaryNode}</span>
-              <span className="toolbar-pill">{isLoadingVersions ? 'VER ...' : compactVersionSummary}</span>
+              <span className="toolbar-pill">{compactVersionSummary}</span>
             </div>
 
             <div className="picker-range-row">
@@ -806,7 +847,6 @@ export function RandomPickerPage({
               </div>
             </div>
 
-            {versionError ? <p className="muted">{versionError}</p> : null}
           </section>
 
           <button type="button" className="picker-random-button" onClick={() => void handlePickRandom()}>
