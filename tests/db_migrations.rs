@@ -48,5 +48,25 @@ WHERE name = 'credit_id'
     .await?;
     assert_eq!(credit_id_column.as_deref(), Some("credit_id"));
 
+    let genre_column = sqlx::query_scalar::<_, Option<String>>(
+        r#"
+SELECT name FROM pragma_table_info('scores')
+WHERE name = 'genre'
+"#,
+    )
+    .fetch_one(&pool)
+    .await?;
+    assert_eq!(genre_column.as_deref(), Some("genre"));
+
+    let artist_column = sqlx::query_scalar::<_, Option<String>>(
+        r#"
+SELECT name FROM pragma_table_info('scores')
+WHERE name = 'artist'
+"#,
+    )
+    .fetch_one(&pool)
+    .await?;
+    assert_eq!(artist_column.as_deref(), Some("artist"));
+
     Ok(())
 }

@@ -134,12 +134,12 @@ async fn upsert_score(
     sqlx::query(
         r#"
 		INSERT INTO scores (
-		  title, chart_type, diff_category,
+		  title, genre, artist, chart_type, diff_category,
 		  achievement_x10000, rank, fc, sync,
 		  dx_score, dx_score_max, last_played_at, play_count
 		)
-		VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)
-		ON CONFLICT(title, chart_type, diff_category) DO UPDATE SET
+		VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)
+		ON CONFLICT(title, chart_type, diff_category, genre, artist) DO UPDATE SET
 		  achievement_x10000 = excluded.achievement_x10000,
 		  rank = excluded.rank,
 		  fc = excluded.fc,
@@ -151,6 +151,8 @@ async fn upsert_score(
 		"#,
     )
     .bind(&entry.title)
+    .bind(&entry.genre)
+    .bind(&entry.artist)
     .bind(chart_type_str(entry.chart_type))
     .bind(entry.diff_category.as_str())
     .bind(achievement_x10000)
@@ -180,12 +182,12 @@ async fn insert_playlog(
 	INSERT INTO playlogs (
 	  played_at_unixtime,
 	  played_at, track, credit_id,
-	  title, chart_type, diff_category,
+	  title, genre, artist, chart_type, diff_category,
 	  achievement_x10000, achievement_new_record,
 	  score_rank, fc, sync,
 	  dx_score, dx_score_max
 	)
-	VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)
+	VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16)
 	ON CONFLICT(played_at_unixtime) DO NOTHING
 	"#,
     )
@@ -194,6 +196,8 @@ async fn insert_playlog(
     .bind(entry.track.map(i64::from))
     .bind(entry.credit_id.map(i64::from))
     .bind(&entry.title)
+    .bind(entry.genre.as_deref())
+    .bind(entry.artist.as_deref())
     .bind(chart_type_str(entry.chart_type))
     .bind(entry.diff_category.map(|d| d.as_str().to_string()))
     .bind(achievement_x10000)
@@ -232,6 +236,8 @@ mod tests {
 
         let first = ParsedScoreEntry {
             title: "Song A".to_string(),
+            genre: "Genre A".to_string(),
+            artist: "Artist A".to_string(),
             chart_type: ChartType::Dx,
             diff_category: DifficultyCategory::Master,
             level: "12+".to_string(),
@@ -249,6 +255,8 @@ mod tests {
 
         let second = ParsedScoreEntry {
             title: "Song A".to_string(),
+            genre: "Genre A".to_string(),
+            artist: "Artist A".to_string(),
             chart_type: ChartType::Dx,
             diff_category: DifficultyCategory::Master,
             level: "12+".to_string(),
@@ -275,7 +283,7 @@ mod tests {
             r#"
                 SELECT achievement_x10000, dx_score, dx_score_max, last_played_at, play_count
                 FROM scores
-                WHERE title = 'Song A' AND chart_type = 'DX' AND diff_category = 'MASTER'
+                WHERE title = 'Song A' AND genre = 'Genre A' AND artist = 'Artist A' AND chart_type = 'DX' AND diff_category = 'MASTER'
                 "#,
         )
         .fetch_one(&pool)
@@ -297,6 +305,8 @@ mod tests {
 
         let initial = ParsedScoreEntry {
             title: "Song A".to_string(),
+            genre: "Genre A".to_string(),
+            artist: "Artist A".to_string(),
             chart_type: ChartType::Dx,
             diff_category: DifficultyCategory::Master,
             level: "12+".to_string(),
@@ -314,6 +324,8 @@ mod tests {
 
         let replacement = ParsedScoreEntry {
             title: "Song B".to_string(),
+            genre: "Genre B".to_string(),
+            artist: "Artist B".to_string(),
             chart_type: ChartType::Std,
             diff_category: DifficultyCategory::Expert,
             level: "11+".to_string(),

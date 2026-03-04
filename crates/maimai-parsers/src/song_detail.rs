@@ -10,6 +10,7 @@ pub fn parse_song_detail_html(html: &str) -> eyre::Result<ParsedSongDetail> {
 
     let title_selector = Selector::parse("div.basic_block div.f_15.break").unwrap();
     let genre_selector = Selector::parse("div.basic_block div.f_12.blue").unwrap();
+    let artist_selector = Selector::parse("div.basic_block div.m_5.f_12.break").unwrap();
     let page_kind_selector = Selector::parse("div.basic_block img").unwrap();
     let detail_selector =
         Selector::parse(r#"div[id][class*="music_"][class*="_score_back"]"#).unwrap();
@@ -37,6 +38,13 @@ pub fn parse_song_detail_html(html: &str) -> eyre::Result<ParsedSongDetail> {
                 .collect::<String>()
         })
         .filter(|value| !value.is_empty());
+
+    let artist = document
+        .select(&artist_selector)
+        .next()
+        .map(|e| collect_text(&e).trim().to_string())
+        .filter(|value| !value.is_empty())
+        .ok_or_else(|| eyre::eyre!("missing artist (div.m_5.f_12.break)"))?;
 
     let page_chart_type = document
         .select(&page_kind_selector)
@@ -146,6 +154,7 @@ pub fn parse_song_detail_html(html: &str) -> eyre::Result<ParsedSongDetail> {
     Ok(ParsedSongDetail {
         title,
         genre,
+        artist,
         chart_type: page_chart_type,
         difficulties,
     })

@@ -1,6 +1,5 @@
 use tracing::{info, warn};
 
-use crate::tasks::utils::detail_hydration::IncompleteBackfillReport;
 use crate::tasks::utils::recent::RecentSyncOutcome;
 use crate::tasks::utils::scores::SeedScoresOutcome;
 
@@ -8,7 +7,7 @@ use crate::tasks::utils::scores::SeedScoresOutcome;
 pub(crate) struct SyncCycleReport {
     pub(crate) skipped_for_maintenance: bool,
     pub(crate) seeded_scores: SeedScoresOutcome,
-    pub(crate) incomplete_backfill: IncompleteBackfillReport,
+    pub(crate) playlog_metadata_backfilled: usize,
     pub(crate) recent_outcome: Option<RecentSyncOutcome>,
 }
 

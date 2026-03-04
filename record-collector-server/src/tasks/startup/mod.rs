@@ -31,26 +31,22 @@ pub(crate) async fn startup_sync(
     let mut client = build_client(config)?;
     ensure_session(&mut client).await?;
 
-    let (seeded_scores, incomplete_backfill) = prepare_scores_state(db_pool, &mut client).await?;
+    let (seeded_scores, playlog_metadata_backfilled) =
+        prepare_scores_state(db_pool, &mut client).await?;
     let player_data = fetch_player_data_logged_in(&mut client).await?;
     let recent_outcome =
         sync_recent_if_play_count_changed(db_pool, &mut client, &player_data).await;
 
     log_recent_outcome("startup", &recent_outcome);
     info!(
-        "Startup sync complete: seeded={} rows_written={} incomplete_checked={} incomplete_attempted={} incomplete_updated={} incomplete_failed={}",
-        seeded_scores.seeded,
-        seeded_scores.rows_written,
-        incomplete_backfill.checked,
-        incomplete_backfill.attempted,
-        incomplete_backfill.updated_rows,
-        incomplete_backfill.failed_targets.len()
+        "Startup sync complete: seeded={} rows_written={} playlog_metadata_backfilled={}",
+        seeded_scores.seeded, seeded_scores.rows_written, playlog_metadata_backfilled
     );
 
     Ok(StartupSyncReport {
         skipped_for_maintenance: false,
         seeded_scores,
-        incomplete_backfill,
+        playlog_metadata_backfilled,
         recent_outcome: Some(recent_outcome),
     })
 }

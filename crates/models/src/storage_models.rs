@@ -3,6 +3,8 @@ use serde::{Deserialize, Serialize};
 #[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
 pub struct StoredScoreEntry {
     pub title: String,
+    pub genre: String,
+    pub artist: String,
     pub chart_type: String,
     pub diff_category: String,
     pub achievement_x10000: Option<i64>,
@@ -21,6 +23,8 @@ pub struct StoredPlayRecord {
     pub played_at: Option<String>,
     pub track: Option<i32>,
     pub title: String,
+    pub genre: Option<String>,
+    pub artist: Option<String>,
     pub chart_type: String,
     pub diff_category: Option<String>,
     pub achievement_x10000: Option<i64>,

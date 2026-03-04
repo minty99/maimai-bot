@@ -47,14 +47,11 @@ async fn main() -> eyre::Result<()> {
     // (useful for testing with invalid credentials)
     match tasks::startup::startup_sync(&db_pool, &config).await {
         Ok(report) => tracing::info!(
-            "Startup sync completed: maintenance_skip={} seeded={} seeded_rows={} incomplete_checked={} incomplete_attempted={} incomplete_updated={} incomplete_failed={} recent_present={}",
+            "Startup sync completed: maintenance_skip={} seeded={} seeded_rows={} playlog_metadata_backfilled={} recent_present={}",
             report.skipped_for_maintenance,
             report.seeded_scores.seeded,
             report.seeded_scores.rows_written,
-            report.incomplete_backfill.checked,
-            report.incomplete_backfill.attempted,
-            report.incomplete_backfill.updated_rows,
-            report.incomplete_backfill.failed_targets.len(),
+            report.playlog_metadata_backfilled,
             report.recent_outcome.is_some()
         ),
         Err(e) => tracing::warn!("Startup sync failed (server will still start): {}", e),

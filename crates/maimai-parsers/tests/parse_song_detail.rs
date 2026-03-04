@@ -21,6 +21,7 @@ fn parse_song_detail_example1() {
             .as_deref()
             .is_some_and(|value| !value.trim().is_empty())
     );
+    assert!(!parsed.artist.trim().is_empty());
     assert_eq!(format!("{:?}", parsed.chart_type), "Dx");
     assert_eq!(
         parsed
@@ -59,6 +60,7 @@ fn parse_song_detail_example1() {
         Some("2025/10/23 00:15")
     );
     assert_eq!(parsed.difficulties[0].play_count, Some(1));
+    assert!(parsed.artist.contains("鳳 ここな"));
 
     println!(
         "title={:?} diffs={}",
@@ -93,6 +95,7 @@ fn parse_song_detail_example2() {
             .as_deref()
             .is_some_and(|value| !value.trim().is_empty())
     );
+    assert!(!parsed.artist.trim().is_empty());
     assert_eq!(format!("{:?}", parsed.chart_type), "Std");
     assert_eq!(
         parsed
@@ -136,6 +139,7 @@ fn parse_song_detail_example2() {
         Some("2025/09/17 22:46")
     );
     assert_eq!(parsed.difficulties[0].play_count, Some(1));
+    assert_eq!(parsed.artist, "40mP");
 
     println!(
         "title={:?} diffs={}",

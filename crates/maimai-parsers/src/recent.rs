@@ -73,12 +73,18 @@ pub fn parse_recent_html(html: &str) -> eyre::Result<Vec<ParsedPlayRecord>> {
         let title_raw = collect_text(&song_block);
         let title = strip_level_from_title(&title_raw, level.as_deref().unwrap_or(""));
 
-        let played_at_unixtime = entry
+        let playlog_detail_idx = entry
             .select(&idx_selector)
             .next()
             .and_then(|e| e.value().attr("value"))
-            .and_then(|raw| raw.split(',').next_back())
-            .and_then(|s| s.trim().parse::<i64>().ok());
+            .map(str::trim)
+            .filter(|raw| !raw.is_empty())
+            .map(str::to_string);
+
+        let played_at_unixtime = playlog_detail_idx
+            .as_deref()
+            .and_then(parse_playlog_idx_components)
+            .and_then(|(_, played_at_unixtime)| played_at_unixtime.parse::<i64>().ok());
 
         let achievement_percent = entry
             .select(&achievement_selector)
@@ -124,10 +130,13 @@ pub fn parse_recent_html(html: &str) -> eyre::Result<Vec<ParsedPlayRecord>> {
 
         out.push(ParsedPlayRecord {
             played_at_unixtime,
+            playlog_detail_idx,
             track,
             played_at,
             credit_id: None,
             title,
+            genre: None,
+            artist: None,
             chart_type,
             diff_category,
             level,
@@ -142,6 +151,16 @@ pub fn parse_recent_html(html: &str) -> eyre::Result<Vec<ParsedPlayRecord>> {
     }
 
     Ok(out)
+}
+
+fn parse_playlog_idx_components(raw: &str) -> Option<(&str, &str)> {
+    let mut parts = raw.split(',');
+    let playlog_detail_idx = parts.next()?.trim();
+    let played_at_unixtime = parts.next_back()?.trim();
+    if playlog_detail_idx.is_empty() || played_at_unixtime.is_empty() {
+        return None;
+    }
+    Some((playlog_detail_idx, played_at_unixtime))
 }
 
 fn collect_text(element: &ElementRef<'_>) -> String {

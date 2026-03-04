@@ -11,8 +11,8 @@ pub use game_domain::{
     ChartType, DifficultyCategory, FcStatus, MaimaiVersion, ScoreRank, SyncStatus,
 };
 pub use parser_models::{
-    ParsedPlayRecord, ParsedPlayerProfile, ParsedRatingTargetEntry, ParsedRatingTargets,
-    ParsedScoreEntry, ParsedSongChartDetail, ParsedSongDetail,
+    ParsedPlayRecord, ParsedPlayerProfile, ParsedPlaylogDetail, ParsedRatingTargetEntry,
+    ParsedRatingTargets, ParsedScoreEntry, ParsedSongChartDetail, ParsedSongDetail,
 };
 pub use song_catalog::{
     SongCatalog, SongCatalogChart, SongCatalogSong, SongChartRegion, SongInternalLevelIndex,

@@ -11,6 +11,7 @@ pub(crate) enum ExpectedPage {
     PlayerData,
     Recent,
     ScoresList { diff: u8 },
+    PlaylogDetail { idx: String },
     MusicDetail { idx: String },
 }
 
@@ -79,6 +80,7 @@ fn expected_page_label(expected_page: &ExpectedPage) -> String {
         ExpectedPage::PlayerData => "playerData page".to_string(),
         ExpectedPage::Recent => "recent page".to_string(),
         ExpectedPage::ScoresList { diff } => format!("scores list page (diff={diff})"),
+        ExpectedPage::PlaylogDetail { idx } => format!("playlogDetail page (idx={idx})"),
         ExpectedPage::MusicDetail { idx } => format!("musicDetail page (idx={idx})"),
     }
 }

@@ -29,6 +29,7 @@ fn parse_recent_record_fixture() {
             .filter(|e| e.dx_score.is_some())
             .all(|e| e.dx_score_max.is_some())
     );
+    assert!(entries.iter().all(|e| e.playlog_detail_idx.is_some()));
     assert!(entries.iter().any(|e| e.chart_type == ChartType::Std));
     assert!(entries.iter().any(|e| e.chart_type == ChartType::Dx));
     assert!(entries.iter().any(|e| e.achievement_new_record));
@@ -56,6 +57,11 @@ fn parse_recent_record_fixture() {
             e.played_at_unixtime
         );
     }
+
+    assert_eq!(
+        entries[0].playlog_detail_idx.as_deref(),
+        Some("14,1769098716")
+    );
 
     let html = std::fs::read_to_string(fixture_path("record.html")).unwrap();
     let html = html.replacen("fc_dummy.png", "fc_fc.png", 1);
