@@ -952,14 +952,14 @@ tbody tr:hover {
 }
 
 .history-chart-scroll {
-  overflow-x: auto;
+  overflow-x: hidden;
   overflow-y: visible;
 }
 
 .history-chart {
   display: block;
   width: 100%;
-  min-width: 760px;
+  min-width: 0;
   height: auto;
   overflow: visible;
 }
