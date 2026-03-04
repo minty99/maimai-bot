@@ -1322,12 +1322,21 @@ tbody tr:hover {
 .picker-random-button {
   height: 50px;
   border-radius: 10px;
+  border: 1px solid #1d4ed8;
   font-family: 'Space Grotesk', sans-serif;
   font-size: 1rem;
   letter-spacing: 0.06em;
   color: #eff6ff;
   background: linear-gradient(135deg, #2563eb 0%, #1e40af 100%);
   box-shadow: 0 12px 24px rgba(37, 99, 235, 0.18);
+}
+
+.picker-random-button:hover,
+.picker-random-button:focus-visible,
+.picker-random-button:active {
+  color: #eff6ff;
+  background: linear-gradient(135deg, #1d4ed8 0%, #1e3a8a 100%);
+  border-color: #1e40af;
 }
 
 .picker-result-panel {
