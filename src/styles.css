@@ -742,6 +742,40 @@ select:focus-visible {
   margin-top: 2px;
 }
 
+
+.rating-stat-grid {
+  display: grid;
+  gap: 8px;
+}
+
+.rating-stat-card {
+  display: grid;
+  gap: 3px;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #f8fbff;
+}
+
+.rating-stat-card span {
+  font-size: 11px;
+  color: var(--muted);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.rating-stat-card strong {
+  font-family: 'Space Grotesk', sans-serif;
+  font-size: 1.4rem;
+  line-height: 1.1;
+}
+
+.rating-table-column {
+  display: grid;
+  gap: 14px;
+}
+
 .table-wrap {
   border: 1px solid var(--line);
   border-radius: 10px;

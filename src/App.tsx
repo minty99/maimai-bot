@@ -48,6 +48,7 @@ import {
 } from './app/filtering';
 import { PlaylogExplorerSection } from './components/PlaylogExplorerSection';
 import { RandomPickerPage } from './components/RandomPickerPage';
+import { RatingPage } from './components/RatingPage';
 import { ScoreExplorerSection } from './components/ScoreExplorerSection';
 import { SettingsPage } from './components/SettingsPage';
 import { SongDetailModal } from './components/SongDetailModal';
@@ -65,9 +66,12 @@ import type {
   SyncStatus,
 } from './types';
 
-type AppPage = 'scores' | 'playlogs' | 'picker' | 'settings';
+type AppPage = 'scores' | 'rating' | 'playlogs' | 'picker' | 'settings';
 
 function readPageFromHash(hash: string): AppPage {
+  if (hash === '#rating') {
+    return 'rating';
+  }
   if (hash === '#playlogs') {
     return 'playlogs';
   }
@@ -109,6 +113,16 @@ function PlaylogsIcon() {
   );
 }
 
+function RatingIcon() {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M4 20h16" />
+      <path d="M7 16 10.2 9.8 13.4 14.2 17 7" />
+      <circle cx="17" cy="7" r="1" fill="currentColor" stroke="none" />
+    </svg>
+  );
+}
+
 function PickerIcon() {
   return (
     <svg viewBox="0 0 24 24" aria-hidden="true">
@@ -140,6 +154,7 @@ function ChevronDownIcon() {
 
 const NAV_ITEMS: Array<{ page: AppPage; label: string; Icon: () => JSX.Element }> = [
   { page: 'scores', label: 'Scores', Icon: ScoresIcon },
+  { page: 'rating', label: 'Rating', Icon: RatingIcon },
   { page: 'playlogs', label: 'Playlogs', Icon: PlaylogsIcon },
   { page: 'picker', label: 'Picker', Icon: PickerIcon },
   { page: 'settings', label: 'Settings', Icon: SettingsIcon },
@@ -644,6 +659,35 @@ function App() {
     ],
   );
 
+  const { ratingTotal, newRatingTotal, oldRatingTotal, newRatingRows, oldRatingRows } = useMemo(() => {
+    const latestVersions = versionOptions.slice(-2);
+    const latestSet = new Set(latestVersions);
+
+    const classifiedRows = scoreData.filter(
+      (row): row is ScoreRow & { ratingPoints: number; version: string } =>
+        row.ratingPoints !== null && row.version !== null,
+    );
+    const newRows = classifiedRows
+      .filter((row) => latestSet.has(row.version))
+      .sort((left, right) => right.ratingPoints - left.ratingPoints)
+      .slice(0, 15);
+    const oldRows = classifiedRows
+      .filter((row) => !latestSet.has(row.version))
+      .sort((left, right) => right.ratingPoints - left.ratingPoints)
+      .slice(0, 35);
+
+    const newTotal = newRows.reduce((sum, row) => sum + (row.ratingPoints ?? 0), 0);
+    const oldTotal = oldRows.reduce((sum, row) => sum + (row.ratingPoints ?? 0), 0);
+
+    return {
+      ratingTotal: newTotal + oldTotal,
+      newRatingTotal: newTotal,
+      oldRatingTotal: oldTotal,
+      newRatingRows: newRows,
+      oldRatingRows: oldRows,
+    };
+  }, [scoreData, versionOptions]);
+
   const handleApplyUrls = () => {
     const nextSongInfoUrl = songInfoUrlDraft.trim();
     const nextRecordUrl = recordCollectorUrlDraft.trim();
@@ -663,6 +707,8 @@ function App() {
     }
     const nextHash = page === 'playlogs'
       ? '#playlogs'
+      : page === 'rating'
+        ? '#rating'
       : page === 'picker'
         ? '#picker'
         : page === 'settings'
@@ -834,6 +880,19 @@ function App() {
               playlogSortKey={playlogSortKey}
               playlogSortDesc={playlogSortDesc}
               onSortBy={handlePlaylogSortBy}
+            />
+          </>
+        ) : activePage === 'rating' ? (
+          <>
+            {loadingError ? <section className="error-banner">에러: {loadingError}</section> : null}
+            <RatingPage
+              sidebarTopContent={desktopSidebarTopContent}
+              songInfoUrl={songInfoUrl}
+              ratingTotal={ratingTotal}
+              newRatingTotal={newRatingTotal}
+              oldRatingTotal={oldRatingTotal}
+              newRows={newRatingRows}
+              oldRows={oldRatingRows}
             />
           </>
         ) : activePage === 'picker' ? (
