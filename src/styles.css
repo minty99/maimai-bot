@@ -1904,3 +1904,28 @@ tbody tr:hover {
     width: min(100%, calc(100vw - 20px));
   }
 }
+
+.playlog-day-filter {
+  display: grid;
+  gap: 6px;
+}
+
+.playlog-day-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.playlog-day-toggle input {
+  width: 16px;
+  height: 16px;
+  margin: 0;
+}
+
+.playlog-day-filter-summary {
+  margin: 0;
+  font-size: 12px;
+  color: var(--muted);
+}

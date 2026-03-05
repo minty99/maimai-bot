@@ -31,6 +31,13 @@ interface PlaylogExplorerSectionProps {
   setPlaylogAchievementMin: Dispatch<SetStateAction<number>>;
   playlogAchievementMax: number;
   setPlaylogAchievementMax: Dispatch<SetStateAction<number>>;
+  isPlaylogDateFilterDisabled: boolean;
+  setIsPlaylogDateFilterDisabled: Dispatch<SetStateAction<boolean>>;
+  selectedPlaylogDayKey: string | null;
+  setSelectedPlaylogDayKey: Dispatch<SetStateAction<string | null>>;
+  availablePlaylogDayKeys: string[];
+  selectedPlaylogDayCreditCount: number | null;
+  selectedPlaylogDaySongCount: number;
   filteredPlaylogRows: PlaylogRow[];
   songInfoUrl: string;
   playlogSortKey: PlaylogSortKey;
@@ -55,6 +62,13 @@ export function PlaylogExplorerSection({
   setPlaylogAchievementMin,
   playlogAchievementMax,
   setPlaylogAchievementMax,
+  isPlaylogDateFilterDisabled,
+  setIsPlaylogDateFilterDisabled,
+  selectedPlaylogDayKey,
+  setSelectedPlaylogDayKey,
+  availablePlaylogDayKeys,
+  selectedPlaylogDayCreditCount,
+  selectedPlaylogDaySongCount,
   filteredPlaylogRows,
   songInfoUrl,
   playlogSortKey,
@@ -99,6 +113,20 @@ export function PlaylogExplorerSection({
     );
   };
 
+  const handlePlaylogDayInputChange = (value: string) => {
+    if (!value) {
+      return;
+    }
+    if (!availablePlaylogDayKeys.includes(value)) {
+      return;
+    }
+    setSelectedPlaylogDayKey(value);
+  };
+
+  const playlogDaySummary = isPlaylogDateFilterDisabled
+    ? `전체: ${selectedPlaylogDaySongCount.toLocaleString()}곡`
+    : `${selectedPlaylogDaySongCount.toLocaleString()}곡 · ${selectedPlaylogDayCreditCount === null ? '-' : selectedPlaylogDayCreditCount.toLocaleString()} 크레딧`;
+
   return (
     <div className="explorer-layout">
       <aside className="sidebar-column">
@@ -119,6 +147,35 @@ export function PlaylogExplorerSection({
                 placeholder="예: 2026/02/25, BUDDiES"
               />
             </label>
+
+            <div className="playlog-day-filter">
+              <label className="playlog-day-toggle">
+                <input
+                  type="checkbox"
+                  checked={isPlaylogDateFilterDisabled}
+                  onChange={(event) => setIsPlaylogDateFilterDisabled(event.target.checked)}
+                />
+                <span>전체 플레이 기록 보기</span>
+              </label>
+              <label className="search-box">
+                <span>플레이 날짜 (maimai day 04:00 기준)</span>
+                <input
+                  type="date"
+                  value={selectedPlaylogDayKey ?? ''}
+                  onChange={(event) => handlePlaylogDayInputChange(event.target.value)}
+                  disabled={isPlaylogDateFilterDisabled || availablePlaylogDayKeys.length === 0}
+                  min={availablePlaylogDayKeys[0]}
+                  max={availablePlaylogDayKeys[availablePlaylogDayKeys.length - 1]}
+                  list="playlog-day-options"
+                />
+                <datalist id="playlog-day-options">
+                  {availablePlaylogDayKeys.map((dayKey) => (
+                    <option key={dayKey} value={dayKey} />
+                  ))}
+                </datalist>
+              </label>
+              <p className="playlog-day-filter-summary">{playlogDaySummary}</p>
+            </div>
 
             <ToggleGroup
               label="Chart Type"

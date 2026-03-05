@@ -166,6 +166,8 @@ interface BuildFilteredPlaylogRowsParams {
   playlogAchievementMax: number;
   playlogSortKey: PlaylogSortKey;
   playlogSortDesc: boolean;
+  playlogDayStartUnix: number | null;
+  playlogDayEndUnix: number | null;
 }
 
 export function buildFilteredPlaylogRows({
@@ -177,8 +179,18 @@ export function buildFilteredPlaylogRows({
   playlogAchievementMax,
   playlogSortKey,
   playlogSortDesc,
+  playlogDayStartUnix,
+  playlogDayEndUnix,
 }: BuildFilteredPlaylogRowsParams): PlaylogRow[] {
   const rows = playlogData.filter((row) => {
+    if (
+      playlogDayStartUnix !== null &&
+      playlogDayEndUnix !== null &&
+      (row.playedAtUnix < playlogDayStartUnix || row.playedAtUnix >= playlogDayEndUnix)
+    ) {
+      return false;
+    }
+
     if (!includesText(`${row.title} ${row.playedAtLabel ?? ''}`, playlogQuery)) {
       return false;
     }

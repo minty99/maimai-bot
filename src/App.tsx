@@ -88,6 +88,37 @@ function readShowJacketsPreference(): boolean {
   return localStorage.getItem(TABLE_LAYOUT_STORAGE_KEY) !== 'compact';
 }
 
+const MAIMAI_DAY_START_HOUR = 4;
+const MAIMAI_DAY_OFFSET_SECONDS = MAIMAI_DAY_START_HOUR * 60 * 60;
+
+function toMaimaiDayKey(playedAtUnix: number): string {
+  const date = new Date((playedAtUnix - MAIMAI_DAY_OFFSET_SECONDS) * 1000);
+  const year = date.getFullYear();
+  const month = `${date.getMonth() + 1}`.padStart(2, '0');
+  const day = `${date.getDate()}`.padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+function toMaimaiDayStartUnix(dayKey: string): number | null {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(dayKey);
+  if (!match) {
+    return null;
+  }
+
+  const [, yearText, monthText, dayText] = match;
+  const start = new Date(
+    Number(yearText),
+    Number(monthText) - 1,
+    Number(dayText),
+    MAIMAI_DAY_START_HOUR,
+    0,
+    0,
+    0,
+  );
+  const unix = Math.floor(start.getTime() / 1000);
+  return Number.isFinite(unix) ? unix : null;
+}
+
 function ScoresIcon() {
   return (
     <svg viewBox="0 0 24 24" aria-hidden="true">
@@ -269,6 +300,8 @@ function App() {
   );
   const [playlogSortKey, setPlaylogSortKey] = useState<PlaylogSortKey>('playedAt');
   const [playlogSortDesc, setPlaylogSortDesc] = useState(true);
+  const [isPlaylogDateFilterDisabled, setIsPlaylogDateFilterDisabled] = useState(false);
+  const [selectedPlaylogDayKey, setSelectedPlaylogDayKey] = useState<string | null>(null);
 
   const loadAbortRef = useRef<AbortController | null>(null);
   const loadedExplorerKeyRef = useRef<string | null>(null);
@@ -635,6 +668,64 @@ function App() {
     ],
   );
 
+  const availablePlaylogDayKeys = useMemo(() => {
+    const dayKeys = new Set(playlogData.map((row) => toMaimaiDayKey(row.playedAtUnix)));
+    return Array.from(dayKeys).sort((left, right) => left.localeCompare(right));
+  }, [playlogData]);
+
+  useEffect(() => {
+    if (availablePlaylogDayKeys.length === 0) {
+      setSelectedPlaylogDayKey(null);
+      return;
+    }
+
+    const latestDayKey = availablePlaylogDayKeys[availablePlaylogDayKeys.length - 1];
+    setSelectedPlaylogDayKey((current) => {
+      if (current && availablePlaylogDayKeys.includes(current)) {
+        return current;
+      }
+      return latestDayKey;
+    });
+  }, [availablePlaylogDayKeys]);
+
+  const selectedPlaylogDayStartUnix = useMemo(() => {
+    if (isPlaylogDateFilterDisabled || !selectedPlaylogDayKey) {
+      return null;
+    }
+    return toMaimaiDayStartUnix(selectedPlaylogDayKey);
+  }, [isPlaylogDateFilterDisabled, selectedPlaylogDayKey]);
+
+  const selectedPlaylogDayEndUnix = useMemo(() => {
+    if (selectedPlaylogDayStartUnix === null) {
+      return null;
+    }
+    return selectedPlaylogDayStartUnix + 24 * 60 * 60;
+  }, [selectedPlaylogDayStartUnix]);
+
+  const selectedPlaylogDayRows = useMemo(() => {
+    if (selectedPlaylogDayStartUnix === null || selectedPlaylogDayEndUnix === null) {
+      return playlogData;
+    }
+    return playlogData.filter(
+      (row) => row.playedAtUnix >= selectedPlaylogDayStartUnix && row.playedAtUnix < selectedPlaylogDayEndUnix,
+    );
+  }, [playlogData, selectedPlaylogDayEndUnix, selectedPlaylogDayStartUnix]);
+
+  const selectedPlaylogDayCreditCount = useMemo(() => {
+    const creditIds = selectedPlaylogDayRows
+      .map((row) => row.creditId)
+      .filter((creditId): creditId is number => creditId !== null);
+    if (creditIds.length === 0) {
+      return null;
+    }
+
+    const minCreditId = Math.min(...creditIds);
+    const maxCreditId = Math.max(...creditIds);
+    return maxCreditId - minCreditId + 1;
+  }, [selectedPlaylogDayRows]);
+
+  const selectedPlaylogDaySongCount = selectedPlaylogDayRows.length;
+
   const filteredPlaylogRows = useMemo(
     () =>
       buildFilteredPlaylogRows({
@@ -646,6 +737,8 @@ function App() {
         playlogAchievementMax,
         playlogSortKey,
         playlogSortDesc,
+        playlogDayStartUnix: selectedPlaylogDayStartUnix,
+        playlogDayEndUnix: selectedPlaylogDayEndUnix,
       }),
     [
       playlogAchievementMax,
@@ -656,6 +749,8 @@ function App() {
       playlogQuery,
       playlogSortDesc,
       playlogSortKey,
+      selectedPlaylogDayEndUnix,
+      selectedPlaylogDayStartUnix,
     ],
   );
 
@@ -875,6 +970,13 @@ function App() {
               setPlaylogAchievementMin={setPlaylogAchievementMin}
               playlogAchievementMax={playlogAchievementMax}
               setPlaylogAchievementMax={setPlaylogAchievementMax}
+              isPlaylogDateFilterDisabled={isPlaylogDateFilterDisabled}
+              setIsPlaylogDateFilterDisabled={setIsPlaylogDateFilterDisabled}
+              selectedPlaylogDayKey={selectedPlaylogDayKey}
+              setSelectedPlaylogDayKey={setSelectedPlaylogDayKey}
+              availablePlaylogDayKeys={availablePlaylogDayKeys}
+              selectedPlaylogDayCreditCount={selectedPlaylogDayCreditCount}
+              selectedPlaylogDaySongCount={selectedPlaylogDaySongCount}
               filteredPlaylogRows={filteredPlaylogRows}
               songInfoUrl={songInfoUrl}
               playlogSortKey={playlogSortKey}
