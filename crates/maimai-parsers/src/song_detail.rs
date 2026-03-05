@@ -44,7 +44,7 @@ pub fn parse_song_detail_html(html: &str) -> eyre::Result<ParsedSongDetail> {
         .next()
         .map(|e| collect_text(&e).trim().to_string())
         .filter(|value| !value.is_empty())
-        .ok_or_else(|| eyre::eyre!("missing artist (div.m_5.f_12.break)"))?;
+        .unwrap_or_default();
 
     let page_chart_type = document
         .select(&page_kind_selector)

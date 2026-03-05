@@ -161,3 +161,19 @@ fn parse_song_detail_example2() {
         );
     }
 }
+
+#[test]
+fn parse_song_detail_missing_artist_fixture() {
+    let html = std::fs::read_to_string(fixture_path("missing_artist.html")).unwrap();
+    let parsed = parse_song_detail_html(&html).unwrap();
+
+    assert_eq!(parsed.artist, "");
+}
+
+#[test]
+fn parse_song_detail_missing_title_fixture() {
+    let html = std::fs::read_to_string(fixture_path("missing_title.html")).unwrap();
+    let parsed = parse_song_detail_html(&html).unwrap();
+
+    assert_eq!(parsed.title, "");
+}
