@@ -1,6 +1,7 @@
 use eyre::{Result, WrapErr};
 use reqwest::Url;
 use sqlx::SqlitePool;
+use tracing::{info, warn};
 
 use crate::db::{count_scores_rows, replace_scores};
 use crate::http_client::MaimaiClient;
@@ -45,17 +46,36 @@ pub(crate) async fn ensure_scores_seeded(
         .wrap_err("fetch diff=0 song index")?;
     let mut detail_cache = SongDetailCache::default();
     let mut entries = Vec::new();
+    let total_songs = seed_targets.len();
+    let started_at = std::time::Instant::now();
 
-    for target in &seed_targets {
+    info!("startup score seeding started: songs={total_songs}");
+
+    for (idx, target) in seed_targets.iter().enumerate() {
         let detail = fetch_seed_song_detail(client, target, &mut detail_cache)
             .await
             .wrap_err_with(|| format!("fetch seed song detail for '{}'", target.title))?;
         entries.extend(score_entries_from_song_detail(detail));
+
+        let processed = idx + 1;
+        if should_log_seed_progress(processed, total_songs) {
+            let percent = (processed as f64 / total_songs as f64) * 100.0;
+            info!(
+                "startup score seeding progress: songs={processed}/{total_songs} ({percent:.1}%) rows_collected={}",
+                entries.len()
+            );
+        }
     }
 
     replace_scores(pool, &entries)
         .await
         .wrap_err("replace seeded scores rows")?;
+
+    info!(
+        "startup score seeding completed: songs={total_songs} rows_written={} elapsed_sec={:.1}",
+        entries.len(),
+        started_at.elapsed().as_secs_f64()
+    );
 
     Ok(SeedScoresOutcome {
         seeded: true,
@@ -147,6 +167,10 @@ async fn fetch_seed_song_index_entries(
         });
     }
 
+    info!(
+        "startup score seeding index loaded: songs={}",
+        targets.len()
+    );
     Ok(targets)
 }
 
@@ -178,6 +202,10 @@ async fn fetch_seed_song_detail(
             Ok(detail)
         }
         Err(first_err) => {
+            warn!(
+                "musicDetail fetch failed during startup seeding; reloading diff=0 snapshot: title='{}' ordinal={} idx={}",
+                target.title, target.ordinal, target.idx
+            );
             let reloaded_targets = fetch_seed_song_index_entries(client)
                 .await
                 .wrap_err("reload diff=0 page after musicDetail failure")?;
@@ -215,6 +243,10 @@ async fn fetch_seed_song_detail(
             Ok(detail)
         }
     }
+}
+
+fn should_log_seed_progress(processed: usize, total: usize) -> bool {
+    processed == 1 || processed == total || processed.is_multiple_of(50)
 }
 
 fn seed_target_matches(expected: &SeedSongIndexEntry, actual: &SeedSongIndexEntry) -> bool {
