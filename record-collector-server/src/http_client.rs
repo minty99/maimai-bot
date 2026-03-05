@@ -1,11 +1,16 @@
 use std::fs::File;
 use std::io::{BufReader, BufWriter};
 use std::sync::Arc;
+use std::sync::OnceLock;
+use std::time::Duration;
 
 use eyre::WrapErr;
+use rand::Rng;
 use reqwest::Url;
 use reqwest_cookie_store::{CookieStore, CookieStoreMutex};
 use time::OffsetDateTime;
+use tokio::sync::Mutex;
+use tokio::time::{Instant, sleep_until};
 
 use maimai_auth::intl;
 use models::config::AppConfig;
@@ -22,6 +27,13 @@ pub(crate) struct MaimaiClient {
     cookie_store: Arc<CookieStoreMutex>,
     client: Arc<reqwest::Client>,
 }
+
+#[derive(Debug)]
+struct RequestRateLimitState {
+    next_allowed_at: Instant,
+}
+
+static REQUEST_RATE_LIMITER: OnceLock<Mutex<RequestRateLimitState>> = OnceLock::new();
 
 impl MaimaiClient {
     pub(crate) fn new(config: &AppConfig) -> eyre::Result<Self> {
@@ -79,6 +91,7 @@ impl MaimaiClient {
 
     pub(crate) async fn get_response(&self, url: &Url) -> eyre::Result<HttpResponse> {
         ensure_not_maintenance_now()?;
+        wait_for_request_slot().await;
         let resp = self
             .client
             .as_ref()
@@ -102,6 +115,32 @@ impl MaimaiClient {
             body: bytes.to_vec(),
         })
     }
+}
+
+async fn wait_for_request_slot() {
+    let limiter = REQUEST_RATE_LIMITER.get_or_init(|| {
+        Mutex::new(RequestRateLimitState {
+            next_allowed_at: Instant::now(),
+        })
+    });
+
+    let slot = {
+        let mut state = limiter.lock().await;
+        let now = Instant::now();
+        let slot = if state.next_allowed_at > now {
+            state.next_allowed_at
+        } else {
+            now
+        };
+        state.next_allowed_at = slot + Duration::from_millis(next_request_interval_ms());
+        slot
+    };
+
+    sleep_until(slot).await;
+}
+
+fn next_request_interval_ms() -> u64 {
+    rand::thread_rng().gen_range(500..=1_000)
 }
 
 pub(crate) fn is_maintenance_window_now() -> bool {
@@ -147,4 +186,17 @@ fn save_cookie_store(
     cookie_store::serde::json::save_incl_expired_and_nonpersistent(&guard, &mut writer)
         .map_err(|e| eyre::eyre!("write cookie json: {e}"))?;
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::next_request_interval_ms;
+
+    #[test]
+    fn request_interval_is_within_expected_range() {
+        for _ in 0..100 {
+            let interval_ms = next_request_interval_ms();
+            assert!((500..=1_000).contains(&interval_ms));
+        }
+    }
 }
