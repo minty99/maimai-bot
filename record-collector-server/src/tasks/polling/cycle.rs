@@ -3,11 +3,11 @@ use tracing::info;
 
 use crate::http_client::is_maintenance_window_now;
 use crate::state::AppState;
-use crate::tasks::startup::bootstrap::prepare_scores_state;
 use crate::tasks::utils::auth::{build_client, ensure_session};
 use crate::tasks::utils::player::fetch_player_data_logged_in;
 use crate::tasks::utils::recent::sync_recent_if_play_count_changed;
 use crate::tasks::utils::reporting::{SyncCycleReport, log_recent_outcome};
+use crate::tasks::utils::scores::{SeedScoresOutcome, backfill_missing_playlog_metadata};
 
 pub(crate) type PollingCycleReport = SyncCycleReport;
 
@@ -23,8 +23,8 @@ pub(crate) async fn run_cycle(app_state: &AppState) -> Result<PollingCycleReport
     let mut client = build_client(&app_state.config)?;
     ensure_session(&mut client).await?;
 
-    let (seeded_scores, playlog_metadata_backfilled) =
-        prepare_scores_state(&app_state.db_pool, &mut client).await?;
+    let seeded_scores = SeedScoresOutcome::default();
+    let playlog_metadata_backfilled = backfill_missing_playlog_metadata(&app_state.db_pool).await?;
     let player_data = fetch_player_data_logged_in(&mut client).await?;
     let recent_outcome =
         sync_recent_if_play_count_changed(&app_state.db_pool, &mut client, &player_data).await;

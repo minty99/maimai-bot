@@ -10,6 +10,8 @@ use crate::tasks::utils::song_detail::{SongDetailCache, fetch_song_detail_by_idx
 use maimai_parsers::parse_scores_html;
 use models::{ChartType, ParsedScoreEntry};
 
+const MAX_SEED_DETAIL_RELOAD_RETRIES: usize = 5;
+
 #[derive(Debug, Clone, Default)]
 pub(crate) struct SeedScoresOutcome {
     pub(crate) seeded: bool,
@@ -196,53 +198,79 @@ async fn fetch_seed_song_detail(
         return Ok(detail);
     }
 
-    match fetch_song_detail_by_idx(client, &target.idx).await {
-        Ok(detail) => {
-            cache.insert(target.idx.clone(), detail.clone());
-            Ok(detail)
+    let mut current_target = target.clone();
+    let mut last_err: Option<eyre::Report> = None;
+
+    for attempt in 1..=MAX_SEED_DETAIL_RELOAD_RETRIES {
+        if let Some(detail) = cache.get(&current_target.idx) {
+            return Ok(detail);
         }
-        Err(first_err) => {
-            warn!(
-                "musicDetail fetch failed during startup seeding; reloading diff=0 snapshot: title='{}' ordinal={} idx={}",
-                target.title, target.ordinal, target.idx
-            );
-            let reloaded_targets = fetch_seed_song_index_entries(client)
-                .await
-                .wrap_err("reload diff=0 page after musicDetail failure")?;
-            let reloaded = reloaded_targets.get(target.ordinal).ok_or_else(|| {
-                eyre::eyre!(
-                    "reloaded diff=0 page has fewer songs than expected: ordinal={} total={}",
-                    target.ordinal,
-                    reloaded_targets.len()
-                )
-            })?;
 
-            if !seed_target_matches(target, reloaded) {
-                return Err(eyre::eyre!(
-                    "diff=0 song ordering changed during startup retry at ordinal {}: expected ('{}', {}, '{}') but got ('{}', {}, '{}')",
-                    target.ordinal,
-                    target.title,
-                    target.chart_type.as_str(),
-                    target.basic_level,
-                    reloaded.title,
-                    reloaded.chart_type.as_str(),
-                    reloaded.basic_level
-                ))
-                .wrap_err(first_err);
+        match fetch_song_detail_by_idx(client, &current_target.idx).await {
+            Ok(detail) => {
+                cache.insert(current_target.idx.clone(), detail.clone());
+                return Ok(detail);
             }
+            Err(err) => {
+                last_err = Some(err);
+                if attempt == MAX_SEED_DETAIL_RELOAD_RETRIES {
+                    break;
+                }
+                warn!(
+                    "musicDetail fetch failed during startup seeding; reloading diff=0 snapshot: title='{}' ordinal={} idx={} attempt={}/{}",
+                    current_target.title,
+                    current_target.ordinal,
+                    current_target.idx,
+                    attempt,
+                    MAX_SEED_DETAIL_RELOAD_RETRIES
+                );
 
-            let detail = fetch_song_detail_by_idx(client, &reloaded.idx)
-                .await
-                .wrap_err_with(|| {
-                    format!(
-                        "retry musicDetail with reloaded idx for '{}' at ordinal {}",
-                        target.title, target.ordinal
+                let reloaded_targets = fetch_seed_song_index_entries(client)
+                    .await
+                    .wrap_err("reload diff=0 page after musicDetail failure")?;
+                let reloaded = reloaded_targets.get(target.ordinal).ok_or_else(|| {
+                    eyre::eyre!(
+                        "reloaded diff=0 page has fewer songs than expected: ordinal={} total={}",
+                        target.ordinal,
+                        reloaded_targets.len()
                     )
                 })?;
-            cache.insert(reloaded.idx.clone(), detail.clone());
-            Ok(detail)
+
+                if !seed_target_matches(target, reloaded) {
+                    return Err(eyre::eyre!(
+                        "diff=0 song ordering changed during startup retry at ordinal {}: expected ('{}', {}, '{}') but got ('{}', {}, '{}')",
+                        target.ordinal,
+                        target.title,
+                        target.chart_type.as_str(),
+                        target.basic_level,
+                        reloaded.title,
+                        reloaded.chart_type.as_str(),
+                        reloaded.basic_level
+                    ))
+                    .wrap_err_with(|| {
+                        format!(
+                            "song identity mismatch while reloading diff=0 snapshot during startup seeding (ordinal={})",
+                            target.ordinal
+                        )
+                    });
+                }
+
+                current_target = reloaded.clone();
+            }
         }
     }
+
+    Err(eyre::eyre!(
+        "failed to fetch musicDetail during startup seeding after {} attempts: title='{}' ordinal={}",
+        MAX_SEED_DETAIL_RELOAD_RETRIES,
+        target.title,
+        target.ordinal
+    ))
+    .wrap_err_with(|| {
+        last_err
+            .map(|e| e.to_string())
+            .unwrap_or_else(|| "missing last error".to_string())
+    })
 }
 
 fn should_log_seed_progress(processed: usize, total: usize) -> bool {
