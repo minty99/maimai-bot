@@ -38,8 +38,6 @@ struct IntlOnlySheet {
     version: MaimaiVersion,
     #[serde(default)]
     internal_level: Option<f32>,
-    #[serde(default)]
-    user_level: Option<String>,
 }
 
 pub(crate) fn load_intl_only_rows() -> eyre::Result<IntlOnlyRows> {
@@ -104,12 +102,6 @@ fn map_to_rows(parsed: IntlOnlyData) -> eyre::Result<IntlOnlyRows> {
                 source: SheetSource::IntlOnly {
                     version_name: sheet.version.as_str().to_string(),
                     internal_level: sheet.internal_level.map(|value| format!("{value:.1}")),
-                    user_level: sheet
-                        .user_level
-                        .as_deref()
-                        .map(str::trim)
-                        .filter(|value| !value.is_empty())
-                        .map(str::to_string),
                 },
             });
         }

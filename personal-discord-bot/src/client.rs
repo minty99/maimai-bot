@@ -70,7 +70,6 @@ pub(crate) enum PlayerDataResult {
 pub(crate) struct SongMetadata {
     pub(crate) level: Option<String>,
     pub(crate) internal_level: Option<f32>,
-    pub(crate) user_level: Option<String>,
     pub(crate) image_name: Option<String>,
     pub(crate) version: Option<String>,
     pub(crate) genre: String,
@@ -84,7 +83,6 @@ pub(crate) struct SongInfoSheet {
     pub(crate) level: String,
     pub(crate) version: Option<String>,
     pub(crate) internal_level: Option<f32>,
-    pub(crate) user_level: Option<String>,
     pub(crate) region: SongChartRegion,
 }
 

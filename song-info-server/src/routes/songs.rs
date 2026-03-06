@@ -19,7 +19,6 @@ pub(crate) struct SongSheetResponse {
     level: String,
     version: Option<String>,
     internal_level: Option<f32>,
-    user_level: Option<String>,
     region: SongChartRegion,
 }
 
@@ -27,7 +26,6 @@ pub(crate) struct SongSheetResponse {
 pub(crate) struct SongMetadataResponse {
     level: Option<String>,
     internal_level: Option<f32>,
-    user_level: Option<String>,
     image_name: Option<String>,
     version: Option<String>,
     genre: String,
@@ -173,7 +171,6 @@ pub(crate) async fn random_song_by_level(
                 level: sheet.level.clone(),
                 version: sheet_version,
                 internal_level,
-                user_level: sheet.user_level.clone(),
                 region: sheet.region.clone(),
             });
         }
@@ -279,7 +276,6 @@ fn build_song_sheet_response(sheet: &models::SongCatalogChart) -> Result<SongShe
             .internal_level
             .as_deref()
             .and_then(|value| value.trim().parse::<f32>().ok()),
-        user_level: sheet.user_level.clone(),
         region: sheet.region.clone(),
     })
 }
@@ -497,7 +493,6 @@ pub(crate) async fn get_song_metadata(
                     return Ok(Json(SongMetadataResponse {
                         level: Some(sheet.level.clone()),
                         internal_level,
-                        user_level: sheet.user_level.clone(),
                         image_name: song.image_name.clone(),
                         version,
                         genre: song.genre.clone(),
@@ -547,7 +542,6 @@ pub(crate) async fn get_song_metadata_item(
                 return Ok(Json(SongMetadataResponse {
                     level: Some(sheet.level.clone()),
                     internal_level,
-                    user_level: sheet.user_level.clone(),
                     image_name: song.image_name.clone(),
                     version,
                     genre: song.genre.clone(),
@@ -600,7 +594,6 @@ mod tests {
             level: "10".to_string(),
             version_name: Some("Splash".to_string()),
             internal_level: None,
-            user_level: None,
             region: SongChartRegion {
                 jp: false,
                 intl: true,
@@ -612,7 +605,6 @@ mod tests {
             level: "10".to_string(),
             version_name: Some("Splash".to_string()),
             internal_level: None,
-            user_level: None,
             region: SongChartRegion {
                 jp: true,
                 intl: false,
@@ -631,7 +623,6 @@ mod tests {
             level: "10".to_string(),
             version_name: Some("Splash".to_string()),
             internal_level: None,
-            user_level: None,
             region: SongChartRegion {
                 jp: true,
                 intl: false,
@@ -643,7 +634,6 @@ mod tests {
             level: "10".to_string(),
             version_name: Some("Splash".to_string()),
             internal_level: None,
-            user_level: None,
             region: SongChartRegion {
                 jp: true,
                 intl: true,
@@ -670,7 +660,6 @@ mod tests {
                 level: "14+".to_string(),
                 version_name: Some("  Buddies Plus  ".to_string()),
                 internal_level: Some("14.7".to_string()),
-                user_level: Some("14+".to_string()),
                 region: SongChartRegion {
                     jp: true,
                     intl: false,

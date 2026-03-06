@@ -1965,7 +1965,6 @@ dependencies = [
  "dotenvy",
  "eyre",
  "hex",
- "image",
  "maimai-auth",
  "maimai-parsers",
  "models",

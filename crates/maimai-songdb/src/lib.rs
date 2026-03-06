@@ -13,12 +13,10 @@ use std::path::Path;
 mod internal_levels;
 mod intl_only;
 mod sheet_versions;
-mod user_tiers;
 
 use internal_levels::{InternalLevelKey, InternalLevelRow};
 use intl_only::load_intl_only_rows;
 use sheet_versions::SheetVersionMap;
-use user_tiers::{UserTierKey, UserTierValue};
 
 pub const SONG_DATA_SUBDIR: &str = "song_data";
 const MAIMAI_SONGS_URL: &str = "https://maimai.sega.jp/data/maimai_songs.json";
@@ -101,7 +99,6 @@ pub(crate) enum SheetSource {
     IntlOnly {
         version_name: String,
         internal_level: Option<String>,
-        user_level: Option<String>,
     },
 }
 
@@ -174,7 +171,6 @@ pub struct SongDatabase {
     sheets: Vec<SheetRow>,
     sheet_versions: SheetVersionMap,
     internal_levels: HashMap<InternalLevelKey, InternalLevelRow>,
-    user_tiers: HashMap<UserTierKey, UserTierValue>,
 }
 
 impl SongDatabase {
@@ -229,23 +225,11 @@ impl SongDatabase {
         let cover_dir = song_data_dir.join("cover");
         download_cover_images(&client, &songs, &cover_dir).await?;
 
-        tracing::info!("Fetching user tiers...");
-        let seed_data_root =
-            build_data_root(&songs, &sheets, &sheet_versions, &internal_levels, None);
-        let user_tiers = user_tiers::fetch_user_tier_map_for_default_levels(
-            &client,
-            &config.google_api_key,
-            &seed_data_root,
-            &cover_dir,
-        )
-        .await?;
-
         Ok(SongDatabase {
             songs,
             sheets,
             sheet_versions,
             internal_levels,
-            user_tiers,
         })
     }
 
@@ -255,7 +239,6 @@ impl SongDatabase {
             &self.sheets,
             &self.sheet_versions,
             &self.internal_levels,
-            Some(&self.user_tiers),
         ))
     }
 }
@@ -265,7 +248,6 @@ fn build_data_root(
     sheets: &[SheetRow],
     sheet_versions: &SheetVersionMap,
     internal_levels: &HashMap<InternalLevelKey, InternalLevelRow>,
-    user_tiers: Option<&HashMap<UserTierKey, UserTierValue>>,
 ) -> SongCatalog {
     use std::collections::BTreeMap;
 
@@ -296,32 +278,8 @@ fn build_data_root(
             .get(&il_key)
             .map(|il| il.internal_level.trim().to_string());
 
-        let user_key = user_tiers.map(|_| UserTierKey {
-            title: song.title.clone(),
-            genre: song.genre.clone(),
-            artist: song.artist.clone(),
-            chart_type: sheet.sheet_type,
-            difficulty: sheet.difficulty,
-        });
-        let user_tier = user_key
-            .as_ref()
-            .and_then(|k| user_tiers.and_then(|map| map.get(k)));
-
-        let (version_name, internal_level, user_level, region) = match &sheet.source {
+        let (version_name, internal_level, region) = match &sheet.source {
             SheetSource::Official => {
-                if let (Some(internal), Some(user_tier_value)) =
-                    (internal_level_from_map.as_deref(), user_tier)
-                    && internal != user_tier_value.source_internal_level
-                {
-                    tracing::warn!(
-                        title = %song.title,
-                        chart_type = %sheet.sheet_type,
-                        difficulty = %sheet.difficulty.as_str(),
-                        chart_internal_level = %internal,
-                        user_tier_internal_level = %user_tier_value.source_internal_level,
-                        "user tier internal level mismatch"
-                    );
-                }
                 let version_name = sheet_versions
                     .get(&sheet.song_id)
                     .and_then(|versions| versions.get(&sheet.sheet_type))
@@ -329,7 +287,6 @@ fn build_data_root(
                 (
                     version_name.clone(),
                     internal_level_from_map,
-                    user_tier.map(|v| v.grade.clone()),
                     SongChartRegion {
                         jp: true,
                         intl: version_name.is_some(),
@@ -339,11 +296,9 @@ fn build_data_root(
             SheetSource::IntlOnly {
                 version_name,
                 internal_level,
-                user_level,
             } => (
                 Some(version_name.clone()),
                 internal_level.clone(),
-                user_level.clone(),
                 SongChartRegion {
                     jp: false,
                     intl: true,
@@ -357,7 +312,6 @@ fn build_data_root(
             level: sheet.level.clone(),
             version_name,
             internal_level,
-            user_level,
             region,
         });
     }
@@ -947,7 +901,6 @@ mod tests {
                 source: SheetSource::IntlOnly {
                     version_name: "Splash".to_string(),
                     internal_level: None,
-                    user_level: None,
                 },
             },
         ];
@@ -957,7 +910,7 @@ mod tests {
             HashMap::from([(ChartType::Std, "Splash".to_string())]),
         );
 
-        let catalog = build_data_root(&songs, &sheets, &sheet_versions, &HashMap::new(), None);
+        let catalog = build_data_root(&songs, &sheets, &sheet_versions, &HashMap::new());
         let official = catalog
             .songs
             .iter()
@@ -1018,7 +971,6 @@ mod tests {
                 source: SheetSource::IntlOnly {
                     version_name: "Splash".to_string(),
                     internal_level: None,
-                    user_level: None,
                 },
             },
         ];

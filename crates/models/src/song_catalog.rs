@@ -28,8 +28,6 @@ pub struct SongCatalogChart {
     pub version_name: Option<String>,
     #[serde(rename = "internalLevel", skip_serializing_if = "Option::is_none")]
     pub internal_level: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub user_level: Option<String>,
     pub region: SongChartRegion,
 }
 
@@ -136,7 +134,6 @@ mod tests {
             level: "13+".to_string(),
             version_name: None,
             internal_level: Some("13.7".to_string()),
-            user_level: None,
             region: SongChartRegion {
                 jp: true,
                 intl: true,
