@@ -46,7 +46,7 @@ pub(crate) async fn sync_recent_if_play_count_changed(
 ) -> RecentSyncOutcome {
     let stored_total = match load_stored_total_play_count(pool).await {
         Ok(value) => value,
-        Err(err) => return RecentSyncOutcome::FailedRequest(err.to_string()),
+        Err(err) => return RecentSyncOutcome::FailedRequest(format!("{err:#}")),
     };
 
     if let Some(stored_total) = stored_total
@@ -57,26 +57,26 @@ pub(crate) async fn sync_recent_if_play_count_changed(
 
     let entries = match fetch_recent_entries_logged_in(client).await {
         Ok(entries) => entries,
-        Err(err) => return RecentSyncOutcome::FailedRequest(err.to_string()),
+        Err(err) => return RecentSyncOutcome::FailedRequest(format!("{err:#}")),
     };
     let entries =
         match annotate_recent_entries_with_credit_id(entries, player_data.total_play_count) {
             Ok(entries) => entries,
-            Err(err) => return RecentSyncOutcome::FailedValidation(err.to_string()),
+            Err(err) => return RecentSyncOutcome::FailedValidation(format!("{err:#}")),
         };
 
     let (resolved_entries, refreshed_scores) =
         match resolve_recent_entries_and_collect_score_updates(pool, client, &entries).await {
             Ok(value) => value,
-            Err(err) => return RecentSyncOutcome::FailedRequest(err.to_string()),
+            Err(err) => return RecentSyncOutcome::FailedRequest(format!("{err:#}")),
         };
 
     if let Err(err) = upsert_playlogs(pool, &resolved_entries).await {
-        return RecentSyncOutcome::FailedRequest(err.to_string());
+        return RecentSyncOutcome::FailedRequest(format!("{err:#}"));
     }
 
     if let Err(err) = persist_player_snapshot(pool, player_data).await {
-        return RecentSyncOutcome::FailedRequest(err.to_string());
+        return RecentSyncOutcome::FailedRequest(format!("{err:#}"));
     }
 
     if stored_total.is_some() {
@@ -111,7 +111,7 @@ async fn resolve_recent_entries_and_collect_score_updates(
         let playlog_detail = fetch_playlog_detail(client, playlog_idx)
             .await
             .wrap_err("fetch playlogDetail from recent entry")?;
-        if playlog_detail.title.trim() != entry.title.trim() {
+        if titles_mismatch_when_present(&playlog_detail.title, &entry.title) {
             return Err(eyre::eyre!(
                 "recent/playlogDetail title mismatch: recent='{}' playlogDetail='{}'",
                 entry.title,
@@ -125,7 +125,7 @@ async fn resolve_recent_entries_and_collect_score_updates(
             let detail = fetch_song_detail_by_idx(client, &playlog_detail.music_detail_idx)
                 .await
                 .wrap_err("fetch musicDetail from playlogDetail")?;
-            if detail.title.trim() != playlog_detail.title.trim() {
+            if titles_mismatch_when_present(&detail.title, &playlog_detail.title) {
                 return Err(eyre::eyre!(
                     "playlogDetail/musicDetail title mismatch: playlogDetail='{}' musicDetail='{}'",
                     playlog_detail.title,
@@ -202,6 +202,13 @@ async fn score_row_is_affected(pool: &SqlitePool, recent: &ParsedPlayRecord) -> 
         Some(stored) => stored < played_at,
         None => true,
     })
+}
+
+fn titles_mismatch_when_present(left: &str, right: &str) -> bool {
+    let left = left.trim();
+    let right = right.trim();
+
+    !left.is_empty() && !right.is_empty() && left != right
 }
 
 pub(crate) fn annotate_recent_entries_with_credit_id(
@@ -285,5 +292,14 @@ mod tests {
         };
         assert!(score_row_is_affected(&pool, &recent).await?);
         Ok(())
+    }
+
+    #[test]
+    fn title_mismatch_check_ignores_missing_values() {
+        assert!(!titles_mismatch_when_present("", ""));
+        assert!(!titles_mismatch_when_present("Song A", ""));
+        assert!(!titles_mismatch_when_present("", "Song A"));
+        assert!(!titles_mismatch_when_present("Song A", "Song A"));
+        assert!(titles_mismatch_when_present("Song A", "Song B"));
     }
 }

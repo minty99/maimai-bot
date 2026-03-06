@@ -22,9 +22,8 @@ pub fn parse_playlog_detail_html(html: &str) -> eyre::Result<ParsedPlaylogDetail
                 .next()
                 .map(|e| e.text().collect::<Vec<_>>().join(""))
                 .map(|s| s.trim().to_string())
-                .filter(|s| !s.is_empty())
         })
-        .ok_or_else(|| eyre::eyre!("missing playlogDetail title"))?;
+        .unwrap_or_default();
 
     let music_detail_idx = document
         .select(&form_selector)

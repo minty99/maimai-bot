@@ -20,3 +20,21 @@ fn parse_playlog_detail_extracts_title_and_music_detail_idx() {
     assert_eq!(parsed.title, "Link");
     assert_eq!(parsed.music_detail_idx, "music-detail-idx-123");
 }
+
+#[test]
+fn parse_playlog_detail_allows_empty_title() {
+    let html = r#"
+    <html>
+      <body>
+        <form action="https://maimaidx-eng.com/maimai-mobile/record/musicDetail/" method="get">
+          <input type="hidden" name="idx" value="music-detail-idx-123" />
+          <button type="submit">MY RECORD</button>
+        </form>
+      </body>
+    </html>
+    "#;
+
+    let parsed = parse_playlog_detail_html(html).unwrap();
+    assert_eq!(parsed.title, "");
+    assert_eq!(parsed.music_detail_idx, "music-detail-idx-123");
+}
