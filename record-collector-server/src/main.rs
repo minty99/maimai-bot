@@ -54,7 +54,7 @@ async fn main() -> eyre::Result<()> {
             report.playlog_metadata_backfilled,
             report.recent_outcome.is_some()
         ),
-        Err(e) => tracing::warn!("Startup sync failed (server will still start): {}", e),
+        Err(e) => tracing::warn!("Startup sync failed (server will still start): {e:#}"),
     }
 
     let app_state = state::AppState {

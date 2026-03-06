@@ -10,7 +10,8 @@ use reqwest::Url;
 use reqwest_cookie_store::{CookieStore, CookieStoreMutex};
 use time::OffsetDateTime;
 use tokio::sync::Mutex;
-use tokio::time::{Instant, sleep_until};
+use tokio::time::{Instant, sleep, sleep_until};
+use tracing::warn;
 
 use maimai_auth::intl;
 use models::config::AppConfig;
@@ -34,6 +35,11 @@ struct RequestRateLimitState {
 }
 
 static REQUEST_RATE_LIMITER: OnceLock<Mutex<RequestRateLimitState>> = OnceLock::new();
+const LOGIN_RETRY_BACKOFFS: [Duration; 3] = [
+    Duration::from_secs(5),
+    Duration::from_secs(15),
+    Duration::from_secs(30),
+];
 
 impl MaimaiClient {
     pub(crate) fn new(config: &AppConfig) -> eyre::Result<Self> {
@@ -66,13 +72,29 @@ impl MaimaiClient {
         if self.check_logged_in().await? {
             return Ok(());
         }
-        self.login().await?;
-        if !self.check_logged_in().await? {
-            return Err(eyre::eyre!("login attempted but still not authenticated"));
+
+        for (attempt_idx, backoff) in LOGIN_RETRY_BACKOFFS.iter().enumerate() {
+            match self.login_and_verify().await {
+                Ok(()) => return Ok(()),
+                Err(err) => {
+                    warn!(
+                        "ensure_logged_in attempt failed: attempt={}/{} next_backoff_sec={} cause={}",
+                        attempt_idx + 1,
+                        LOGIN_RETRY_BACKOFFS.len(),
+                        backoff.as_secs(),
+                        format!("{err:#}")
+                    );
+                }
+            }
+
+            ensure_not_maintenance_now()?;
+            sleep(*backoff).await;
         }
-        save_cookie_store(&self.config.cookie_path, &self.cookie_store)
-            .wrap_err("save cookie store")?;
-        Ok(())
+
+        match self.login_and_verify().await {
+            Ok(()) => Ok(()),
+            Err(err) => Err(err),
+        }
     }
 
     pub(crate) async fn login(&mut self) -> eyre::Result<()> {
@@ -84,6 +106,16 @@ impl MaimaiClient {
         )
         .await?;
 
+        save_cookie_store(&self.config.cookie_path, &self.cookie_store)
+            .wrap_err("save cookie store")?;
+        Ok(())
+    }
+
+    async fn login_and_verify(&mut self) -> eyre::Result<()> {
+        self.login().await?;
+        if !self.check_logged_in().await? {
+            return Err(eyre::eyre!("login attempted but still not authenticated"));
+        }
         save_cookie_store(&self.config.cookie_path, &self.cookie_store)
             .wrap_err("save cookie store")?;
         Ok(())
