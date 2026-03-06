@@ -88,12 +88,11 @@ pub(crate) async fn count_scores_rows(pool: &SqlitePool) -> eyre::Result<i64> {
 }
 
 pub(crate) async fn get_app_state_u32(pool: &SqlitePool, key: &str) -> eyre::Result<Option<u32>> {
-    let value: Option<String> =
-        sqlx::query_scalar::<_, Option<String>>("SELECT value FROM app_state WHERE key = ?")
-            .bind(key)
-            .fetch_one(pool)
-            .await
-            .wrap_err("get app_state value")?;
+    let value = sqlx::query_scalar::<_, String>("SELECT value FROM app_state WHERE key = ?")
+        .bind(key)
+        .fetch_optional(pool)
+        .await
+        .wrap_err("get app_state value")?;
     let Some(value) = value else {
         return Ok(None);
     };
@@ -345,6 +344,16 @@ mod tests {
             .fetch_all(&pool)
             .await?;
         assert_eq!(titles, vec!["Song B".to_string()]);
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn get_app_state_u32_returns_none_for_missing_key() -> eyre::Result<()> {
+        let pool = connect("sqlite::memory:").await?;
+        migrate(&pool).await?;
+
+        assert_eq!(get_app_state_u32(&pool, "missing").await?, None);
 
         Ok(())
     }
