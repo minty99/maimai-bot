@@ -174,6 +174,7 @@ pub(crate) async fn mai_score(
         let metadata = fetch_song_metadata(
             &ctx.data().song_info_client,
             &score.title,
+            Some((&resolved_genre, &resolved_artist)),
             score.chart_type,
             score.diff_category,
         )
@@ -332,6 +333,10 @@ pub(crate) async fn mai_song_info(
     if !version_lines.is_empty() {
         blocks.push(version_lines.join("\n"));
     }
+    blocks.push(format!(
+        "Genre: {}\nArtist: {}",
+        song_info.genre, song_info.artist
+    ));
 
     if let Some(levels) = format_levels(models::ChartType::Std) {
         blocks.push(format!("Level (STD)\n{levels}"));
@@ -410,6 +415,7 @@ pub(crate) async fn mai_recent(ctx: Context<'_>) -> Result<(), Error> {
                 fetch_song_metadata(
                     &ctx.data().song_info_client,
                     &record.title,
+                    record.genre.as_deref().zip(record.artist.as_deref()),
                     record.chart_type,
                     diff_category,
                 )
@@ -597,6 +603,7 @@ pub(crate) async fn mai_today_detail(
                 fetch_song_metadata(
                     &ctx.data().song_info_client,
                     &play.title,
+                    play.genre.as_deref().zip(play.artist.as_deref()),
                     play.chart_type,
                     diff_category,
                 )
@@ -847,6 +854,7 @@ async fn build_rating_rows(
         let metadata = fetch_song_metadata(
             song_info_client,
             &entry.title,
+            None,
             entry.chart_type,
             entry.diff_category,
         )
@@ -884,13 +892,30 @@ async fn build_rating_rows(
 async fn fetch_song_metadata(
     song_info_client: &crate::client::SongInfoClient,
     title: &str,
+    identity: Option<(&str, &str)>,
     chart_type: models::ChartType,
     diff_category: models::DifficultyCategory,
 ) -> Option<crate::client::SongMetadata> {
-    match song_info_client
-        .get_song_metadata(title, chart_type.as_str(), diff_category.as_str())
-        .await
-    {
+    let response = match identity {
+        Some((genre, artist)) => {
+            song_info_client
+                .get_song_metadata_by_identity(
+                    title,
+                    genre,
+                    artist,
+                    chart_type.as_str(),
+                    diff_category.as_str(),
+                )
+                .await
+        }
+        None => {
+            song_info_client
+                .get_song_metadata(title, chart_type.as_str(), diff_category.as_str())
+                .await
+        }
+    };
+
+    match response {
         Ok(v) => v,
         Err(e) => {
             tracing::warn!(

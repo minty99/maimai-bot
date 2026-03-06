@@ -73,6 +73,8 @@ pub(crate) struct SongMetadata {
     pub(crate) user_level: Option<String>,
     pub(crate) image_name: Option<String>,
     pub(crate) version: Option<String>,
+    pub(crate) genre: String,
+    pub(crate) artist: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -89,6 +91,8 @@ pub(crate) struct SongInfoSheet {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub(crate) struct SongInfo {
     pub(crate) title: String,
+    pub(crate) genre: String,
+    pub(crate) artist: String,
     pub(crate) image_name: Option<String>,
     pub(crate) sheets: Vec<SongInfoSheet>,
 }
@@ -172,6 +176,47 @@ impl SongInfoClient {
             .json::<SongMetadata>()
             .await
             .wrap_err("parse song metadata")?;
+        Ok(Some(metadata))
+    }
+
+    pub(crate) async fn get_song_metadata_by_identity(
+        &self,
+        title: &str,
+        genre: &str,
+        artist: &str,
+        chart_type: &str,
+        diff_category: &str,
+    ) -> Result<Option<SongMetadata>> {
+        let url = format!("{}/api/songs/metadata", self.base_url);
+
+        let resp = self
+            .client
+            .get(&url)
+            .query(&[
+                ("title", title),
+                ("genre", genre),
+                ("artist", artist),
+                ("chart_type", chart_type),
+                ("diff_category", diff_category),
+            ])
+            .send()
+            .await
+            .wrap_err("fetch song metadata by identity")?;
+
+        if resp.status() == reqwest::StatusCode::NOT_FOUND {
+            return Ok(None);
+        }
+        if !resp.status().is_success() {
+            return Err(eyre::eyre!(
+                "Failed to fetch song metadata by identity: HTTP {}",
+                resp.status()
+            ));
+        }
+
+        let metadata = resp
+            .json::<SongMetadata>()
+            .await
+            .wrap_err("parse song metadata by identity")?;
         Ok(Some(metadata))
     }
 

@@ -24,6 +24,7 @@ pub(crate) fn create_router(state: AppState) -> Router {
             "/api/songs/{title}/{chart_type}/{diff_category}",
             get(songs::get_song_metadata),
         )
+        .route("/api/songs/metadata", get(songs::get_song_metadata_item))
         .route("/api/cover/{image_name}", get(cover::get_cover))
         .layer(CorsLayer::permissive())
         .layer(

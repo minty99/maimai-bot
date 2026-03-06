@@ -3,6 +3,7 @@ use axum::{
     extract::{Path, Query, State},
 };
 use models::{ChartType, DifficultyCategory, MaimaiVersion, SongChartRegion};
+use serde::Deserialize;
 use serde::Serialize;
 use std::collections::{HashMap, HashSet};
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -29,12 +30,16 @@ pub(crate) struct SongMetadataResponse {
     user_level: Option<String>,
     image_name: Option<String>,
     version: Option<String>,
+    genre: String,
+    artist: String,
     region: SongChartRegion,
 }
 
 #[derive(Serialize)]
 pub(crate) struct SongInfoResponse {
     title: String,
+    genre: String,
+    artist: String,
     image_name: Option<String>,
     sheets: Vec<SongSheetResponse>,
 }
@@ -53,6 +58,8 @@ pub(crate) struct SongSelectionStatsResponse {
 #[derive(Serialize)]
 pub(crate) struct SongResponse {
     title: String,
+    genre: String,
+    artist: String,
     image_name: Option<String>,
     sheets: Vec<SongSheetResponse>,
     selection_stats: SongSelectionStatsResponse,
@@ -68,6 +75,15 @@ pub(crate) struct SongVersionResponse {
 #[derive(Serialize)]
 pub(crate) struct SongVersionsListResponse {
     versions: Vec<SongVersionResponse>,
+}
+
+#[derive(Debug, Deserialize)]
+pub(crate) struct SongMetadataQuery {
+    title: String,
+    genre: String,
+    artist: String,
+    chart_type: String,
+    diff_category: String,
 }
 
 pub(crate) async fn random_song_by_level(
@@ -169,6 +185,8 @@ pub(crate) async fn random_song_by_level(
         if !sheets.is_empty() {
             candidates.push(SongResponse {
                 title: song.title.clone(),
+                genre: song.genre.clone(),
+                artist: song.artist.clone(),
                 image_name: song.image_name.clone(),
                 sheets,
                 selection_stats: SongSelectionStatsResponse {
@@ -275,9 +293,20 @@ fn build_song_info_response(song: &models::SongCatalogSong) -> Result<SongInfoRe
 
     Ok(SongInfoResponse {
         title: song.title.clone(),
+        genre: song.genre.clone(),
+        artist: song.artist.clone(),
         image_name: song.image_name.clone(),
         sheets,
     })
+}
+
+fn song_matches_identity(
+    song: &models::SongCatalogSong,
+    title: &str,
+    genre: &str,
+    artist: &str,
+) -> bool {
+    song.title == title && song.genre == genre && song.artist == artist
 }
 
 pub(crate) async fn list_song_info(
@@ -471,6 +500,8 @@ pub(crate) async fn get_song_metadata(
                         user_level: sheet.user_level.clone(),
                         image_name: song.image_name.clone(),
                         version,
+                        genre: song.genre.clone(),
+                        artist: song.artist.clone(),
                         region: sheet.region.clone(),
                     }));
                 }
@@ -482,6 +513,54 @@ pub(crate) async fn get_song_metadata(
     Err(AppError::NotFound(format!(
         "Song not found: {} / {} / {}",
         title, chart_type, diff_category
+    )))
+}
+
+pub(crate) async fn get_song_metadata_item(
+    State(state): State<AppState>,
+    Query(params): Query<SongMetadataQuery>,
+) -> Result<Json<SongMetadataResponse>> {
+    let song_data_root = state
+        .song_data_root
+        .read()
+        .map_err(|_| AppError::IoError("Failed to read song data".to_string()))?;
+
+    for song in song_data_root.iter() {
+        if !song_matches_identity(song, &params.title, &params.genre, &params.artist) {
+            continue;
+        }
+
+        for sheet in &song.sheets {
+            if sheet.chart_type.eq_ignore_ascii_case(&params.chart_type)
+                && sheet.difficulty.eq_ignore_ascii_case(&params.diff_category)
+            {
+                let internal_level = sheet
+                    .internal_level
+                    .as_deref()
+                    .and_then(|value| value.trim().parse::<f32>().ok());
+                let version = sheet
+                    .version_name
+                    .clone()
+                    .map(|v| v.trim().to_string())
+                    .filter(|v| !v.is_empty());
+
+                return Ok(Json(SongMetadataResponse {
+                    level: Some(sheet.level.clone()),
+                    internal_level,
+                    user_level: sheet.user_level.clone(),
+                    image_name: song.image_name.clone(),
+                    version,
+                    genre: song.genre.clone(),
+                    artist: song.artist.clone(),
+                    region: sheet.region.clone(),
+                }));
+            }
+        }
+    }
+
+    Err(AppError::NotFound(format!(
+        "Song metadata not found: {} / {} / {} / {} / {}",
+        params.title, params.genre, params.artist, params.chart_type, params.diff_category
     )))
 }
 
@@ -582,6 +661,8 @@ mod tests {
     fn build_song_info_response_normalizes_sheet_fields() {
         let song = SongCatalogSong {
             title: "Test Song".to_string(),
+            genre: "maimai".to_string(),
+            artist: "".to_string(),
             image_name: Some("cover.png".to_string()),
             sheets: vec![SongCatalogChart {
                 chart_type: "dx".to_string(),
@@ -600,6 +681,8 @@ mod tests {
         let response = build_song_info_response(&song).expect("song info should build");
 
         assert_eq!(response.title, "Test Song");
+        assert_eq!(response.genre, "maimai");
+        assert_eq!(response.artist, "");
         assert_eq!(response.image_name.as_deref(), Some("cover.png"));
         assert_eq!(response.sheets.len(), 1);
 
