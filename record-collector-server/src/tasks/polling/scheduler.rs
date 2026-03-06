@@ -18,11 +18,10 @@ pub(crate) fn start_background_polling(app_state: AppState) {
 
             match run_cycle(&app_state).await {
                 Ok(report) => info!(
-                    "Periodic poll finished: maintenance_skip={} seeded={} seeded_rows={} playlog_metadata_backfilled={} recent_present={}",
+                    "Periodic poll finished: maintenance_skip={} seeded={} seeded_rows={} recent_present={}",
                     report.skipped_for_maintenance,
                     report.seeded_scores.seeded,
                     report.seeded_scores.rows_written,
-                    report.playlog_metadata_backfilled,
                     report.recent_outcome.is_some()
                 ),
                 Err(err) => error!("Periodic poll failed: {err:#}"),

@@ -7,7 +7,6 @@ use crate::tasks::utils::scores::SeedScoresOutcome;
 pub(crate) struct SyncCycleReport {
     pub(crate) skipped_for_maintenance: bool,
     pub(crate) seeded_scores: SeedScoresOutcome,
-    pub(crate) playlog_metadata_backfilled: usize,
     pub(crate) recent_outcome: Option<RecentSyncOutcome>,
 }
 

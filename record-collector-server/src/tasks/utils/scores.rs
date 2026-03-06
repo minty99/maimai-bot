@@ -90,62 +90,6 @@ pub(crate) async fn ensure_scores_seeded(
     })
 }
 
-pub(crate) async fn backfill_missing_playlog_metadata(pool: &SqlitePool) -> Result<usize> {
-    let rows = sqlx::query_as::<_, (i64, String, String, Option<String>)>(
-        r#"
-        SELECT played_at_unixtime, title, chart_type, diff_category
-        FROM playlogs
-        WHERE genre IS NULL OR artist IS NULL
-        "#,
-    )
-    .fetch_all(pool)
-    .await
-    .wrap_err("fetch playlogs missing song metadata")?;
-
-    let mut updated = 0usize;
-    for (played_at_unixtime, title, chart_type, diff_category) in rows {
-        let Some(diff_category) = diff_category else {
-            continue;
-        };
-
-        let matches = sqlx::query_as::<_, (String, String)>(
-            r#"
-            SELECT DISTINCT genre, artist
-            FROM scores
-            WHERE title = ?1 AND chart_type = ?2 AND diff_category = ?3
-            "#,
-        )
-        .bind(&title)
-        .bind(&chart_type)
-        .bind(&diff_category)
-        .fetch_all(pool)
-        .await
-        .wrap_err("fetch candidate song metadata from scores")?;
-
-        if matches.len() != 1 {
-            continue;
-        }
-
-        let (genre, artist) = &matches[0];
-        sqlx::query(
-            r#"
-            UPDATE playlogs
-            SET genre = ?1, artist = ?2
-            WHERE played_at_unixtime = ?3
-            "#,
-        )
-        .bind(genre)
-        .bind(artist)
-        .bind(played_at_unixtime)
-        .execute(pool)
-        .await
-        .wrap_err("update playlog metadata from scores")?;
-        updated += 1;
-    }
-
-    Ok(updated)
-}
-
 async fn fetch_seed_song_index_entries(
     client: &mut MaimaiClient,
 ) -> Result<Vec<SeedSongIndexEntry>> {
