@@ -29,6 +29,8 @@ static USER_TIER_CONFIG: LazyLock<UserTierConfig> = LazyLock::new(|| {
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub(crate) struct UserTierKey {
     pub(crate) title: String,
+    pub(crate) genre: String,
+    pub(crate) artist: String,
     pub(crate) chart_type: ChartType,
     pub(crate) difficulty: DifficultyCategory,
 }
@@ -43,8 +45,10 @@ impl Display for UserTierKey {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
-            "{} ({}, {})",
+            "{} / {} / {} ({}, {})",
             self.title,
+            self.genre,
+            self.artist,
             self.chart_type,
             self.difficulty.as_str()
         )
@@ -71,6 +75,8 @@ enum BorderHint {
 #[derive(Debug, Clone)]
 struct CoverFingerprint {
     title: String,
+    genre: String,
+    artist: String,
     vector: Vec<f32>,
 }
 
@@ -114,10 +120,9 @@ async fn fetch_user_tier_map_for_sheet(
         let image_bytes = download_image(client, &entry.image_url)
             .await
             .wrap_err_with(|| format!("download user-tier image: {}", entry.image_url))?;
-        let matched_title = match_cover_title(&image_bytes, cover_fingerprints)?;
+        let matched_song = match_cover_song(&image_bytes, cover_fingerprints)?;
 
-        if let Some(key) = resolve_key(song_data, matched_title, entry.border_hint, internal_level)
-        {
+        if let Some(key) = resolve_key(song_data, matched_song, entry.border_hint, internal_level) {
             map.insert(key, entry.grade);
         }
     }
@@ -368,6 +373,8 @@ fn build_cover_fingerprints(
             .wrap_err_with(|| format!("decode cover image: {}", path.display()))?;
         out.push(CoverFingerprint {
             title: song.title.clone(),
+            genre: song.genre.clone(),
+            artist: song.artist.clone(),
             vector,
         });
     }
@@ -375,29 +382,29 @@ fn build_cover_fingerprints(
     Ok(out)
 }
 
-fn match_cover_title<'a>(
+fn match_cover_song<'a>(
     image_bytes: &[u8],
     cover_fingerprints: &'a [CoverFingerprint],
-) -> eyre::Result<&'a str> {
+) -> eyre::Result<&'a CoverFingerprint> {
     let border_hint = classify_border_hint(image_bytes).unwrap_or(BorderHint::None);
     let query_vector = image_to_vector(image_bytes, true)?;
 
-    let mut best: Option<(&str, f32)> = None;
+    let mut best: Option<(&CoverFingerprint, f32)> = None;
     for cover in cover_fingerprints {
         let score = l1_distance(&query_vector, &cover.vector);
         match best {
             Some((_, best_score)) if score >= best_score => {}
-            _ => best = Some((cover.title.as_str(), score)),
+            _ => best = Some((cover, score)),
         }
     }
 
-    let (title, score) = best.wrap_err("no cover candidates")?;
+    let (cover, score) = best.wrap_err("no cover candidates")?;
     if score > 13.0 {
         return Err(eyre::eyre!("no reliable cover match, score={score:.3}"));
     }
 
     let _ = border_hint;
-    Ok(title)
+    Ok(cover)
 }
 
 fn image_to_vector(image_bytes: &[u8], crop_border: bool) -> eyre::Result<Vec<f32>> {
@@ -511,11 +518,15 @@ fn classify_border_hint(image_bytes: &[u8]) -> eyre::Result<BorderHint> {
 
 fn resolve_key(
     song_data: &SongCatalog,
-    matched_title: &str,
+    matched_song: &CoverFingerprint,
     border_hint: BorderHint,
     internal_level: &str,
 ) -> Option<UserTierKey> {
-    let song = song_data.songs.iter().find(|s| s.title == matched_title)?;
+    let song = song_data.songs.iter().find(|s| {
+        s.title == matched_song.title
+            && s.genre == matched_song.genre
+            && s.artist == matched_song.artist
+    })?;
 
     let mut candidates: Vec<(ChartType, DifficultyCategory)> = song
         .sheets
@@ -555,6 +566,8 @@ fn resolve_key(
     {
         return Some(UserTierKey {
             title: song.title.clone(),
+            genre: song.genre.clone(),
+            artist: song.artist.clone(),
             chart_type,
             difficulty,
         });
@@ -563,6 +576,8 @@ fn resolve_key(
     let (chart_type, difficulty) = candidates[0];
     Some(UserTierKey {
         title: song.title.clone(),
+        genre: song.genre.clone(),
+        artist: song.artist.clone(),
         chart_type,
         difficulty,
     })
@@ -628,6 +643,8 @@ mod tests {
         let root = SongCatalog {
             songs: vec![SongCatalogSong {
                 title: "Song A".to_string(),
+                genre: "maimai".to_string(),
+                artist: "".to_string(),
                 image_name: Some("a.png".to_string()),
                 sheets: vec![
                     SongCatalogChart {
@@ -658,13 +675,24 @@ mod tests {
             }],
         };
 
-        let key_default =
-            resolve_key(&root, "Song A", BorderHint::None, LIVE_TEST_INTERNAL_LEVEL).unwrap();
+        let matched_song = CoverFingerprint {
+            title: "Song A".to_string(),
+            genre: "maimai".to_string(),
+            artist: "".to_string(),
+            vector: Vec::new(),
+        };
+        let key_default = resolve_key(
+            &root,
+            &matched_song,
+            BorderHint::None,
+            LIVE_TEST_INTERNAL_LEVEL,
+        )
+        .unwrap();
         assert_eq!(key_default.difficulty, DifficultyCategory::Master);
 
         let key_expert = resolve_key(
             &root,
-            "Song A",
+            &matched_song,
             BorderHint::Expert,
             LIVE_TEST_INTERNAL_LEVEL,
         )
@@ -679,12 +707,14 @@ mod tests {
 
         let cover_fp = CoverFingerprint {
             title: "Song A".to_string(),
+            genre: "maimai".to_string(),
+            artist: "".to_string(),
             vector: image_to_vector(&cover, true).unwrap(),
         };
 
         let covers = [cover_fp];
-        let matched = match_cover_title(&query, &covers).unwrap();
-        assert_eq!(matched, "Song A");
+        let matched = match_cover_song(&query, &covers).unwrap();
+        assert_eq!(matched.title, "Song A");
     }
 
     #[tokio::test]

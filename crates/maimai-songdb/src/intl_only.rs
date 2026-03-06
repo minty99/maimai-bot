@@ -1,8 +1,8 @@
 use eyre::WrapErr;
-use models::{ChartType, DifficultyCategory, MaimaiVersion, SongTitle};
+use models::{ChartType, DifficultyCategory, MaimaiVersion};
 use serde::Deserialize;
 
-use crate::{SheetRow, SheetSource, SongRow, sha256_hex};
+use crate::{SheetRow, SheetSource, SongRow, normalize_identity_component, sha256_hex};
 
 const INTL_ONLY_DATA_JSON: &str = include_str!("data/intl_only.json");
 
@@ -23,6 +23,7 @@ struct IntlOnlySong {
     song_id: String,
     title: String,
     category: String,
+    artist: String,
     image_url: String,
     #[serde(default)]
     sheets: Vec<IntlOnlySheet>,
@@ -53,13 +54,11 @@ fn map_to_rows(parsed: IntlOnlyData) -> eyre::Result<IntlOnlyRows> {
 
     for song in parsed.songs {
         let song_id = song.song_id.trim().to_string();
-        let raw_title = song.title.trim();
-        let title = SongTitle::parse(raw_title).canonical();
-        let category = song.category.trim().to_string();
-        if song_id.is_empty() || raw_title.is_empty() {
-            return Err(eyre::eyre!(
-                "intl_only song requires non-empty song_id/title"
-            ));
+        let title = normalize_identity_component(&song.title);
+        let category = normalize_identity_component(&song.category);
+        let artist = normalize_identity_component(&song.artist);
+        if song_id.is_empty() {
+            return Err(eyre::eyre!("intl_only song requires non-empty song_id"));
         }
         if category.is_empty() {
             return Err(eyre::eyre!(
@@ -81,7 +80,7 @@ fn map_to_rows(parsed: IntlOnlyData) -> eyre::Result<IntlOnlyRows> {
             song_id: song_id.clone(),
             category,
             title: title.clone(),
-            artist: None,
+            artist,
             image_name,
             image_url,
             release_date: None,
@@ -133,6 +132,7 @@ mod tests {
               "song_id": "test-song",
               "title": "Test Song",
               "category": "maimai",
+              "artist": "",
               "sheets": [
                 {
                   "type": "STD",
@@ -158,6 +158,7 @@ mod tests {
               "song_id": "test-song",
               "title": "Test Song",
               "category": "maimai",
+              "artist": "",
               "image_url": "https://example.com/test.png",
               "sheets": [
                 {
@@ -179,14 +180,15 @@ mod tests {
     }
 
     #[test]
-    fn intl_only_title_normalizes_during_row_mapping() {
+    fn intl_only_allows_empty_title_and_artist() {
         let json = r#"
         {
           "songs": [
             {
               "song_id": "test-song",
-              "title": "Link",
+              "title": "",
               "category": "niconico＆ボーカロイド",
+              "artist": "",
               "image_url": "https://example.com/test.png",
               "sheets": [
                 {
@@ -202,6 +204,7 @@ mod tests {
         "#;
         let parsed: IntlOnlyData = serde_json::from_str(json).expect("parse intl_only test json");
         let rows = map_to_rows(parsed).expect("map rows");
-        assert_eq!(rows.songs[0].title, "Link");
+        assert_eq!(rows.songs[0].title, "");
+        assert_eq!(rows.songs[0].artist, "");
     }
 }

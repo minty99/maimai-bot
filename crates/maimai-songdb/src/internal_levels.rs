@@ -4,10 +4,12 @@ use eyre::WrapErr;
 use models::{ChartType, DifficultyCategory};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::path::Path;
 use std::sync::LazyLock;
 use tokio::time::{Duration, sleep};
+
+use crate::{SongRow, normalize_song_title_value};
 
 #[derive(Debug, Clone, Deserialize)]
 struct ExtractSpec {
@@ -53,6 +55,63 @@ static TITLE_MAPPINGS: LazyLock<TitleMappings> = LazyLock::new(|| {
     serde_json::from_str(include_str!("data/title_mappings.json"))
         .expect("failed to parse embedded title_mappings.json")
 });
+
+struct InternalLevelTitleResolver {
+    song_id_by_title: HashMap<String, String>,
+    skipped_titles: HashSet<String>,
+    rename_titles: HashMap<String, String>,
+}
+
+impl InternalLevelTitleResolver {
+    fn new(songs: &[SongRow]) -> Self {
+        let mappings = &*TITLE_MAPPINGS;
+        let mut candidates_by_title: HashMap<String, Vec<String>> = HashMap::new();
+
+        for song in songs {
+            candidates_by_title
+                .entry(normalize_song_title_value(&song.title))
+                .or_default()
+                .push(song.song_id.clone());
+        }
+
+        let song_id_by_title = candidates_by_title
+            .into_iter()
+            .filter_map(|(title, song_ids)| match song_ids.as_slice() {
+                [song_id] => Some((title, song_id.clone())),
+                _ => None,
+            })
+            .collect();
+
+        Self {
+            song_id_by_title,
+            skipped_titles: mappings
+                .skip
+                .iter()
+                .map(|title| normalize_song_title_value(title))
+                .collect(),
+            rename_titles: mappings
+                .rename
+                .iter()
+                .map(|(title, renamed)| {
+                    (
+                        normalize_song_title_value(title),
+                        normalize_song_title_value(renamed),
+                    )
+                })
+                .collect(),
+        }
+    }
+
+    fn song_id_for_title(&self, title: &str) -> Option<String> {
+        let title = normalize_song_title_value(title);
+        if self.skipped_titles.contains(&title) {
+            return None;
+        }
+
+        let title = self.rename_titles.get(&title).cloned().unwrap_or(title);
+        self.song_id_by_title.get(&title).cloned()
+    }
+}
 
 fn max_column_for_extract(extract: &ExtractSpec) -> usize {
     let max_data_index = extract.data_indexes.iter().copied().max().unwrap_or(0);
@@ -144,6 +203,7 @@ fn extract_records_from_values(
     values: &[Vec<Value>],
     spec: &ExtractSpec,
     source_version: i64,
+    resolver: &InternalLevelTitleResolver,
 ) -> Vec<InternalLevelRow> {
     let mut out = Vec::new();
 
@@ -163,7 +223,8 @@ fn extract_records_from_values(
             let raw_type = row.get(type_idx).and_then(parse_string);
             let raw_diff = row.get(diff_idx).and_then(parse_string);
 
-            let Some((song_id, sheet_type, difficulty)) = map_row_keys(title, raw_type, raw_diff)
+            let Some((song_id, sheet_type, difficulty)) =
+                map_row_keys(title, raw_type, raw_diff, resolver)
             else {
                 continue;
             };
@@ -185,13 +246,14 @@ fn map_row_keys(
     title: Option<&str>,
     sheet_type: Option<&str>,
     difficulty: Option<&str>,
+    resolver: &InternalLevelTitleResolver,
 ) -> Option<(String, ChartType, DifficultyCategory)> {
     let title = title?.trim();
     if title.is_empty() {
         return None;
     }
 
-    let song_id = song_id_from_internal_level_title(title)?;
+    let song_id = resolver.song_id_for_title(title)?;
 
     let sheet_type = match sheet_type?.trim() {
         "STD" => ChartType::Std,
@@ -232,28 +294,11 @@ fn col_idx_to_a1(mut idx: usize) -> String {
     out.iter().rev().collect()
 }
 
-fn song_id_from_internal_level_title(title: &str) -> Option<String> {
-    if title == "Link" {
-        return None;
-    }
-
-    let mappings = &*TITLE_MAPPINGS;
-
-    if mappings.skip.iter().any(|s| s == title) {
-        return None;
-    }
-
-    if let Some(mapped) = mappings.rename.get(title) {
-        return Some(mapped.clone());
-    }
-
-    Some(title.to_string())
-}
-
 async fn fetch_rows_for_spreadsheet(
     client: &reqwest::Client,
     spreadsheet: &SpreadsheetSpec,
     google_api_key: &str,
+    resolver: &InternalLevelTitleResolver,
 ) -> eyre::Result<(Vec<InternalLevelRow>, usize, Vec<String>)> {
     let mut rows = Vec::new();
     let mut total_sheets = 0;
@@ -277,6 +322,7 @@ async fn fetch_rows_for_spreadsheet(
                     &values,
                     extract,
                     spreadsheet.source_version,
+                    resolver,
                 ));
             }
             Err(e) => {
@@ -292,7 +338,7 @@ async fn fetch_rows_for_spreadsheet(
 }
 
 fn cache_path_for_version(cache_dir: &Path, version: i64) -> std::path::PathBuf {
-    cache_dir.join(format!("v{version}.json"))
+    cache_dir.join(format!("v{version}.identity-v2.json"))
 }
 
 fn load_cached_rows(path: &Path) -> eyre::Result<Vec<InternalLevelRow>> {
@@ -317,8 +363,10 @@ pub(crate) async fn fetch_internal_levels(
     client: &reqwest::Client,
     google_api_key: &str,
     cache_dir: &Path,
+    songs: &[SongRow],
 ) -> eyre::Result<HashMap<InternalLevelKey, InternalLevelRow>> {
     std::fs::create_dir_all(cache_dir).wrap_err("create internal_level cache dir")?;
+    let resolver = InternalLevelTitleResolver::new(songs);
 
     let spreadsheets = &*SPREADSHEETS;
 
@@ -355,7 +403,7 @@ pub(crate) async fn fetch_internal_levels(
         tracing::info!("v{}: fetching from Google Sheets ({reason})", version);
 
         let (rows, sheet_count, failures) =
-            fetch_rows_for_spreadsheet(client, spreadsheet, google_api_key).await?;
+            fetch_rows_for_spreadsheet(client, spreadsheet, google_api_key, &resolver).await?;
 
         total_sheets += sheet_count;
         failed_sheets.extend(failures);
@@ -412,6 +460,23 @@ pub(crate) async fn fetch_internal_levels(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::song_id_from_identity_parts;
+
+    fn resolver_for_tests() -> InternalLevelTitleResolver {
+        InternalLevelTitleResolver::new(&[SongRow {
+            song_id: song_id_from_identity_parts("Some Song", "genre", ""),
+            category: "genre".to_string(),
+            title: "Some Song".to_string(),
+            artist: "".to_string(),
+            image_name: "cover.png".to_string(),
+            image_url: "https://example.com/cover.png".to_string(),
+            release_date: None,
+            sort_order: None,
+            is_new: false,
+            is_locked: false,
+            comment: None,
+        }])
+    }
 
     #[test]
     fn col_idx_to_a1_works() {
@@ -438,9 +503,12 @@ mod tests {
             Value::Number(serde_json::Number::from_f64(13.7).unwrap()),
         ]];
 
-        let rows = extract_records_from_values(&values, &spec, 13);
+        let rows = extract_records_from_values(&values, &spec, 13, &resolver_for_tests());
         assert_eq!(rows.len(), 1);
-        assert_eq!(rows[0].song_id, "Some Song");
+        assert_eq!(
+            rows[0].song_id,
+            song_id_from_identity_parts("Some Song", "genre", "")
+        );
         assert_eq!(rows[0].sheet_type, ChartType::Std);
         assert_eq!(rows[0].difficulty, DifficultyCategory::Master);
         assert_eq!(rows[0].internal_level, "13.7");
@@ -470,7 +538,12 @@ mod tests {
         .await
         .expect("fetch_sheet_values failed");
 
-        let rows = extract_records_from_values(&values, extract, latest.source_version);
+        let rows = extract_records_from_values(
+            &values,
+            extract,
+            latest.source_version,
+            &resolver_for_tests(),
+        );
 
         eprintln!(
             "v{} / {}: {} raw rows, {} parsed records",

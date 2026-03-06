@@ -11,6 +11,8 @@ pub struct SongCatalog {
 #[derive(Debug, Serialize, Deserialize)]
 pub struct SongCatalogSong {
     pub title: String,
+    pub genre: String,
+    pub artist: String,
     #[serde(rename = "imageName", skip_serializing_if = "Option::is_none")]
     pub image_name: Option<String>,
     pub sheets: Vec<SongCatalogChart>,
@@ -44,7 +46,9 @@ pub struct SongInternalLevelIndex {
 
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
 struct SongChartLookupKey {
-    title_norm: String,
+    title: String,
+    genre: String,
+    artist: String,
     chart_type: ChartType,
     diff_category: DifficultyCategory,
 }
@@ -59,11 +63,15 @@ impl SongInternalLevelIndex {
     pub fn internal_level(
         &self,
         title: &str,
+        genre: &str,
+        artist: &str,
         chart_type: ChartType,
         diff_category: DifficultyCategory,
     ) -> Option<f32> {
         let key = SongChartLookupKey {
-            title_norm: normalize_title(title),
+            title: normalize_identity_component(title),
+            genre: normalize_identity_component(genre),
+            artist: normalize_identity_component(artist),
             chart_type,
             diff_category,
         };
@@ -74,7 +82,9 @@ impl SongInternalLevelIndex {
         let mut map = HashMap::new();
 
         for song in catalog.songs {
-            let title_norm = normalize_title(&song.title);
+            let title = normalize_identity_component(&song.title);
+            let genre = normalize_identity_component(&song.genre);
+            let artist = normalize_identity_component(&song.artist);
 
             for sheet in song.sheets {
                 let Some(chart_type) = ChartType::from_lowercase(&sheet.chart_type) else {
@@ -96,7 +106,9 @@ impl SongInternalLevelIndex {
 
                 map.insert(
                     SongChartLookupKey {
-                        title_norm: title_norm.clone(),
+                        title: title.clone(),
+                        genre: genre.clone(),
+                        artist: artist.clone(),
                         chart_type,
                         diff_category,
                     },
@@ -109,9 +121,96 @@ impl SongInternalLevelIndex {
     }
 }
 
-fn normalize_title(s: &str) -> String {
-    s.to_ascii_lowercase()
-        .chars()
-        .filter(|c| !c.is_whitespace())
-        .collect::<String>()
+fn normalize_identity_component(s: &str) -> String {
+    s.trim().to_string()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn chart() -> SongCatalogChart {
+        SongCatalogChart {
+            chart_type: "std".to_string(),
+            difficulty: "master".to_string(),
+            level: "13+".to_string(),
+            version_name: None,
+            internal_level: Some("13.7".to_string()),
+            user_level: None,
+            region: SongChartRegion {
+                jp: true,
+                intl: true,
+            },
+        }
+    }
+
+    #[test]
+    fn internal_level_index_uses_trim_only_identity() {
+        let index = SongInternalLevelIndex::from_catalog(SongCatalog {
+            songs: vec![SongCatalogSong {
+                title: " Song A ".to_string(),
+                genre: " maimai ".to_string(),
+                artist: " Artist ".to_string(),
+                image_name: None,
+                sheets: vec![chart()],
+            }],
+        });
+
+        assert_eq!(
+            index.internal_level(
+                "Song A",
+                "maimai",
+                "Artist",
+                ChartType::Std,
+                DifficultyCategory::Master
+            ),
+            Some(13.7)
+        );
+    }
+
+    #[test]
+    fn internal_level_index_keeps_case_distinct() {
+        let index = SongInternalLevelIndex::from_catalog(SongCatalog {
+            songs: vec![
+                SongCatalogSong {
+                    title: "Link".to_string(),
+                    genre: "maimai".to_string(),
+                    artist: "".to_string(),
+                    image_name: None,
+                    sheets: vec![chart()],
+                },
+                SongCatalogSong {
+                    title: "link".to_string(),
+                    genre: "maimai".to_string(),
+                    artist: "".to_string(),
+                    image_name: None,
+                    sheets: vec![SongCatalogChart {
+                        internal_level: Some("14.0".to_string()),
+                        ..chart()
+                    }],
+                },
+            ],
+        });
+
+        assert_eq!(
+            index.internal_level(
+                "Link",
+                "maimai",
+                "",
+                ChartType::Std,
+                DifficultyCategory::Master
+            ),
+            Some(13.7)
+        );
+        assert_eq!(
+            index.internal_level(
+                "link",
+                "maimai",
+                "",
+                ChartType::Std,
+                DifficultyCategory::Master
+            ),
+            Some(14.0)
+        );
+    }
 }

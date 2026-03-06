@@ -3,7 +3,6 @@
 use eyre::{ContextCompat, WrapErr};
 use models::{
     ChartType, DifficultyCategory, SongCatalog, SongCatalogChart, SongCatalogSong, SongChartRegion,
-    SongTitle,
 };
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
@@ -74,36 +73,42 @@ struct RawSong {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct SongRow {
-    song_id: String,
-    category: String,
-    title: String,
-    artist: Option<String>,
-    image_name: String,
-    image_url: String,
-    release_date: Option<String>,
-    sort_order: Option<i64>,
-    is_new: bool,
-    is_locked: bool,
-    comment: Option<String>,
+    pub(crate) song_id: String,
+    pub(crate) category: String,
+    pub(crate) title: String,
+    pub(crate) artist: String,
+    pub(crate) image_name: String,
+    pub(crate) image_url: String,
+    pub(crate) release_date: Option<String>,
+    pub(crate) sort_order: Option<i64>,
+    pub(crate) is_new: bool,
+    pub(crate) is_locked: bool,
+    pub(crate) comment: Option<String>,
 }
 
 #[derive(Debug, Clone)]
-struct SheetRow {
-    song_id: String,
-    sheet_type: ChartType,
-    difficulty: DifficultyCategory,
-    level: String,
-    source: SheetSource,
+pub(crate) struct SheetRow {
+    pub(crate) song_id: String,
+    pub(crate) sheet_type: ChartType,
+    pub(crate) difficulty: DifficultyCategory,
+    pub(crate) level: String,
+    pub(crate) source: SheetSource,
 }
 
 #[derive(Debug, Clone)]
-enum SheetSource {
+pub(crate) enum SheetSource {
     Official,
     IntlOnly {
         version_name: String,
         internal_level: Option<String>,
         user_level: Option<String>,
     },
+}
+
+impl SheetSource {
+    pub(crate) fn is_official(&self) -> bool {
+        matches!(self, Self::Official)
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -203,6 +208,8 @@ impl SongDatabase {
         let sheet_versions = sheet_versions::fetch_intl_sheet_versions(
             &config.intl_sega_id,
             &config.intl_sega_password,
+            &songs,
+            &sheets,
         )
         .await
         .wrap_err("fetch INTL sheet versions")?;
@@ -213,6 +220,7 @@ impl SongDatabase {
             &client,
             &config.google_api_key,
             &internal_level_cache_dir,
+            &songs,
         )
         .await
         .wrap_err("fetch internal levels")?;
@@ -268,6 +276,8 @@ fn build_data_root(
             song.song_id.clone(),
             SongCatalogSong {
                 title: song.title.clone(),
+                genre: song.category.clone(),
+                artist: song.artist.clone(),
                 image_name: Some(song.image_name.clone()),
                 sheets: Vec::new(),
             },
@@ -288,6 +298,8 @@ fn build_data_root(
 
         let user_key = user_tiers.map(|_| UserTierKey {
             title: song.title.clone(),
+            genre: song.genre.clone(),
+            artist: song.artist.clone(),
             chart_type: sheet.sheet_type,
             difficulty: sheet.difficulty,
         });
@@ -449,6 +461,9 @@ fn ensure_unique_sheet_keys(sheets: &[SheetRow]) -> eyre::Result<()> {
 }
 
 fn extract_song(raw_song: &RawSong) -> SongRow {
+    let title = normalized_song_title(raw_song);
+    let category = normalize_identity_component(&raw_song.catcode);
+    let artist = normalized_song_artist(raw_song.artist.as_deref());
     let image_url = format!(
         "{}{}",
         IMAGE_BASE_URL,
@@ -458,17 +473,10 @@ fn extract_song(raw_song: &RawSong) -> SongRow {
     let release_date = parse_release_date(raw_song.release.as_deref());
     let sort_order = raw_song.version.parse::<i64>().ok();
 
-    let artist = raw_song
-        .artist
-        .as_deref()
-        .map(str::trim)
-        .filter(|value| !value.is_empty())
-        .map(str::to_string);
-
     SongRow {
-        song_id: derive_song_id(raw_song),
-        category: raw_song.catcode.clone(),
-        title: raw_song.title.clone(),
+        song_id: song_id_from_identity_parts(&title, &category, &artist),
+        category,
+        title,
         artist,
         image_name,
         image_url,
@@ -552,29 +560,48 @@ fn extract_sheets(raw_song: &RawSong) -> Vec<SheetRow> {
 }
 
 fn derive_song_id(raw_song: &RawSong) -> String {
-    if raw_song.catcode == "宴会場" {
-        if raw_song.title == "[協]青春コンプレックス" {
-            if raw_song.comment.as_deref() == Some("バンドメンバーを集めて楽しもう！（入門編）")
-            {
-                return "[協]青春コンプレックス（入門編）".to_string();
-            }
-            if raw_song.comment.as_deref() == Some("バンドメンバーを集めて挑め！（ヒーロー級）")
-            {
-                return "[協]青春コンプレックス（ヒーロー級）".to_string();
-            }
+    let category = normalize_identity_component(&raw_song.catcode);
+    let title = normalized_song_title(raw_song);
+    let artist = normalized_song_artist(raw_song.artist.as_deref());
+    song_id_from_identity_parts(&title, &category, &artist)
+}
+
+fn normalized_song_title(raw_song: &RawSong) -> String {
+    if raw_song.catcode == "宴会場" && raw_song.title.trim() == "[協]青春コンプレックス"
+    {
+        if raw_song.comment.as_deref() == Some("バンドメンバーを集めて楽しもう！（入門編）")
+        {
+            return "[協]青春コンプレックス（入門編）".to_string();
         }
-        return raw_song.title.clone();
+        if raw_song.comment.as_deref() == Some("バンドメンバーを集めて挑め！（ヒーロー級）")
+        {
+            return "[協]青春コンプレックス（ヒーロー級）".to_string();
+        }
     }
 
-    if SongTitle::requires_qualifier_for(&raw_song.title) {
-        return SongTitle::from_parts(&raw_song.title, Some(&raw_song.catcode)).canonical();
-    }
+    let title = normalize_identity_component(&raw_song.title);
+    normalize_song_title_value(&title)
+}
 
-    if raw_song.title == "Bad Apple!! feat nomico" {
-        return "Bad Apple!! feat.nomico".to_string();
-    }
+fn normalized_song_artist(artist: Option<&str>) -> String {
+    normalize_identity_component(artist.unwrap_or_default())
+}
 
-    raw_song.title.clone()
+pub(crate) fn normalize_song_title_value(title: &str) -> String {
+    let title = normalize_identity_component(title);
+    if title == "Bad Apple!! feat nomico" {
+        "Bad Apple!! feat.nomico".to_string()
+    } else {
+        title
+    }
+}
+
+pub(crate) fn normalize_identity_component(value: &str) -> String {
+    value.trim().to_string()
+}
+
+pub(crate) fn song_id_from_identity_parts(title: &str, genre: &str, artist: &str) -> String {
+    serde_json::to_string(&(title, genre, artist)).expect("serialize song identity")
 }
 
 fn extract_comment(raw_song: &RawSong) -> Option<String> {
@@ -781,25 +808,34 @@ mod tests {
         raw_song.comment = Some("バンドメンバーを集めて楽しもう！（入門編）".to_string());
         assert_eq!(
             derive_song_id(&raw_song),
-            "[協]青春コンプレックス（入門編）"
+            song_id_from_identity_parts("[協]青春コンプレックス（入門編）", "宴会場", "artist")
         );
 
         raw_song.comment = Some("バンドメンバーを集めて挑め！（ヒーロー級）".to_string());
         assert_eq!(
             derive_song_id(&raw_song),
-            "[協]青春コンプレックス（ヒーロー級）"
+            song_id_from_identity_parts("[協]青春コンプレックス（ヒーロー級）", "宴会場", "artist")
         );
 
         raw_song.catcode = "niconico＆ボーカロイド".to_string();
         raw_song.title = "Link".to_string();
         raw_song.comment = None;
-        assert_eq!(derive_song_id(&raw_song), "Link [[niconico＆VOCALOID™]]");
+        assert_eq!(
+            derive_song_id(&raw_song),
+            song_id_from_identity_parts("Link", "niconico＆ボーカロイド", "artist")
+        );
 
         raw_song.catcode = "maimai".to_string();
-        assert_eq!(derive_song_id(&raw_song), "Link [[maimai]]");
+        assert_eq!(
+            derive_song_id(&raw_song),
+            song_id_from_identity_parts("Link", "maimai", "artist")
+        );
 
         raw_song.title = "Bad Apple!! feat nomico".to_string();
-        assert_eq!(derive_song_id(&raw_song), "Bad Apple!! feat.nomico");
+        assert_eq!(
+            derive_song_id(&raw_song),
+            song_id_from_identity_parts("Bad Apple!! feat.nomico", "maimai", "artist")
+        );
     }
 
     #[test]
@@ -865,7 +901,7 @@ mod tests {
                 song_id: "official-song".to_string(),
                 category: "maimai".to_string(),
                 title: "Official Song".to_string(),
-                artist: None,
+                artist: "".to_string(),
                 image_name: "official.png".to_string(),
                 image_url: "https://example.com/official.png".to_string(),
                 release_date: None,
@@ -878,7 +914,7 @@ mod tests {
                 song_id: "intl-song".to_string(),
                 category: "INTL_ONLY".to_string(),
                 title: "Intl Song".to_string(),
-                artist: None,
+                artist: "".to_string(),
                 image_name: "intl.png".to_string(),
                 image_url: "https://example.com/intl.png".to_string(),
                 release_date: None,
@@ -958,7 +994,7 @@ mod tests {
         let intl_song = rows
             .songs
             .iter()
-            .find(|song| song.song_id == "全世界共通リズム感テスト")
+            .find(|song| song.title == "全世界共通リズム感テスト")
             .expect("intl song entry exists");
         let expected = format!("{}.png", sha256_hex(&intl_song.image_url));
         assert_eq!(intl_song.image_name, expected);
@@ -989,5 +1025,12 @@ mod tests {
 
         let result = ensure_unique_sheet_keys(&sheets);
         assert!(result.is_err());
+    }
+
+    #[test]
+    fn song_identity_keeps_case_distinct() {
+        let lower = song_id_from_identity_parts("link", "maimai", "");
+        let upper = song_id_from_identity_parts("Link", "maimai", "");
+        assert_ne!(lower, upper);
     }
 }
