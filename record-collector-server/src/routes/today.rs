@@ -76,6 +76,8 @@ pub(crate) async fn get_today(
             played_at,
             track,
             title,
+            genre,
+            artist,
             chart_type,
             diff_category,
             achievement_x10000,

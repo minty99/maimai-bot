@@ -40,10 +40,11 @@ pub(crate) async fn get_player(
         .map_err(|e| crate::error::AppError::InternalError(e.to_string()))?;
 
     let bytes = client
-        .get_bytes(&url)
+        .get_response(&url)
         .await
         .wrap_err("fetch playerData url")
-        .map_err(|e| crate::error::AppError::HttpClientError(e.to_string()))?;
+        .map_err(|e| crate::error::AppError::HttpClientError(e.to_string()))?
+        .body;
 
     let html = String::from_utf8(bytes)
         .wrap_err("playerData response is not utf-8")

@@ -41,12 +41,17 @@ async fn main() -> eyre::Result<()> {
         .wrap_err("ensure logged in")?;
 
     let parsed_url = Url::parse(&url).wrap_err("parse url")?;
-    let bytes = client
-        .get_bytes(&parsed_url)
+    let response = client
+        .get_response(&parsed_url)
         .await
-        .wrap_err("fetch bytes")?;
-    std::fs::write(&out_path, &bytes).wrap_err("write output file")?;
+        .wrap_err("fetch response")?;
+    std::fs::write(&out_path, &response.body).wrap_err("write output file")?;
 
-    println!("wrote {} bytes to {}", bytes.len(), out_path);
+    println!(
+        "wrote {} bytes from {} to {}",
+        response.body.len(),
+        response.final_url,
+        out_path
+    );
     Ok(())
 }

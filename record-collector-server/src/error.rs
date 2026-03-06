@@ -8,7 +8,6 @@ pub(crate) enum AppError {
     NotFound(String),
     InternalError(String),
     BadRequest(String),
-    AmbiguousSongTitle(String),
     Maintenance(String),
 }
 
@@ -40,9 +39,6 @@ impl IntoResponse for AppError {
                 None,
             ),
             AppError::BadRequest(msg) => (StatusCode::BAD_REQUEST, msg, "BAD_REQUEST", None),
-            AppError::AmbiguousSongTitle(msg) => {
-                (StatusCode::BAD_REQUEST, msg, "AMBIGUOUS_SONG_TITLE", None)
-            }
             AppError::Maintenance(msg) => (
                 StatusCode::SERVICE_UNAVAILABLE,
                 msg,

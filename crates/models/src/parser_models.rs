@@ -5,6 +5,8 @@ use crate::{ChartType, DifficultyCategory, FcStatus, ScoreRank, SyncStatus};
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ParsedScoreEntry {
     pub title: String,
+    pub genre: String,
+    pub artist: String,
     pub chart_type: ChartType,
     pub diff_category: DifficultyCategory,
     pub level: String,
@@ -22,10 +24,13 @@ pub struct ParsedScoreEntry {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ParsedPlayRecord {
     pub played_at_unixtime: Option<i64>,
+    pub playlog_detail_idx: Option<String>,
     pub track: Option<u8>,
     pub played_at: Option<String>,
     pub credit_id: Option<u32>,
     pub title: String,
+    pub genre: Option<String>,
+    pub artist: Option<String>,
     pub chart_type: ChartType,
     pub diff_category: Option<DifficultyCategory>,
     pub level: Option<String>,
@@ -42,8 +47,15 @@ pub struct ParsedPlayRecord {
 pub struct ParsedSongDetail {
     pub title: String,
     pub genre: Option<String>,
+    pub artist: String,
     pub chart_type: ChartType,
     pub difficulties: Vec<ParsedSongChartDetail>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ParsedPlaylogDetail {
+    pub title: String,
+    pub music_detail_idx: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

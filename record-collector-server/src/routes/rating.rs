@@ -32,10 +32,11 @@ pub(crate) async fn get_rating_targets(
         .map_err(|e| crate::error::AppError::InternalError(e.to_string()))?;
 
     let bytes = client
-        .get_bytes(&url)
+        .get_response(&url)
         .await
         .wrap_err("fetch ratingTargetMusic url")
-        .map_err(|e| crate::error::AppError::HttpClientError(e.to_string()))?;
+        .map_err(|e| crate::error::AppError::HttpClientError(e.to_string()))?
+        .body;
     let html = String::from_utf8(bytes)
         .wrap_err("ratingTargetMusic response is not utf-8")
         .map_err(|e| crate::error::AppError::InternalError(e.to_string()))?;

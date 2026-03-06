@@ -19,14 +19,8 @@ pub(crate) fn create_routes(state: AppState) -> Router {
         .route("/health/ready", get(health::ready))
         .route("/api/scores/search", get(scores::search_scores))
         .route("/api/scores/rated", get(scores::get_all_rated_scores))
-        .route(
-            "/api/scores/detail/{title}",
-            get(scores::get_song_detail_scores),
-        )
-        .route(
-            "/api/scores/{title}/{chart_type}/{diff_category}",
-            get(scores::get_score),
-        )
+        .route("/api/songs/scores", get(scores::get_song_detail_scores))
+        .route("/api/scores/item", get(scores::get_score))
         .route("/api/player", get(player::get_player))
         .route("/api/rating/targets", get(rating::get_rating_targets))
         .route("/api/recent", get(recent::get_recent))

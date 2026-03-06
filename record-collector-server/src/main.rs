@@ -46,8 +46,14 @@ async fn main() -> eyre::Result<()> {
     // Attempt startup sync, but allow server to start even if it fails
     // (useful for testing with invalid credentials)
     match tasks::startup::startup_sync(&db_pool, &config).await {
-        Ok(_) => tracing::info!("Startup sync completed successfully"),
-        Err(e) => tracing::warn!("Startup sync failed (server will still start): {}", e),
+        Ok(report) => tracing::info!(
+            "Startup sync completed: maintenance_skip={} seeded={} seeded_rows={} recent_present={}",
+            report.skipped_for_maintenance,
+            report.seeded_scores.seeded,
+            report.seeded_scores.rows_written,
+            report.recent_outcome.is_some()
+        ),
+        Err(e) => tracing::warn!("Startup sync failed (server will still start): {e:#}"),
     }
 
     let app_state = state::AppState {

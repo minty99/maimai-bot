@@ -28,7 +28,7 @@ pub(crate) async fn get_recent(
     let limit = params.limit.clamp(1, 500);
 
     let rows = sqlx::query_as::<_, StoredPlayRecord>(
-        "SELECT played_at_unixtime, played_at, track, title, chart_type, diff_category, 
+        "SELECT played_at_unixtime, played_at, track, title, genre, artist, chart_type, diff_category, 
                 achievement_x10000, score_rank, fc, sync, dx_score, dx_score_max, 
                 credit_id, achievement_new_record
          FROM playlogs

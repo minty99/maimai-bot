@@ -98,6 +98,8 @@ pub fn parse_scores_html(html: &str, diff: u8) -> eyre::Result<Vec<ParsedScoreEn
 
         entries.push(ParsedScoreEntry {
             title,
+            genre: String::new(),
+            artist: String::new(),
             chart_type,
             diff_category,
             level,

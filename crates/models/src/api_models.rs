@@ -5,6 +5,8 @@ use crate::{ChartType, DifficultyCategory, FcStatus, ScoreRank, SyncStatus};
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ScoreApiResponse {
     pub title: String,
+    pub genre: String,
+    pub artist: String,
     pub chart_type: ChartType,
     pub diff_category: DifficultyCategory,
     pub achievement_x10000: Option<i64>,
@@ -22,6 +24,8 @@ pub struct ScoreApiResponse {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SongDetailScoreApiResponse {
     pub title: String,
+    pub genre: String,
+    pub artist: String,
     pub chart_type: ChartType,
     pub diff_category: DifficultyCategory,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -48,6 +52,10 @@ pub struct PlayRecordApiResponse {
     pub played_at: Option<String>,
     pub track: Option<i32>,
     pub title: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub genre: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub artist: Option<String>,
     pub chart_type: ChartType,
     pub diff_category: Option<DifficultyCategory>,
     pub achievement_x10000: Option<i64>,

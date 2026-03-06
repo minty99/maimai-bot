@@ -24,6 +24,8 @@ pub(crate) fn score_response_from_entry(entry: StoredScoreEntry) -> Result<Score
 
     Ok(ScoreApiResponse {
         title: entry.title,
+        genre: entry.genre,
+        artist: entry.artist,
         chart_type,
         diff_category,
         achievement_x10000: entry.achievement_x10000,
@@ -63,6 +65,8 @@ pub(crate) fn play_record_response_from_record(
         played_at: record.played_at,
         track: record.track,
         title: record.title,
+        genre: record.genre,
+        artist: record.artist,
         chart_type,
         diff_category,
         achievement_x10000: record.achievement_x10000,

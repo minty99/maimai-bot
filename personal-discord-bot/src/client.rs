@@ -46,10 +46,6 @@ impl ApiError {
     pub(crate) fn code(&self) -> &str {
         &self.code
     }
-
-    pub(crate) fn message(&self) -> &str {
-        &self.message
-    }
 }
 
 impl fmt::Display for ApiError {
@@ -276,14 +272,18 @@ impl RecordCollectorClient {
     pub async fn get_score(
         &self,
         title: &str,
+        genre: &str,
+        artist: &str,
         chart: &str,
         diff: &str,
     ) -> Result<ScoreApiResponse> {
         self.get_with_retry(&format!(
-            "/api/scores/{}/{}/{}",
+            "/api/scores/item?title={}&genre={}&artist={}&chart_type={}&diff_category={}",
             urlencoding::encode(title),
-            chart,
-            diff
+            urlencoding::encode(genre),
+            urlencoding::encode(artist),
+            urlencoding::encode(chart),
+            urlencoding::encode(diff)
         ))
         .await
     }
@@ -309,10 +309,14 @@ impl RecordCollectorClient {
     pub async fn get_song_detail_scores(
         &self,
         title: &str,
+        genre: &str,
+        artist: &str,
     ) -> Result<Vec<SongDetailScoreApiResponse>> {
         self.get_with_retry(&format!(
-            "/api/scores/detail/{}",
-            urlencoding::encode(title)
+            "/api/songs/scores?title={}&genre={}&artist={}",
+            urlencoding::encode(title),
+            urlencoding::encode(genre),
+            urlencoding::encode(artist)
         ))
         .await
     }
