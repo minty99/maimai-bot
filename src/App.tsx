@@ -683,7 +683,7 @@ function App() {
 
   const availablePlaylogDayKeys = useMemo(() => {
     const dayKeys = new Set(playlogData.map((row) => toMaimaiDayKey(row.playedAtUnix)));
-    return Array.from(dayKeys).sort((left, right) => left.localeCompare(right));
+    return Array.from(dayKeys).sort((left, right) => right.localeCompare(left));
   }, [playlogData]);
 
   useEffect(() => {
@@ -692,7 +692,7 @@ function App() {
       return;
     }
 
-    const latestDayKey = availablePlaylogDayKeys[availablePlaylogDayKeys.length - 1];
+    const latestDayKey = availablePlaylogDayKeys[0];
     setSelectedPlaylogDayKey((current) => {
       if (current && availablePlaylogDayKeys.includes(current)) {
         return current;
