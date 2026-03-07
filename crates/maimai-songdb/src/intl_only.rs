@@ -1,8 +1,10 @@
 use eyre::WrapErr;
-use models::{ChartType, DifficultyCategory, MaimaiVersion};
+use models::{ChartType, DifficultyCategory, MaimaiVersion, SongGenre};
 use serde::Deserialize;
 
-use crate::{SheetRow, SheetSource, SongRow, normalize_identity_component, sha256_hex};
+use crate::{
+    SheetRow, SheetSource, SongIdentity, SongRow, normalize_identity_component, sha256_hex,
+};
 
 const INTL_ONLY_DATA_JSON: &str = include_str!("data/intl_only.json");
 
@@ -20,7 +22,6 @@ struct IntlOnlyData {
 
 #[derive(Debug, Deserialize)]
 struct IntlOnlySong {
-    song_id: String,
     title: String,
     category: String,
     artist: String,
@@ -51,19 +52,16 @@ fn map_to_rows(parsed: IntlOnlyData) -> eyre::Result<IntlOnlyRows> {
     let mut sheets = Vec::new();
 
     for song in parsed.songs {
-        let song_id = song.song_id.trim().to_string();
         let title = normalize_identity_component(&song.title);
-        let category = normalize_identity_component(&song.category);
+        let genre = SongGenre::from_name(&song.category).ok_or_else(|| {
+            eyre::eyre!(
+                "intl_only song '{}' has unknown category: {}",
+                title,
+                song.category.trim()
+            )
+        })?;
         let artist = normalize_identity_component(&song.artist);
-        if song_id.is_empty() {
-            return Err(eyre::eyre!("intl_only song requires non-empty song_id"));
-        }
-        if category.is_empty() {
-            return Err(eyre::eyre!(
-                "intl_only song '{}' requires non-empty category",
-                title
-            ));
-        }
+        let identity = SongIdentity::new(&title, genre, &artist);
         let image_url = song.image_url.trim().to_string();
         if !image_url.starts_with("http://") && !image_url.starts_with("https://") {
             return Err(eyre::eyre!(
@@ -75,10 +73,7 @@ fn map_to_rows(parsed: IntlOnlyData) -> eyre::Result<IntlOnlyRows> {
         let image_name = format!("{}.png", sha256_hex(&image_url));
 
         songs.push(SongRow {
-            song_id: song_id.clone(),
-            category,
-            title: title.clone(),
-            artist,
+            identity: identity.clone(),
             image_name,
             image_url,
             release_date: None,
@@ -95,7 +90,7 @@ fn map_to_rows(parsed: IntlOnlyData) -> eyre::Result<IntlOnlyRows> {
             }
 
             sheets.push(SheetRow {
-                song_id: song_id.clone(),
+                song_identity: identity.clone(),
                 sheet_type: sheet.chart_type,
                 difficulty: sheet.difficulty,
                 level: level.to_string(),
@@ -121,7 +116,6 @@ mod tests {
         {
           "songs": [
             {
-              "song_id": "test-song",
               "title": "Test Song",
               "category": "maimai",
               "artist": "",
@@ -147,7 +141,6 @@ mod tests {
         {
           "songs": [
             {
-              "song_id": "test-song",
               "title": "Test Song",
               "category": "maimai",
               "artist": "",
@@ -177,7 +170,6 @@ mod tests {
         {
           "songs": [
             {
-              "song_id": "test-song",
               "title": "",
               "category": "niconico＆ボーカロイド",
               "artist": "",
@@ -196,7 +188,7 @@ mod tests {
         "#;
         let parsed: IntlOnlyData = serde_json::from_str(json).expect("parse intl_only test json");
         let rows = map_to_rows(parsed).expect("map rows");
-        assert_eq!(rows.songs[0].title, "");
-        assert_eq!(rows.songs[0].artist, "");
+        assert_eq!(rows.songs[0].identity.title, "");
+        assert_eq!(rows.songs[0].identity.artist, "");
     }
 }

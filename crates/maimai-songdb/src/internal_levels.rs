@@ -9,7 +9,7 @@ use std::path::Path;
 use std::sync::LazyLock;
 use tokio::time::{Duration, sleep};
 
-use crate::{SongRow, normalize_song_title_value};
+use crate::{SongIdentity, SongRow, normalize_song_title_value};
 
 #[derive(Debug, Clone, Deserialize)]
 struct ExtractSpec {
@@ -39,7 +39,7 @@ struct ValuesResponse {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub(crate) struct InternalLevelRow {
-    pub(crate) song_id: String,
+    pub(crate) song_identity: SongIdentity,
     pub(crate) sheet_type: ChartType,
     pub(crate) difficulty: DifficultyCategory,
     pub(crate) internal_level: String,
@@ -57,7 +57,7 @@ static TITLE_MAPPINGS: LazyLock<TitleMappings> = LazyLock::new(|| {
 });
 
 struct InternalLevelTitleResolver {
-    song_id_by_title: HashMap<String, String>,
+    song_identity_by_title: HashMap<String, SongIdentity>,
     skipped_titles: HashSet<String>,
     rename_titles: HashMap<String, String>,
 }
@@ -65,25 +65,27 @@ struct InternalLevelTitleResolver {
 impl InternalLevelTitleResolver {
     fn new(songs: &[SongRow]) -> Self {
         let mappings = &*TITLE_MAPPINGS;
-        let mut candidates_by_title: HashMap<String, Vec<String>> = HashMap::new();
+        let mut candidates_by_title: HashMap<String, Vec<SongIdentity>> = HashMap::new();
 
         for song in songs {
             candidates_by_title
-                .entry(normalize_song_title_value(&song.title))
+                .entry(normalize_song_title_value(&song.identity.title))
                 .or_default()
-                .push(song.song_id.clone());
+                .push(song.identity.clone());
         }
 
-        let song_id_by_title = candidates_by_title
+        let song_identity_by_title = candidates_by_title
             .into_iter()
-            .filter_map(|(title, song_ids)| match song_ids.as_slice() {
-                [song_id] => Some((title, song_id.clone())),
-                _ => None,
-            })
+            .filter_map(
+                |(title, song_identities)| match song_identities.as_slice() {
+                    [song_identity] => Some((title, song_identity.clone())),
+                    _ => None,
+                },
+            )
             .collect();
 
         Self {
-            song_id_by_title,
+            song_identity_by_title,
             skipped_titles: mappings
                 .skip
                 .iter()
@@ -102,14 +104,14 @@ impl InternalLevelTitleResolver {
         }
     }
 
-    fn song_id_for_title(&self, title: &str) -> Option<String> {
+    fn song_identity_for_title(&self, title: &str) -> Option<SongIdentity> {
         let title = normalize_song_title_value(title);
         if self.skipped_titles.contains(&title) {
             return None;
         }
 
         let title = self.rename_titles.get(&title).cloned().unwrap_or(title);
-        self.song_id_by_title.get(&title).cloned()
+        self.song_identity_by_title.get(&title).cloned()
     }
 }
 
@@ -223,14 +225,14 @@ fn extract_records_from_values(
             let raw_type = row.get(type_idx).and_then(parse_string);
             let raw_diff = row.get(diff_idx).and_then(parse_string);
 
-            let Some((song_id, sheet_type, difficulty)) =
+            let Some((song_identity, sheet_type, difficulty)) =
                 map_row_keys(title, raw_type, raw_diff, resolver)
             else {
                 continue;
             };
 
             out.push(InternalLevelRow {
-                song_id,
+                song_identity,
                 sheet_type,
                 difficulty,
                 internal_level: format!("{internal:.1}"),
@@ -247,13 +249,13 @@ fn map_row_keys(
     sheet_type: Option<&str>,
     difficulty: Option<&str>,
     resolver: &InternalLevelTitleResolver,
-) -> Option<(String, ChartType, DifficultyCategory)> {
+) -> Option<(SongIdentity, ChartType, DifficultyCategory)> {
     let title = title?.trim();
     if title.is_empty() {
         return None;
     }
 
-    let song_id = resolver.song_id_for_title(title)?;
+    let song_identity = resolver.song_identity_for_title(title)?;
 
     let sheet_type = match sheet_type?.trim() {
         "STD" => ChartType::Std,
@@ -263,7 +265,7 @@ fn map_row_keys(
 
     let difficulty = DifficultyCategory::from_sheet_abbreviation(difficulty?.trim())?;
 
-    Some((song_id, sheet_type, difficulty))
+    Some((song_identity, sheet_type, difficulty))
 }
 
 fn parse_string(v: &Value) -> Option<&str> {
@@ -338,7 +340,7 @@ async fn fetch_rows_for_spreadsheet(
 }
 
 fn cache_path_for_version(cache_dir: &Path, version: i64) -> std::path::PathBuf {
-    cache_dir.join(format!("v{version}.identity-v2.json"))
+    cache_dir.join(format!("v{version}.identity-v3.json"))
 }
 
 fn load_cached_rows(path: &Path) -> eyre::Result<Vec<InternalLevelRow>> {
@@ -357,7 +359,7 @@ fn save_cached_rows(path: &Path, rows: &[InternalLevelRow]) -> eyre::Result<()> 
     Ok(())
 }
 
-pub(crate) type InternalLevelKey = (String, ChartType, DifficultyCategory);
+pub(crate) type InternalLevelKey = (SongIdentity, ChartType, DifficultyCategory);
 
 pub(crate) async fn fetch_internal_levels(
     client: &reqwest::Client,
@@ -424,7 +426,7 @@ pub(crate) async fn fetch_internal_levels(
 
     let mut result = HashMap::new();
     for row in all_rows {
-        let key: InternalLevelKey = (row.song_id.clone(), row.sheet_type, row.difficulty);
+        let key: InternalLevelKey = (row.song_identity.clone(), row.sheet_type, row.difficulty);
         result
             .entry(key)
             .and_modify(|existing: &mut InternalLevelRow| {
@@ -460,14 +462,11 @@ pub(crate) async fn fetch_internal_levels(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::song_id_from_identity_parts;
+    use models::SongGenre;
 
     fn resolver_for_tests() -> InternalLevelTitleResolver {
         InternalLevelTitleResolver::new(&[SongRow {
-            song_id: song_id_from_identity_parts("Some Song", "genre", ""),
-            category: "genre".to_string(),
-            title: "Some Song".to_string(),
-            artist: "".to_string(),
+            identity: SongIdentity::new("Some Song", SongGenre::Maimai, ""),
             image_name: "cover.png".to_string(),
             image_url: "https://example.com/cover.png".to_string(),
             release_date: None,
@@ -506,8 +505,8 @@ mod tests {
         let rows = extract_records_from_values(&values, &spec, 13, &resolver_for_tests());
         assert_eq!(rows.len(), 1);
         assert_eq!(
-            rows[0].song_id,
-            song_id_from_identity_parts("Some Song", "genre", "")
+            rows[0].song_identity,
+            SongIdentity::new("Some Song", SongGenre::Maimai, "")
         );
         assert_eq!(rows[0].sheet_type, ChartType::Std);
         assert_eq!(rows[0].difficulty, DifficultyCategory::Master);
