@@ -8,7 +8,6 @@ mod commands;
 mod config;
 mod dm;
 mod embeds;
-mod rating_image;
 
 use client::{RecordCollectorClient, SongInfoClient};
 use config::DiscordConfig;
@@ -69,9 +68,6 @@ async fn main() -> eyre::Result<()> {
                 commands::mai_song_info(),
                 commands::mai_recent(),
                 commands::mai_today(),
-                commands::mai_today_detail(),
-                commands::mai_rating(),
-                commands::mai_rating_img(),
             ],
             on_error: |error: poise::FrameworkError<
                 '_,

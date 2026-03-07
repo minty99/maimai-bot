@@ -1,7 +1,7 @@
 use eyre::{Result, WrapErr};
 use models::{
-    ChartType, DifficultyCategory, ParsedPlayerProfile, ParsedRatingTargets, PlayRecordApiResponse,
-    ScoreApiResponse, SongChartRegion, SongDetailScoreApiResponse,
+    ChartType, DifficultyCategory, ParsedPlayerProfile, PlayRecordApiResponse, ScoreApiResponse,
+    SongChartRegion, SongDetailScoreApiResponse,
 };
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
@@ -68,31 +68,38 @@ pub(crate) enum PlayerDataResult {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub(crate) struct SongMetadata {
+    pub(crate) title: String,
+    pub(crate) chart_type: ChartType,
+    pub(crate) diff_category: DifficultyCategory,
     pub(crate) level: Option<String>,
     pub(crate) internal_level: Option<f32>,
     pub(crate) image_name: Option<String>,
     pub(crate) version: Option<String>,
     pub(crate) genre: String,
     pub(crate) artist: String,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub(crate) struct SongInfoSheet {
-    pub(crate) chart_type: ChartType,
-    pub(crate) difficulty: DifficultyCategory,
-    pub(crate) level: String,
-    pub(crate) version: Option<String>,
-    pub(crate) internal_level: Option<f32>,
     pub(crate) region: SongChartRegion,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub(crate) struct SongInfo {
-    pub(crate) title: String,
-    pub(crate) genre: String,
-    pub(crate) artist: String,
-    pub(crate) image_name: Option<String>,
-    pub(crate) sheets: Vec<SongInfoSheet>,
+pub(crate) struct SongMetadataSearchRequest {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) title: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) genre: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) artist: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) chart_type: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) diff_category: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) limits: Option<usize>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub(crate) struct SongMetadataSearchResponse {
+    pub(crate) total: usize,
+    pub(crate) items: Vec<SongMetadata>,
 }
 
 #[derive(Debug)]
@@ -139,110 +146,57 @@ impl SongInfoClient {
             .wrap_err("read cover image bytes")
     }
 
-    pub(crate) async fn get_song_metadata(
+    pub(crate) async fn search_song_metadata(
         &self,
-        title: &str,
-        chart_type: &str,
-        diff_category: &str,
-    ) -> Result<Option<SongMetadata>> {
-        let url = format!(
-            "{}/api/songs/{}/{}/{}",
-            self.base_url,
-            urlencoding::encode(title),
-            urlencoding::encode(chart_type),
-            urlencoding::encode(diff_category)
-        );
-
-        let resp = self
-            .client
-            .get(&url)
-            .send()
-            .await
-            .wrap_err("fetch song metadata")?;
-
-        if resp.status() == reqwest::StatusCode::NOT_FOUND {
-            return Ok(None);
-        }
-        if !resp.status().is_success() {
-            return Err(eyre::eyre!(
-                "Failed to fetch song metadata: HTTP {}",
-                resp.status()
-            ));
-        }
-
-        let metadata = resp
-            .json::<SongMetadata>()
-            .await
-            .wrap_err("parse song metadata")?;
-        Ok(Some(metadata))
-    }
-
-    pub(crate) async fn get_song_metadata_by_identity(
-        &self,
-        title: &str,
-        genre: &str,
-        artist: &str,
-        chart_type: &str,
-        diff_category: &str,
-    ) -> Result<Option<SongMetadata>> {
+        request: &SongMetadataSearchRequest,
+    ) -> Result<SongMetadataSearchResponse> {
         let url = format!("{}/api/songs/metadata", self.base_url);
 
         let resp = self
             .client
-            .get(&url)
-            .query(&[
-                ("title", title),
-                ("genre", genre),
-                ("artist", artist),
-                ("chart_type", chart_type),
-                ("diff_category", diff_category),
-            ])
+            .post(&url)
+            .json(request)
             .send()
             .await
-            .wrap_err("fetch song metadata by identity")?;
-
-        if resp.status() == reqwest::StatusCode::NOT_FOUND {
-            return Ok(None);
-        }
+            .wrap_err("search song metadata")?;
         if !resp.status().is_success() {
             return Err(eyre::eyre!(
-                "Failed to fetch song metadata by identity: HTTP {}",
+                "Failed to search song metadata: HTTP {}",
                 resp.status()
             ));
         }
 
-        let metadata = resp
-            .json::<SongMetadata>()
+        resp.json::<SongMetadataSearchResponse>()
             .await
-            .wrap_err("parse song metadata by identity")?;
-        Ok(Some(metadata))
+            .wrap_err("parse song metadata search response")
     }
 
-    pub(crate) async fn get_song_info_by_title(&self, title: &str) -> Result<Option<SongInfo>> {
-        let url = format!(
-            "{}/api/songs/by-title/{}",
-            self.base_url,
-            urlencoding::encode(title)
-        );
+    pub(crate) async fn find_song_metadata(
+        &self,
+        title: &str,
+        genre: &str,
+        artist: &str,
+        chart_type: ChartType,
+        diff_category: DifficultyCategory,
+    ) -> Result<Option<SongMetadata>> {
+        let response = self
+            .search_song_metadata(&SongMetadataSearchRequest {
+                title: Some(title.to_string()),
+                genre: Some(genre.to_string()),
+                artist: Some(artist.to_string()),
+                chart_type: Some(chart_type.as_str().to_string()),
+                diff_category: Some(diff_category.as_str().to_string()),
+                limits: Some(2),
+            })
+            .await?;
 
-        let resp = self
-            .client
-            .get(&url)
-            .send()
-            .await
-            .wrap_err("fetch song info")?;
-        if resp.status() == reqwest::StatusCode::NOT_FOUND {
-            return Ok(None);
-        }
-        if !resp.status().is_success() {
-            return Err(eyre::eyre!(
-                "Failed to fetch song info: HTTP {}",
-                resp.status()
-            ));
+        if response.total > 1 {
+            tracing::warn!(
+                "song metadata search returned multiple rows for exact identity: {title} / {genre} / {artist} [{chart_type} {diff_category}]"
+            );
         }
 
-        let song_info = resp.json::<SongInfo>().await.wrap_err("parse song info")?;
-        Ok(Some(song_info))
+        Ok(response.items.into_iter().next())
     }
 }
 
@@ -343,10 +297,6 @@ impl RecordCollectorClient {
 
     pub async fn get_rated_scores(&self) -> Result<Vec<ScoreApiResponse>> {
         self.get_with_retry("/api/scores/rated").await
-    }
-
-    pub async fn get_rating_targets(&self) -> Result<ParsedRatingTargets> {
-        self.get_with_retry("/api/rating/targets").await
     }
 
     pub async fn get_song_detail_scores(

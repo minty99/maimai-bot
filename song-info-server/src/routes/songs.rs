@@ -1,6 +1,6 @@
 use axum::{
     Json,
-    extract::{Path, Query, State},
+    extract::{Query, State},
 };
 use models::{ChartType, DifficultyCategory, MaimaiVersion, SongChartRegion, SongGenre};
 use serde::Deserialize;
@@ -24,6 +24,9 @@ pub(crate) struct SongSheetResponse {
 
 #[derive(Serialize)]
 pub(crate) struct SongMetadataResponse {
+    title: String,
+    chart_type: ChartType,
+    diff_category: DifficultyCategory,
     level: Option<String>,
     internal_level: Option<f32>,
     image_name: Option<String>,
@@ -76,12 +79,25 @@ pub(crate) struct SongVersionsListResponse {
 }
 
 #[derive(Debug, Deserialize)]
-pub(crate) struct SongMetadataQuery {
-    title: String,
-    genre: String,
-    artist: String,
-    chart_type: String,
-    diff_category: String,
+pub(crate) struct SongMetadataSearchRequest {
+    #[serde(default)]
+    title: Option<String>,
+    #[serde(default)]
+    genre: Option<String>,
+    #[serde(default)]
+    artist: Option<String>,
+    #[serde(default)]
+    chart_type: Option<String>,
+    #[serde(default)]
+    diff_category: Option<String>,
+    #[serde(default)]
+    limits: Option<usize>,
+}
+
+#[derive(Serialize)]
+pub(crate) struct SongMetadataSearchResponse {
+    total: usize,
+    items: Vec<SongMetadataResponse>,
 }
 
 pub(crate) async fn random_song_by_level(
@@ -296,15 +312,105 @@ fn build_song_info_response(song: &models::SongCatalogSong) -> Result<SongInfoRe
     })
 }
 
-fn song_matches_identity(
+fn song_matches_search_request(
     song: &models::SongCatalogSong,
-    title: &str,
-    genre: &str,
-    artist: &str,
+    title: Option<&str>,
+    genre: Option<&SongGenre>,
+    artist: Option<&str>,
 ) -> bool {
-    song.title == title
-        && SongGenre::from_name(genre).is_some_and(|parsed| song.genre == parsed)
-        && song.artist == artist
+    title.is_none_or(|title| song.title == title)
+        && genre.is_none_or(|genre| song.genre == *genre)
+        && artist.is_none_or(|artist| song.artist == artist)
+}
+
+fn search_song_metadata_items(
+    songs: &[models::SongCatalogSong],
+    params: &SongMetadataSearchRequest,
+) -> Result<SongMetadataSearchResponse> {
+    let parsed_genre =
+        match params.genre.as_deref() {
+            Some(genre) => Some(SongGenre::from_name(genre).ok_or_else(|| {
+                AppError::JsonError(format!("unknown song genre: {}", genre.trim()))
+            })?),
+            None => None,
+        };
+    let parsed_chart_type = match params.chart_type.as_deref() {
+        Some(chart_type) => Some(parse_chart_type_query_value(chart_type).ok_or_else(|| {
+            AppError::JsonError(format!(
+                "invalid chart type: {} (expected STD or DX)",
+                chart_type
+            ))
+        })?),
+        None => None,
+    };
+    let parsed_diff_category = match params.diff_category.as_deref() {
+        Some(diff_category) => Some(
+            DifficultyCategory::from_lowercase(diff_category).ok_or_else(|| {
+                AppError::JsonError(format!("invalid diff_category: {}", diff_category))
+            })?,
+        ),
+        None => None,
+    };
+    let limit = params.limits.unwrap_or(20).min(100);
+
+    let mut items = Vec::new();
+
+    for song in songs {
+        if !song_matches_search_request(
+            song,
+            params.title.as_deref(),
+            parsed_genre.as_ref(),
+            params.artist.as_deref(),
+        ) {
+            continue;
+        }
+
+        for sheet in &song.sheets {
+            let Some(sheet_chart_type) = parse_sheet_chart_type(&sheet.chart_type) else {
+                continue;
+            };
+            let Some(sheet_diff_category) = parse_sheet_difficulty(&sheet.difficulty) else {
+                continue;
+            };
+
+            if parsed_chart_type.is_some_and(|chart_type| chart_type != sheet_chart_type) {
+                continue;
+            }
+            if parsed_diff_category
+                .is_some_and(|diff_category| diff_category != sheet_diff_category)
+            {
+                continue;
+            }
+
+            let internal_level = sheet
+                .internal_level
+                .as_deref()
+                .and_then(|value| value.trim().parse::<f32>().ok());
+            let version = sheet
+                .version_name
+                .clone()
+                .map(|v| v.trim().to_string())
+                .filter(|v| !v.is_empty());
+
+            items.push(SongMetadataResponse {
+                title: song.title.clone(),
+                chart_type: sheet_chart_type,
+                diff_category: sheet_diff_category,
+                level: Some(sheet.level.clone()),
+                internal_level,
+                image_name: song.image_name.clone(),
+                version,
+                genre: song.genre.to_string(),
+                artist: song.artist.clone(),
+                region: sheet.region.clone(),
+            });
+        }
+    }
+
+    let total = items.len();
+    items.truncate(limit);
+
+    Ok(SongMetadataSearchResponse { total, items })
 }
 
 pub(crate) async fn list_song_info(
@@ -453,139 +559,27 @@ fn select_random_index(len: usize) -> usize {
     (nanos % len as u128) as usize
 }
 
-pub(crate) async fn get_song_metadata(
+pub(crate) async fn search_song_metadata(
     State(state): State<AppState>,
-    Path((title, chart_type, diff_category)): Path<(String, String, String)>,
-) -> Result<Json<SongMetadataResponse>> {
-    // URL-decode path parameters
-    let title = urlencoding::decode(&title)
-        .map_err(|_| AppError::JsonError("Invalid title encoding".to_string()))?
-        .into_owned();
-    let chart_type = urlencoding::decode(&chart_type)
-        .map_err(|_| AppError::JsonError("Invalid chart_type encoding".to_string()))?
-        .into_owned();
-    let diff_category = urlencoding::decode(&diff_category)
-        .map_err(|_| AppError::JsonError("Invalid diff_category encoding".to_string()))?
-        .into_owned();
-
-    // Search for matching song in song_data_root
+    Json(params): Json<SongMetadataSearchRequest>,
+) -> Result<Json<SongMetadataSearchResponse>> {
     let song_data_root = state
         .song_data_root
         .read()
         .map_err(|_| AppError::IoError("Failed to read song data".to_string()))?;
 
-    for song in song_data_root.iter() {
-        if song.title.eq_ignore_ascii_case(&title) {
-            // Found matching song, now search for matching sheet
-            for sheet in &song.sheets {
-                if sheet.chart_type.eq_ignore_ascii_case(&chart_type)
-                    && sheet.difficulty.eq_ignore_ascii_case(&diff_category)
-                {
-                    // Found matching sheet
-                    let internal_level = sheet
-                        .internal_level
-                        .as_deref()
-                        .and_then(|value| value.trim().parse::<f32>().ok());
-                    let version = sheet
-                        .version_name
-                        .clone()
-                        .map(|v| v.trim().to_string())
-                        .filter(|v| !v.is_empty());
-
-                    return Ok(Json(SongMetadataResponse {
-                        level: Some(sheet.level.clone()),
-                        internal_level,
-                        image_name: song.image_name.clone(),
-                        version,
-                        genre: song.genre.to_string(),
-                        artist: song.artist.clone(),
-                        region: sheet.region.clone(),
-                    }));
-                }
-            }
-        }
-    }
-
-    // Not found
-    Err(AppError::NotFound(format!(
-        "Song not found: {} / {} / {}",
-        title, chart_type, diff_category
-    )))
-}
-
-pub(crate) async fn get_song_metadata_item(
-    State(state): State<AppState>,
-    Query(params): Query<SongMetadataQuery>,
-) -> Result<Json<SongMetadataResponse>> {
-    let song_data_root = state
-        .song_data_root
-        .read()
-        .map_err(|_| AppError::IoError("Failed to read song data".to_string()))?;
-
-    for song in song_data_root.iter() {
-        if !song_matches_identity(song, &params.title, &params.genre, &params.artist) {
-            continue;
-        }
-
-        for sheet in &song.sheets {
-            if sheet.chart_type.eq_ignore_ascii_case(&params.chart_type)
-                && sheet.difficulty.eq_ignore_ascii_case(&params.diff_category)
-            {
-                let internal_level = sheet
-                    .internal_level
-                    .as_deref()
-                    .and_then(|value| value.trim().parse::<f32>().ok());
-                let version = sheet
-                    .version_name
-                    .clone()
-                    .map(|v| v.trim().to_string())
-                    .filter(|v| !v.is_empty());
-
-                return Ok(Json(SongMetadataResponse {
-                    level: Some(sheet.level.clone()),
-                    internal_level,
-                    image_name: song.image_name.clone(),
-                    version,
-                    genre: song.genre.to_string(),
-                    artist: song.artist.clone(),
-                    region: sheet.region.clone(),
-                }));
-            }
-        }
-    }
-
-    Err(AppError::NotFound(format!(
-        "Song metadata not found: {} / {} / {} / {} / {}",
-        params.title, params.genre, params.artist, params.chart_type, params.diff_category
-    )))
-}
-
-pub(crate) async fn get_song_info_by_title(
-    State(state): State<AppState>,
-    Path(title): Path<String>,
-) -> Result<Json<SongInfoResponse>> {
-    let title = urlencoding::decode(&title)
-        .map_err(|_| AppError::JsonError("Invalid title encoding".to_string()))?
-        .into_owned();
-
-    let song_data_root = state
-        .song_data_root
-        .read()
-        .map_err(|_| AppError::IoError("Failed to read song data".to_string()))?;
-
-    let Some(song) = song_data_root
-        .iter()
-        .find(|song| song.title.eq_ignore_ascii_case(&title))
-    else {
-        return Err(AppError::NotFound(format!("Song not found: {}", title)));
-    };
-
-    Ok(Json(build_song_info_response(song)?))
+    Ok(Json(search_song_metadata_items(
+        song_data_root.as_slice(),
+        &params,
+    )?))
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{build_song_info_response, is_intl_sheet, parse_intl_sheet_version};
+    use super::{
+        SongMetadataSearchRequest, build_song_info_response, is_intl_sheet,
+        parse_intl_sheet_version, search_song_metadata_items,
+    };
     use models::{MaimaiVersion, SongCatalogChart, SongCatalogSong, SongChartRegion, SongGenre};
 
     #[test]
@@ -684,5 +678,98 @@ mod tests {
         assert_eq!(sheet.internal_level, Some(14.7));
         assert!(sheet.region.jp);
         assert!(!sheet.region.intl);
+    }
+
+    #[test]
+    fn metadata_search_returns_multiple_rows_and_total() {
+        let songs = vec![
+            SongCatalogSong {
+                title: "Link".to_string(),
+                genre: SongGenre::Maimai,
+                artist: "Artist A".to_string(),
+                image_name: Some("a.png".to_string()),
+                sheets: vec![SongCatalogChart {
+                    chart_type: "std".to_string(),
+                    difficulty: "basic".to_string(),
+                    level: "5".to_string(),
+                    version_name: Some("CiRCLE".to_string()),
+                    internal_level: Some("5.0".to_string()),
+                    region: SongChartRegion {
+                        jp: true,
+                        intl: true,
+                    },
+                }],
+            },
+            SongCatalogSong {
+                title: "Link".to_string(),
+                genre: SongGenre::NiconicoVocaloid,
+                artist: "Artist B".to_string(),
+                image_name: Some("b.png".to_string()),
+                sheets: vec![SongCatalogChart {
+                    chart_type: "std".to_string(),
+                    difficulty: "basic".to_string(),
+                    level: "6".to_string(),
+                    version_name: Some("CiRCLE".to_string()),
+                    internal_level: Some("6.0".to_string()),
+                    region: SongChartRegion {
+                        jp: true,
+                        intl: true,
+                    },
+                }],
+            },
+        ];
+
+        let response = search_song_metadata_items(
+            &songs,
+            &SongMetadataSearchRequest {
+                title: Some("Link".to_string()),
+                genre: None,
+                artist: None,
+                chart_type: None,
+                diff_category: None,
+                limits: Some(1),
+            },
+        )
+        .expect("search should succeed");
+
+        assert_eq!(response.total, 2);
+        assert_eq!(response.items.len(), 1);
+    }
+
+    #[test]
+    fn metadata_search_can_match_empty_artist_exactly() {
+        let songs = vec![SongCatalogSong {
+            title: "Empty Artist".to_string(),
+            genre: SongGenre::Maimai,
+            artist: "".to_string(),
+            image_name: None,
+            sheets: vec![SongCatalogChart {
+                chart_type: "std".to_string(),
+                difficulty: "expert".to_string(),
+                level: "10+".to_string(),
+                version_name: Some("CiRCLE".to_string()),
+                internal_level: Some("10.7".to_string()),
+                region: SongChartRegion {
+                    jp: false,
+                    intl: true,
+                },
+            }],
+        }];
+
+        let response = search_song_metadata_items(
+            &songs,
+            &SongMetadataSearchRequest {
+                title: Some("Empty Artist".to_string()),
+                genre: Some("maimai".to_string()),
+                artist: Some(String::new()),
+                chart_type: Some("STD".to_string()),
+                diff_category: Some("EXPERT".to_string()),
+                limits: Some(10),
+            },
+        )
+        .expect("search should succeed");
+
+        assert_eq!(response.total, 1);
+        assert_eq!(response.items[0].artist, "");
     }
 }

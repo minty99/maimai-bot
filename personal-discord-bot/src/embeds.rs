@@ -54,15 +54,6 @@ pub(crate) struct RecentRecordView {
     pub(crate) rank: Option<ScoreRank>,
 }
 
-#[derive(Debug, Clone)]
-pub(crate) struct TodayDetailRowView {
-    pub(crate) title: String,
-    pub(crate) chart_type: ChartType,
-    pub(crate) achievement_percent: Option<f64>,
-    pub(crate) rating_points: Option<u32>,
-    pub(crate) achievement_new_record: bool,
-}
-
 pub(crate) fn format_level_with_internal(level: &str, internal_level: Option<f32>) -> String {
     if level == "N/A" {
         return level.to_string();
@@ -159,43 +150,6 @@ pub(crate) fn build_mai_today_embed(
         .field("Tracks", tracks.to_string(), true)
         .field("New records", new_records.to_string(), true);
     e
-}
-
-pub(crate) fn build_mai_today_detail_embed(
-    display_name: &str,
-    day_key: &str,
-    start: &str,
-    end: &str,
-    rows: &[TodayDetailRowView],
-) -> CreateEmbed {
-    let mut desc = String::new();
-    let total = rows.len();
-
-    for (idx, row) in rows.iter().enumerate() {
-        let achv = format_percent_f64(row.achievement_percent);
-        let mut line = format!("- **{}** [{}] — {}", row.title, row.chart_type, achv);
-        if let Some(pt) = row.rating_points {
-            line.push_str(&format!(" • {pt}pt"));
-        }
-        if row.achievement_new_record {
-            line.push_str(" [NEW RECORD]");
-        }
-        line.push('\n');
-
-        if desc.len().saturating_add(line.len()) > 3900 {
-            desc.push_str(&format!("... (truncated; showing {}/{total})\n", idx));
-            break;
-        }
-        desc.push_str(&line);
-    }
-
-    if desc.trim().is_empty() {
-        desc = "No playlogs found for this day.".to_string();
-    }
-
-    embed_base(&format!("{display_name}'s plays on {day_key}"))
-        .field("Window", format!("{start} ~ {end}"), false)
-        .description(desc)
 }
 
 fn format_track_label(track: Option<i64>) -> String {
