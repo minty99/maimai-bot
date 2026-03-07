@@ -2,7 +2,7 @@ use axum::{
     Json,
     extract::{Path, Query, State},
 };
-use models::{ChartType, DifficultyCategory, MaimaiVersion, SongChartRegion};
+use models::{ChartType, DifficultyCategory, MaimaiVersion, SongChartRegion, SongGenre};
 use serde::Deserialize;
 use serde::Serialize;
 use std::collections::{HashMap, HashSet};
@@ -182,7 +182,7 @@ pub(crate) async fn random_song_by_level(
         if !sheets.is_empty() {
             candidates.push(SongResponse {
                 title: song.title.clone(),
-                genre: song.genre.clone(),
+                genre: song.genre.to_string(),
                 artist: song.artist.clone(),
                 image_name: song.image_name.clone(),
                 sheets,
@@ -289,7 +289,7 @@ fn build_song_info_response(song: &models::SongCatalogSong) -> Result<SongInfoRe
 
     Ok(SongInfoResponse {
         title: song.title.clone(),
-        genre: song.genre.clone(),
+        genre: song.genre.to_string(),
         artist: song.artist.clone(),
         image_name: song.image_name.clone(),
         sheets,
@@ -302,7 +302,9 @@ fn song_matches_identity(
     genre: &str,
     artist: &str,
 ) -> bool {
-    song.title == title && song.genre == genre && song.artist == artist
+    song.title == title
+        && SongGenre::from_name(genre).is_some_and(|parsed| song.genre == parsed)
+        && song.artist == artist
 }
 
 pub(crate) async fn list_song_info(
@@ -495,7 +497,7 @@ pub(crate) async fn get_song_metadata(
                         internal_level,
                         image_name: song.image_name.clone(),
                         version,
-                        genre: song.genre.clone(),
+                        genre: song.genre.to_string(),
                         artist: song.artist.clone(),
                         region: sheet.region.clone(),
                     }));
@@ -544,7 +546,7 @@ pub(crate) async fn get_song_metadata_item(
                     internal_level,
                     image_name: song.image_name.clone(),
                     version,
-                    genre: song.genre.clone(),
+                    genre: song.genre.to_string(),
                     artist: song.artist.clone(),
                     region: sheet.region.clone(),
                 }));
@@ -584,7 +586,7 @@ pub(crate) async fn get_song_info_by_title(
 #[cfg(test)]
 mod tests {
     use super::{build_song_info_response, is_intl_sheet, parse_intl_sheet_version};
-    use models::{MaimaiVersion, SongCatalogChart, SongCatalogSong, SongChartRegion};
+    use models::{MaimaiVersion, SongCatalogChart, SongCatalogSong, SongChartRegion, SongGenre};
 
     #[test]
     fn intl_sheet_predicate_uses_region_flag() {
@@ -651,7 +653,7 @@ mod tests {
     fn build_song_info_response_normalizes_sheet_fields() {
         let song = SongCatalogSong {
             title: "Test Song".to_string(),
-            genre: "maimai".to_string(),
+            genre: SongGenre::Maimai,
             artist: "".to_string(),
             image_name: Some("cover.png".to_string()),
             sheets: vec![SongCatalogChart {

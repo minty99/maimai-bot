@@ -1,6 +1,75 @@
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize, Serializer, de::Error as DeError};
 use std::fmt;
 use strum::{Display, EnumIter, EnumString, IntoEnumIterator};
+
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum SongGenre {
+    PopsAnime,
+    NiconicoVocaloid,
+    TouhouProject,
+    GameVariety,
+    Maimai,
+    OngekiChunithm,
+    Utage,
+}
+
+impl SongGenre {
+    pub fn from_name(name: &str) -> Option<Self> {
+        match name.trim() {
+            "POPS＆ANIME" | "POPS＆アニメ" => Some(Self::PopsAnime),
+            "niconico＆VOCALOID™" | "niconico＆ボーカロイド" => {
+                Some(Self::NiconicoVocaloid)
+            }
+            "東方Project" => Some(Self::TouhouProject),
+            "GAME＆VARIETY" | "ゲーム＆バラエティ" => Some(Self::GameVariety),
+            "maimai" => Some(Self::Maimai),
+            "オンゲキ＆CHUNITHM" => Some(Self::OngekiChunithm),
+            "宴会場" => Some(Self::Utage),
+            _ => None,
+        }
+    }
+
+    pub fn as_str(&self) -> &str {
+        match self {
+            Self::PopsAnime => "POPS＆ANIME",
+            Self::NiconicoVocaloid => "niconico＆VOCALOID™",
+            Self::TouhouProject => "東方Project",
+            Self::GameVariety => "GAME＆VARIETY",
+            Self::Maimai => "maimai",
+            Self::OngekiChunithm => "オンゲキ＆CHUNITHM",
+            Self::Utage => "宴会場",
+        }
+    }
+}
+
+impl fmt::Display for SongGenre {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(self.as_str())
+    }
+}
+
+impl Serialize for SongGenre {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        serializer.serialize_str(self.as_str())
+    }
+}
+
+impl<'de> Deserialize<'de> for SongGenre {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let value = String::deserialize(deserializer)?;
+        if value.trim().is_empty() {
+            return Err(D::Error::custom("song genre cannot be empty"));
+        }
+        Self::from_name(&value)
+            .ok_or_else(|| D::Error::custom(format!("unknown song genre: {}", value.trim())))
+    }
+}
 
 #[derive(
     Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize, EnumString,
@@ -138,9 +207,7 @@ impl fmt::Display for DifficultyCategory {
     }
 }
 
-#[derive(
-    Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize, EnumIter,
-)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, EnumIter)]
 #[repr(u8)]
 pub enum MaimaiVersion {
     Maimai = 0,
@@ -214,6 +281,64 @@ impl MaimaiVersion {
     pub fn from_name(name: &str) -> Option<Self> {
         let normalized = name.trim();
         Self::iter().find(|version| version.as_str() == normalized)
+    }
+}
+
+impl Serialize for MaimaiVersion {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        serializer.serialize_str(self.as_str())
+    }
+}
+
+impl<'de> Deserialize<'de> for MaimaiVersion {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let value = String::deserialize(deserializer)?;
+        if value.trim().is_empty() {
+            return Err(D::Error::custom("maimai version cannot be empty"));
+        }
+        Self::from_name(&value)
+            .ok_or_else(|| D::Error::custom(format!("unknown maimai version: {}", value.trim())))
+    }
+}
+
+#[cfg(test)]
+mod song_genre_tests {
+    use super::SongGenre;
+
+    #[test]
+    fn song_genre_loads_jp_and_intl_aliases() {
+        assert_eq!(
+            SongGenre::from_name("niconico＆ボーカロイド"),
+            Some(SongGenre::NiconicoVocaloid)
+        );
+        assert_eq!(
+            SongGenre::from_name("niconico＆VOCALOID™"),
+            Some(SongGenre::NiconicoVocaloid)
+        );
+        assert_eq!(
+            SongGenre::from_name("ゲーム＆バラエティ"),
+            Some(SongGenre::GameVariety)
+        );
+        assert_eq!(
+            SongGenre::from_name("GAME＆VARIETY"),
+            Some(SongGenre::GameVariety)
+        );
+    }
+
+    #[test]
+    fn song_genre_formats_as_intl_string() {
+        assert_eq!(SongGenre::PopsAnime.to_string(), "POPS＆ANIME");
+        assert_eq!(
+            SongGenre::NiconicoVocaloid.to_string(),
+            "niconico＆VOCALOID™"
+        );
+        assert_eq!(SongGenre::GameVariety.to_string(), "GAME＆VARIETY");
     }
 }
 

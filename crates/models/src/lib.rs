@@ -7,7 +7,7 @@ pub mod storage_models;
 
 pub use api_models::{PlayRecordApiResponse, ScoreApiResponse, SongDetailScoreApiResponse};
 pub use game_domain::{
-    ChartType, DifficultyCategory, FcStatus, MaimaiVersion, ScoreRank, SyncStatus,
+    ChartType, DifficultyCategory, FcStatus, MaimaiVersion, ScoreRank, SongGenre, SyncStatus,
 };
 pub use parser_models::{
     ParsedPlayRecord, ParsedPlayerProfile, ParsedPlaylogDetail, ParsedRatingTargetEntry,

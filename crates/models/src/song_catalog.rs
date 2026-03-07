@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
-use crate::{ChartType, DifficultyCategory};
+use crate::{ChartType, DifficultyCategory, SongGenre};
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct SongCatalog {
@@ -11,7 +11,7 @@ pub struct SongCatalog {
 #[derive(Debug, Serialize, Deserialize)]
 pub struct SongCatalogSong {
     pub title: String,
-    pub genre: String,
+    pub genre: SongGenre,
     pub artist: String,
     #[serde(rename = "imageName", skip_serializing_if = "Option::is_none")]
     pub image_name: Option<String>,
@@ -68,7 +68,7 @@ impl SongInternalLevelIndex {
     ) -> Option<f32> {
         let key = SongChartLookupKey {
             title: normalize_identity_component(title),
-            genre: normalize_identity_component(genre),
+            genre: normalize_genre_identity_component(genre),
             artist: normalize_identity_component(artist),
             chart_type,
             diff_category,
@@ -81,7 +81,7 @@ impl SongInternalLevelIndex {
 
         for song in catalog.songs {
             let title = normalize_identity_component(&song.title);
-            let genre = normalize_identity_component(&song.genre);
+            let genre = normalize_genre_identity_component(song.genre.as_str());
             let artist = normalize_identity_component(&song.artist);
 
             for sheet in song.sheets {
@@ -123,6 +123,12 @@ fn normalize_identity_component(s: &str) -> String {
     s.trim().to_string()
 }
 
+fn normalize_genre_identity_component(s: &str) -> String {
+    SongGenre::from_name(s)
+        .map(|genre| genre.to_string())
+        .unwrap_or_else(|| s.trim().to_string())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -146,7 +152,7 @@ mod tests {
         let index = SongInternalLevelIndex::from_catalog(SongCatalog {
             songs: vec![SongCatalogSong {
                 title: " Song A ".to_string(),
-                genre: " maimai ".to_string(),
+                genre: SongGenre::Maimai,
                 artist: " Artist ".to_string(),
                 image_name: None,
                 sheets: vec![chart()],
@@ -171,14 +177,14 @@ mod tests {
             songs: vec![
                 SongCatalogSong {
                     title: "Link".to_string(),
-                    genre: "maimai".to_string(),
+                    genre: SongGenre::Maimai,
                     artist: "".to_string(),
                     image_name: None,
                     sheets: vec![chart()],
                 },
                 SongCatalogSong {
                     title: "link".to_string(),
-                    genre: "maimai".to_string(),
+                    genre: SongGenre::Maimai,
                     artist: "".to_string(),
                     image_name: None,
                     sheets: vec![SongCatalogChart {
