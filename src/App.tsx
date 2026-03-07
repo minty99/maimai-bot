@@ -53,6 +53,7 @@ import { ScoreExplorerSection } from './components/ScoreExplorerSection';
 import { SettingsPage } from './components/SettingsPage';
 import { SongDetailModal } from './components/SongDetailModal';
 import { ScoreHistoryModal } from './components/ScoreHistoryModal';
+import { songIdentityKey } from './songIdentity';
 import type {
   ChartType,
   DifficultyCategory,
@@ -292,7 +293,7 @@ function App() {
   const [scoreSortKey, setScoreSortKey] = useState<ScoreSortKey>('lastPlayed');
   const [scoreSortDesc, setScoreSortDesc] = useState(true);
 
-  const [selectedDetailTitle, setSelectedDetailTitle] = useState<string | null>(null);
+  const [selectedDetailSongKey, setSelectedDetailSongKey] = useState<string | null>(null);
   const [selectedHistoryKey, setSelectedHistoryKey] = useState<string | null>(null);
   const [showJackets, setShowJackets] = useState<boolean>(readShowJacketsPreference);
 
@@ -324,9 +325,10 @@ function App() {
     [scoreRecords, songMetadata],
   );
   const selectedDetailRows = useMemo(
-    () => buildSongDetailRows(scoreData, selectedDetailTitle),
-    [scoreData, selectedDetailTitle],
+    () => buildSongDetailRows(scoreData, selectedDetailSongKey),
+    [scoreData, selectedDetailSongKey],
   );
+  const selectedDetailSong = selectedDetailRows[0] ?? null;
   const playlogData = useMemo(
     () => buildPlaylogRows(playlogRecords, songMetadata),
     [playlogRecords, songMetadata],
@@ -546,12 +548,12 @@ function App() {
     };
   }, [isMobileNavOpen]);
 
-  const handleOpenSongDetail = useCallback((title: string) => {
-    setSelectedDetailTitle(title);
+  const handleOpenSongDetail = useCallback((row: ScoreRow) => {
+    setSelectedDetailSongKey(songIdentityKey(row.title, row.genre, row.artist));
   }, []);
 
   const closeSongDetail = useCallback(() => {
-    setSelectedDetailTitle(null);
+    setSelectedDetailSongKey(null);
   }, []);
 
   const handleOpenHistory = useCallback((row: ScoreRow) => {
@@ -1037,7 +1039,9 @@ function App() {
       </main>
 
       <SongDetailModal
-        selectedDetailTitle={selectedDetailTitle}
+        selectedDetailTitle={selectedDetailSong?.title ?? null}
+        selectedDetailGenre={selectedDetailSong?.genre ?? null}
+        selectedDetailArtist={selectedDetailSong?.artist ?? null}
         selectedDetailRows={selectedDetailRows}
         songInfoUrl={songInfoUrl}
         onClose={closeSongDetail}

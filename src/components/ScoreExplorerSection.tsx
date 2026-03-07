@@ -61,7 +61,7 @@ interface ScoreExplorerSectionProps {
   setDaysMax: Dispatch<SetStateAction<number>>;
   filteredScoreRows: ScoreRow[];
   songInfoUrl: string;
-  onOpenSongDetail: (title: string) => void;
+  onOpenSongDetail: (row: ScoreRow) => void;
   onOpenHistory: (row: ScoreRow) => void;
   scoreSortKey: ScoreSortKey;
   scoreSortDesc: boolean;
@@ -407,7 +407,7 @@ export function ScoreExplorerSection({
                         <button
                           type="button"
                           className="link-button"
-                          onClick={() => void onOpenSongDetail(row.title)}
+                          onClick={() => void onOpenSongDetail(row)}
                         >
                           {row.title}
                         </button>

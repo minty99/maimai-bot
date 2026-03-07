@@ -10,15 +10,17 @@ import type {
   SongInfoResponse,
   SongSheetResponse,
 } from './types';
-import { normalizeTitleKey } from './api';
+import { chartIdentityKey, songIdentityKey } from './songIdentity';
 import { CHART_TYPES, DIFFICULTIES } from './app/constants';
 
 export function chartKey(
   title: string,
+  genre: string,
+  artist: string,
   chartType: ChartType,
   difficulty: DifficultyCategory,
 ): string {
-  return `${normalizeTitleKey(title)}::${chartType}::${difficulty}`;
+  return chartIdentityKey(title, genre, artist, chartType, difficulty);
 }
 
 function findMatchingSheet(
@@ -200,11 +202,20 @@ function parseMaimaiPlayedAtToUnix(playedAt: string | null | undefined): number 
 
 export function buildScoreRows(
   scores: ScoreApiResponse[],
-  songInfoByTitle: Map<string, SongInfoResponse>,
+  songInfoByIdentity: Map<string, SongInfoResponse>,
 ): ScoreRow[] {
   const scoreByKey = new Map<string, ScoreApiResponse>();
   for (const score of scores) {
-    scoreByKey.set(chartKey(score.title, score.chart_type, score.diff_category), score);
+    scoreByKey.set(
+      chartKey(
+        score.title,
+        score.genre,
+        score.artist,
+        score.chart_type,
+        score.diff_category,
+      ),
+      score,
+    );
   }
 
   const rows: ScoreRow[] = [];
@@ -212,13 +223,15 @@ export function buildScoreRows(
 
   const buildRow = (
     title: string,
+    genre: string,
+    artist: string,
     chartType: ChartType,
     difficulty: DifficultyCategory,
     songInfo?: SongInfoResponse,
     sheet?: SongSheetResponse | null,
   ): ScoreRow => {
-    const normalizedTitle = normalizeTitleKey(title);
-    const key = chartKey(title, chartType, difficulty);
+    const songKey = songIdentityKey(title, genre, artist);
+    const key = chartKey(title, genre, artist, chartType, difficulty);
     const matchedSheet = sheet ?? findMatchingSheet(songInfo, chartType, difficulty);
     const score = scoreByKey.get(key) ?? null;
     const estimatedInternalLevel = estimateInternalLevel(matchedSheet?.level);
@@ -229,8 +242,10 @@ export function buildScoreRows(
 
     return {
       key,
+      songKey,
       title,
-      normalizedTitle,
+      genre,
+      artist,
       chartType,
       difficulty,
       achievementX10000: score?.achievement_x10000 ?? null,
@@ -249,7 +264,6 @@ export function buildScoreRows(
       level: matchedSheet?.level ?? null,
       internalLevel,
       isInternalLevelEstimated,
-      userLevel: matchedSheet?.user_level ?? null,
       version: matchedSheet?.version ?? null,
       imageName: songInfo?.image_name ?? null,
       latestPlayedAtUnix,
@@ -259,12 +273,22 @@ export function buildScoreRows(
     };
   };
 
-  for (const songInfo of songInfoByTitle.values()) {
+  for (const songInfo of songInfoByIdentity.values()) {
     for (const sheet of listPreferredSheets(songInfo)) {
-      includedKeys.add(chartKey(songInfo.title, sheet.chart_type, sheet.difficulty));
+      includedKeys.add(
+        chartKey(
+          songInfo.title,
+          songInfo.genre,
+          songInfo.artist,
+          sheet.chart_type,
+          sheet.difficulty,
+        ),
+      );
       rows.push(
         buildRow(
           songInfo.title,
+          songInfo.genre,
+          songInfo.artist,
           sheet.chart_type,
           sheet.difficulty,
           songInfo,
@@ -275,13 +299,27 @@ export function buildScoreRows(
   }
 
   for (const score of scores) {
-    const key = chartKey(score.title, score.chart_type, score.diff_category);
+    const key = chartKey(
+      score.title,
+      score.genre,
+      score.artist,
+      score.chart_type,
+      score.diff_category,
+    );
     if (includedKeys.has(key)) {
       continue;
     }
 
     includedKeys.add(key);
-    rows.push(buildRow(score.title, score.chart_type, score.diff_category));
+    rows.push(
+      buildRow(
+        score.title,
+        score.genre,
+        score.artist,
+        score.chart_type,
+        score.diff_category,
+      ),
+    );
   }
 
   return rows;
@@ -289,11 +327,13 @@ export function buildScoreRows(
 
 export function buildPlaylogRows(
   playlogs: PlayRecordApiResponse[],
-  songInfoByTitle: Map<string, SongInfoResponse>,
+  songInfoByIdentity: Map<string, SongInfoResponse>,
 ): PlaylogRow[] {
   return playlogs.map((log, index) => {
-    const normalizedTitle = normalizeTitleKey(log.title);
-    const songInfo = songInfoByTitle.get(normalizedTitle);
+    const genre = log.genre ?? '';
+    const artist = log.artist ?? '';
+    const songKey = songIdentityKey(log.title, genre, artist);
+    const songInfo = songInfoByIdentity.get(songKey);
     const sheet =
       log.diff_category === null
         ? null
@@ -304,8 +344,10 @@ export function buildPlaylogRows(
 
     return {
       key: `${log.played_at_unixtime}-${index}`,
+      songKey,
       title: log.title,
-      normalizedTitle,
+      genre,
+      artist,
       chartType: log.chart_type,
       difficulty: log.diff_category,
       level: sheet?.level ?? null,
@@ -345,7 +387,7 @@ export function buildScoreHistoryPoints(
   const matchingRows = playlogRows
     .filter(
       (row) =>
-        row.normalizedTitle === selectedRow.normalizedTitle &&
+        row.songKey === selectedRow.songKey &&
         row.chartType === selectedRow.chartType &&
         row.difficulty === selectedRow.difficulty &&
         row.achievementX10000 !== null &&
@@ -386,16 +428,14 @@ const difficultyOrder = new Map(DIFFICULTIES.map((value, index) => [value, index
 
 export function buildSongDetailRows(
   scoreRows: ScoreRow[],
-  title: string | null,
+  songKey: string | null,
 ): SongDetailRow[] {
-  if (!title) {
+  if (!songKey) {
     return [];
   }
 
-  const normalizedTitle = normalizeTitleKey(title);
-
   return scoreRows
-    .filter((row) => row.normalizedTitle === normalizedTitle)
+    .filter((row) => row.songKey === songKey)
     .sort((left, right) => {
       const chartDelta =
         (chartOrder.get(left.chartType) ?? Number.MAX_SAFE_INTEGER) -
@@ -410,14 +450,16 @@ export function buildSongDetailRows(
     })
     .map((row) => ({
       key: row.key,
+      songKey: row.songKey,
       title: row.title,
+      genre: row.genre,
+      artist: row.artist,
       imageName: row.imageName,
       chartType: row.chartType,
       difficulty: row.difficulty,
       level: row.level,
       internalLevel: row.internalLevel,
       isInternalLevelEstimated: row.isInternalLevelEstimated,
-      userLevel: row.userLevel,
       achievementPercent: row.achievementPercent,
       rank: row.rank,
       fc: row.fc,

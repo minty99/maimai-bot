@@ -20,7 +20,7 @@ import {
   type StoredRandomPickerFilters,
 } from '../app/storage';
 import { formatNumber, formatPercent, formatVersionLabel } from '../app/utils';
-import { normalizeTitleKey } from '../api';
+import { chartIdentityKey } from '../songIdentity';
 import type {
   ChartType,
   DifficultyCategory,
@@ -401,7 +401,13 @@ export function RandomPickerPage({
     const next = new Map<string, ScoreApiResponse>();
     for (const score of scoreRecords) {
       next.set(
-        `${normalizeTitleKey(score.title)}::${score.chart_type}::${score.diff_category}`,
+        chartIdentityKey(
+          score.title,
+          score.genre,
+          score.artist,
+          score.chart_type,
+          score.diff_category,
+        ),
         score,
       );
     }
@@ -509,7 +515,13 @@ export function RandomPickerPage({
             continue;
           }
 
-          const key = `${normalizeTitleKey(song.title)}::${sheet.chart_type}::${sheet.difficulty}`;
+          const key = chartIdentityKey(
+            song.title,
+            song.genre,
+            song.artist,
+            sheet.chart_type,
+            sheet.difficulty,
+          );
           levelPoolSet.add(key);
 
           if (!chartTypeSet.has(sheet.chart_type)) {
@@ -529,13 +541,14 @@ export function RandomPickerPage({
           const score = scoreMap.get(key);
           candidates.push({
             title: song.title,
+            genre: song.genre,
+            artist: song.artist,
             version: sheet.version,
             imageName: song.image_name,
             chartType: sheet.chart_type,
             difficulty: sheet.difficulty,
             level: sheet.level,
             internalLevel: sheet.internal_level,
-            userLevel: sheet.user_level,
             achievementX10000: score?.achievement_x10000 ?? null,
             rank: score?.rank ?? null,
             fc: score?.fc ?? null,
@@ -710,9 +723,7 @@ export function RandomPickerPage({
           <h3>{pickedSong.title}</h3>
           <p className="picker-level-line">
             {pickedSong.level}
-            {pickedSong.internalLevel !== null ? ` (${pickedSong.internalLevel.toFixed(1)}` : ''}
-            {pickedSong.internalLevel !== null && pickedSong.userLevel ? ` / ${pickedSong.userLevel}` : ''}
-            {pickedSong.internalLevel !== null ? ')' : pickedSong.userLevel ? ` (${pickedSong.userLevel})` : ''}
+            {pickedSong.internalLevel !== null ? ` (${pickedSong.internalLevel.toFixed(1)})` : ''}
           </p>
 
           {pickedSong.filteredSongCount !== null && pickedSong.levelSongCount !== null ? (
