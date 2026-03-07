@@ -202,8 +202,17 @@ impl SongDatabase {
         let raw_songs = fetch_maimai_songs(&client).await?;
         ensure_unique_song_identities(&raw_songs)?;
 
-        let mut songs: Vec<SongRow> = raw_songs.iter().map(extract_song).collect();
-        let mut sheets: Vec<SheetRow> = raw_songs.iter().flat_map(extract_sheets).collect();
+        let mut songs: Vec<SongRow> = raw_songs
+            .iter()
+            .map(extract_song)
+            .collect::<eyre::Result<Vec<_>>>()?;
+        let mut sheets: Vec<SheetRow> = raw_songs
+            .iter()
+            .map(extract_sheets)
+            .collect::<eyre::Result<Vec<_>>>()?
+            .into_iter()
+            .flatten()
+            .collect();
         let intl_only_rows = load_intl_only_rows().wrap_err("load intl_only.json")?;
         songs.extend(intl_only_rows.songs);
         sheets.extend(intl_only_rows.sheets);
@@ -372,8 +381,17 @@ pub(crate) fn load_official_rows_from_json(
     let raw_songs = parse_maimai_songs_json(json)?;
     ensure_unique_song_identities(&raw_songs)?;
 
-    let songs: Vec<SongRow> = raw_songs.iter().map(extract_song).collect();
-    let sheets: Vec<SheetRow> = raw_songs.iter().flat_map(extract_sheets).collect();
+    let songs: Vec<SongRow> = raw_songs
+        .iter()
+        .map(extract_song)
+        .collect::<eyre::Result<Vec<_>>>()?;
+    let sheets: Vec<SheetRow> = raw_songs
+        .iter()
+        .map(extract_sheets)
+        .collect::<eyre::Result<Vec<_>>>()?
+        .into_iter()
+        .flatten()
+        .collect();
 
     ensure_unique_song_row_ids(&songs)?;
     ensure_unique_sheet_keys(&sheets)?;
@@ -395,7 +413,7 @@ fn ensure_unique_song_identities(raw_songs: &[RawSong]) -> eyre::Result<()> {
     let mut seen = HashSet::new();
     let mut duplicates = Vec::new();
     for raw_song in raw_songs {
-        let identity = derive_song_identity(raw_song);
+        let identity = derive_song_identity(raw_song)?;
         if !seen.insert(identity.clone()) {
             duplicates.push(identity);
         }
@@ -455,8 +473,8 @@ fn ensure_unique_sheet_keys(sheets: &[SheetRow]) -> eyre::Result<()> {
     Ok(())
 }
 
-fn extract_song(raw_song: &RawSong) -> SongRow {
-    let identity = derive_song_identity(raw_song);
+fn extract_song(raw_song: &RawSong) -> eyre::Result<SongRow> {
+    let identity = derive_song_identity(raw_song)?;
     let image_url = format!(
         "{}{}",
         IMAGE_BASE_URL,
@@ -466,7 +484,7 @@ fn extract_song(raw_song: &RawSong) -> SongRow {
     let release_date = parse_release_date(raw_song.release.as_deref());
     let sort_order = raw_song.version.parse::<i64>().ok();
 
-    SongRow {
+    Ok(SongRow {
         identity,
         image_name,
         image_url,
@@ -475,11 +493,11 @@ fn extract_song(raw_song: &RawSong) -> SongRow {
         is_new: is_truthy(&raw_song.date),
         is_locked: is_truthy(&raw_song.key),
         comment: extract_comment(raw_song),
-    }
+    })
 }
 
-fn extract_sheets(raw_song: &RawSong) -> Vec<SheetRow> {
-    let song_identity = derive_song_identity(raw_song);
+fn extract_sheets(raw_song: &RawSong) -> eyre::Result<Vec<SheetRow>> {
+    let song_identity = derive_song_identity(raw_song)?;
 
     let candidates: [(ChartType, DifficultyCategory, Option<&str>); 10] = [
         (
@@ -534,7 +552,7 @@ fn extract_sheets(raw_song: &RawSong) -> Vec<SheetRow> {
         ),
     ];
 
-    candidates
+    Ok(candidates
         .into_iter()
         .filter_map(|(sheet_type, difficulty, level)| {
             let level = normalize_level(level)?;
@@ -546,21 +564,23 @@ fn extract_sheets(raw_song: &RawSong) -> Vec<SheetRow> {
                 source: SheetSource::Official,
             })
         })
-        .collect()
+        .collect())
 }
 
-fn derive_song_identity(raw_song: &RawSong) -> SongIdentity {
-    let genre =
-        SongGenre::from_name(&raw_song.catcode).expect("unknown official song genre in catcode");
-    let title = normalized_song_title(raw_song);
+fn derive_song_identity(raw_song: &RawSong) -> eyre::Result<SongIdentity> {
+    let genre = SongGenre::from_name(&raw_song.catcode).ok_or_else(|| {
+        eyre::eyre!(
+            "unknown official song genre in catcode: {}",
+            raw_song.catcode.trim()
+        )
+    })?;
+    let title = normalized_song_title(raw_song, &genre);
     let artist = normalized_song_artist(raw_song.artist.as_deref());
-    SongIdentity::new(&title, genre, &artist)
+    Ok(SongIdentity::new(&title, genre, &artist))
 }
 
-fn normalized_song_title(raw_song: &RawSong) -> String {
-    if SongGenre::from_name(&raw_song.catcode) == Some(SongGenre::Utage)
-        && raw_song.title.trim() == "[協]青春コンプレックス"
-    {
+fn normalized_song_title(raw_song: &RawSong, genre: &SongGenre) -> String {
+    if *genre == SongGenre::Utage && raw_song.title.trim() == "[協]青春コンプレックス" {
         if raw_song.comment.as_deref() == Some("バンドメンバーを集めて楽しもう！（入門編）")
         {
             return "[協]青春コンプレックス（入門編）".to_string();
@@ -799,7 +819,7 @@ mod tests {
         raw_song.title = "[協]青春コンプレックス".to_string();
         raw_song.comment = Some("バンドメンバーを集めて楽しもう！（入門編）".to_string());
         assert_eq!(
-            derive_song_identity(&raw_song),
+            derive_song_identity(&raw_song).expect("derive song identity"),
             SongIdentity::new(
                 "[協]青春コンプレックス（入門編）",
                 SongGenre::Utage,
@@ -809,7 +829,7 @@ mod tests {
 
         raw_song.comment = Some("バンドメンバーを集めて挑め！（ヒーロー級）".to_string());
         assert_eq!(
-            derive_song_identity(&raw_song),
+            derive_song_identity(&raw_song).expect("derive song identity"),
             SongIdentity::new(
                 "[協]青春コンプレックス（ヒーロー級）",
                 SongGenre::Utage,
@@ -821,19 +841,19 @@ mod tests {
         raw_song.title = "Link".to_string();
         raw_song.comment = None;
         assert_eq!(
-            derive_song_identity(&raw_song),
+            derive_song_identity(&raw_song).expect("derive song identity"),
             SongIdentity::new("Link", SongGenre::NiconicoVocaloid, "artist")
         );
 
         raw_song.catcode = "maimai".to_string();
         assert_eq!(
-            derive_song_identity(&raw_song),
+            derive_song_identity(&raw_song).expect("derive song identity"),
             SongIdentity::new("Link", SongGenre::Maimai, "artist")
         );
 
         raw_song.title = "Bad Apple!! feat nomico".to_string();
         assert_eq!(
-            derive_song_identity(&raw_song),
+            derive_song_identity(&raw_song).expect("derive song identity"),
             SongIdentity::new("Bad Apple!! feat.nomico", SongGenre::Maimai, "artist")
         );
     }
@@ -868,8 +888,18 @@ mod tests {
         let mut raw_song = raw_song_stub();
         raw_song.lev_utage = Some("14".to_string());
         raw_song.kanji = Some("協奏曲".to_string());
-        let sheets = extract_sheets(&raw_song);
+        let sheets = extract_sheets(&raw_song).expect("extract sheets");
         assert!(sheets.is_empty());
+    }
+
+    #[test]
+    fn derive_song_identity_returns_error_for_unknown_genre() {
+        let mut raw_song = raw_song_stub();
+        raw_song.catcode = "UNKNOWN".to_string();
+
+        let err = derive_song_identity(&raw_song).expect_err("unknown genre should error");
+
+        assert!(err.to_string().contains("unknown official song genre"));
     }
 
     #[test]

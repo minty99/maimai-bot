@@ -191,9 +191,9 @@ impl SongInfoClient {
             .await?;
 
         if response.total > 1 {
-            tracing::warn!(
+            return Err(eyre::eyre!(
                 "song metadata search returned multiple rows for exact identity: {title} / {genre} / {artist} [{chart_type} {diff_category}]"
-            );
+            ));
         }
 
         Ok(response.items.into_iter().next())

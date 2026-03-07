@@ -310,9 +310,18 @@ impl<'de> Deserialize<'de> for MaimaiVersion {
 #[cfg(test)]
 mod song_genre_tests {
     use super::SongGenre;
+    use std::collections::BTreeSet;
 
     #[test]
     fn song_genre_loads_jp_and_intl_aliases() {
+        assert_eq!(
+            SongGenre::from_name("POPS＆アニメ"),
+            Some(SongGenre::PopsAnime)
+        );
+        assert_eq!(
+            SongGenre::from_name("POPS＆ANIME"),
+            Some(SongGenre::PopsAnime)
+        );
         assert_eq!(
             SongGenre::from_name("niconico＆ボーカロイド"),
             Some(SongGenre::NiconicoVocaloid)
@@ -329,6 +338,15 @@ mod song_genre_tests {
             SongGenre::from_name("GAME＆VARIETY"),
             Some(SongGenre::GameVariety)
         );
+        assert_eq!(
+            SongGenre::from_name("東方Project"),
+            Some(SongGenre::TouhouProject)
+        );
+        assert_eq!(
+            SongGenre::from_name("オンゲキ＆CHUNITHM"),
+            Some(SongGenre::OngekiChunithm)
+        );
+        assert_eq!(SongGenre::from_name("宴会場"), Some(SongGenre::Utage));
     }
 
     #[test]
@@ -339,6 +357,32 @@ mod song_genre_tests {
             "niconico＆VOCALOID™"
         );
         assert_eq!(SongGenre::GameVariety.to_string(), "GAME＆VARIETY");
+    }
+
+    #[test]
+    fn song_genre_parses_all_official_fixture_catcodes() {
+        let fixture =
+            include_str!("../../maimai-songdb/examples/maimai/official/maimai_songs.json");
+        let rows: serde_json::Value =
+            serde_json::from_str(fixture).expect("parse official songs fixture");
+        let catcodes = rows
+            .as_array()
+            .expect("fixture should be an array")
+            .iter()
+            .map(|row| {
+                row.get("catcode")
+                    .and_then(|value| value.as_str())
+                    .expect("catcode should be present")
+                    .to_string()
+            })
+            .collect::<BTreeSet<_>>();
+
+        for catcode in catcodes {
+            assert!(
+                SongGenre::from_name(&catcode).is_some(),
+                "catcode should parse: {catcode}"
+            );
+        }
     }
 }
 

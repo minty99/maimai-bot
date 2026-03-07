@@ -258,7 +258,7 @@ pub(crate) async fn mai_song_info(
             artist: None,
             chart_type: None,
             diff_category: None,
-            limits: Some(64),
+            limits: Some(100),
         })
         .await
         .wrap_err("search song metadata")?;
@@ -281,7 +281,7 @@ pub(crate) async fn mai_song_info(
         return Ok(());
     }
 
-    if songs.len() > 1 {
+    if songs.len() > 2 {
         let candidates = songs
             .keys()
             .take(8)
@@ -298,11 +298,45 @@ pub(crate) async fn mai_song_info(
         return Ok(());
     }
 
-    let ((song_title, song_genre, song_artist), mut sheets) =
-        songs.into_iter().next().expect("checked non-empty");
+    let mut embeds = Vec::new();
+    let mut image_names = Vec::new();
+    for ((song_title, song_genre, song_artist), mut sheets) in songs {
+        sheets.sort_by_key(|sheet| (sheet.chart_type.as_u8(), sheet.diff_category.as_u8()));
+        let (embed, image_name) =
+            build_song_info_embed(&song_title, &song_genre, &song_artist, &sheets);
+        if let Some(image_name) = image_name {
+            image_names.push(image_name.to_string());
+        }
+        embeds.push(embed);
+    }
 
-    sheets.sort_by_key(|sheet| (sheet.chart_type.as_u8(), sheet.diff_category.as_u8()));
-    let region_unreleased_line = build_region_unreleased_line(&sheets);
+    let mut attachments = Vec::new();
+    for image_name in image_names {
+        match ctx.data().song_info_client.get_cover(&image_name).await {
+            Ok(bytes) => {
+                attachments.push(serenity::CreateAttachment::bytes(bytes, image_name.clone()));
+            }
+            Err(e) => tracing::warn!("failed to fetch cover image {image_name}: {e:?}"),
+        }
+    }
+
+    ctx.send(CreateReply {
+        embeds,
+        attachments,
+        ..Default::default()
+    })
+    .await?;
+
+    Ok(())
+}
+
+fn build_song_info_embed(
+    song_title: &str,
+    song_genre: &str,
+    song_artist: &str,
+    sheets: &[crate::client::SongMetadata],
+) -> (serenity::CreateEmbed, Option<String>) {
+    let region_unreleased_line = build_region_unreleased_line(sheets);
 
     let std_version = sheets
         .iter()
@@ -380,38 +414,17 @@ pub(crate) async fn mai_song_info(
         blocks.push(format!("Level (DX)\n{levels}"));
     }
 
-    let mut base = embed_base(&song_title);
+    let mut embed = embed_base(song_title);
     if !blocks.is_empty() {
-        base = base.description(blocks.join("\n\n"));
+        embed = embed.description(blocks.join("\n\n"));
     }
 
-    let image_name = sheets.iter().find_map(|sheet| sheet.image_name.as_deref());
-    if let Some(image_name) = image_name {
-        base = base.thumbnail(format!("attachment://{image_name}"));
-    }
-    let embeds = vec![base];
-
-    let mut attachments = Vec::new();
-    if let Some(image_name) = image_name {
-        match ctx.data().song_info_client.get_cover(image_name).await {
-            Ok(bytes) => {
-                attachments.push(serenity::CreateAttachment::bytes(
-                    bytes,
-                    image_name.to_string(),
-                ));
-            }
-            Err(e) => tracing::warn!("failed to fetch cover image {image_name}: {e:?}"),
-        }
+    let image_name = sheets.iter().find_map(|sheet| sheet.image_name.clone());
+    if let Some(image_name) = image_name.as_deref() {
+        embed = embed.thumbnail(format!("attachment://{image_name}"));
     }
 
-    ctx.send(CreateReply {
-        embeds,
-        attachments,
-        ..Default::default()
-    })
-    .await?;
-
-    Ok(())
+    (embed, image_name)
 }
 
 /// Get most recent credit records
