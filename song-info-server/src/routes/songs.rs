@@ -325,22 +325,51 @@ fn song_matches_search_request(
         && artist.is_none_or(|artist| song.artist == artist)
 }
 
+fn normalize_lookup_value(value: &str) -> String {
+    value.trim().to_lowercase()
+}
+
+fn song_matches_flexible_search_request(
+    song: &models::SongCatalogSong,
+    title: Option<&str>,
+    genre: Option<&SongGenre>,
+    artist: Option<&str>,
+) -> bool {
+    title.is_none_or(|title| normalize_lookup_value(&song.title) == normalize_lookup_value(title))
+        && genre.is_none_or(|genre| song.genre == *genre)
+        && artist.is_none_or(|artist| {
+            normalize_lookup_value(&song.artist) == normalize_lookup_value(artist)
+        })
+}
+
 fn collect_song_metadata_items(
     songs: &[models::SongCatalogSong],
     params: &SongMetadataSearchRequest,
     parsed_genre: Option<&SongGenre>,
     parsed_chart_type: Option<ChartType>,
     parsed_diff_category: Option<DifficultyCategory>,
+    use_flexible_match: bool,
 ) -> Vec<SongMetadataResponse> {
     let mut items = Vec::new();
 
     for song in songs {
-        if !song_matches_search_request(
-            song,
-            params.title.as_deref(),
-            parsed_genre,
-            params.artist.as_deref(),
-        ) {
+        let matches = if use_flexible_match {
+            song_matches_flexible_search_request(
+                song,
+                params.title.as_deref(),
+                parsed_genre,
+                params.artist.as_deref(),
+            )
+        } else {
+            song_matches_search_request(
+                song,
+                params.title.as_deref(),
+                parsed_genre,
+                params.artist.as_deref(),
+            )
+        };
+
+        if !matches {
             continue;
         }
 
@@ -428,7 +457,18 @@ fn search_song_metadata_items(
         parsed_genre.as_ref(),
         parsed_chart_type,
         parsed_diff_category,
+        false,
     );
+    if items.is_empty() {
+        items = collect_song_metadata_items(
+            songs,
+            params,
+            parsed_genre.as_ref(),
+            parsed_chart_type,
+            parsed_diff_category,
+            true,
+        );
+    }
     let total = items.len();
     items.truncate(limit);
 
@@ -783,6 +823,100 @@ mod tests {
 
         assert_eq!(response.total, 1);
         assert_eq!(response.items[0].artist, "");
+    }
+
+    #[test]
+    fn metadata_search_falls_back_to_case_insensitive_title() {
+        let songs = vec![SongCatalogSong {
+            title: "Link".to_string(),
+            genre: SongGenre::Maimai,
+            artist: "Artist A".to_string(),
+            image_name: Some("a.png".to_string()),
+            sheets: vec![SongCatalogChart {
+                chart_type: "std".to_string(),
+                difficulty: "basic".to_string(),
+                level: "5".to_string(),
+                version_name: Some("CiRCLE".to_string()),
+                internal_level: Some("5.0".to_string()),
+                region: SongChartRegion {
+                    jp: true,
+                    intl: true,
+                },
+            }],
+        }];
+
+        let response = search_song_metadata_items(
+            &songs,
+            &SongMetadataSearchRequest {
+                title: Some("link".to_string()),
+                genre: None,
+                artist: None,
+                chart_type: None,
+                diff_category: None,
+                limits: Some(10),
+            },
+        )
+        .expect("search should succeed");
+
+        assert_eq!(response.total, 1);
+        assert_eq!(response.items[0].title, "Link");
+    }
+
+    #[test]
+    fn metadata_search_keeps_exact_match_priority_over_fallback() {
+        let songs = vec![
+            SongCatalogSong {
+                title: "Link".to_string(),
+                genre: SongGenre::Maimai,
+                artist: "Artist A".to_string(),
+                image_name: Some("a.png".to_string()),
+                sheets: vec![SongCatalogChart {
+                    chart_type: "std".to_string(),
+                    difficulty: "basic".to_string(),
+                    level: "5".to_string(),
+                    version_name: Some("CiRCLE".to_string()),
+                    internal_level: Some("5.0".to_string()),
+                    region: SongChartRegion {
+                        jp: true,
+                        intl: true,
+                    },
+                }],
+            },
+            SongCatalogSong {
+                title: "link".to_string(),
+                genre: SongGenre::Maimai,
+                artist: "Artist B".to_string(),
+                image_name: Some("b.png".to_string()),
+                sheets: vec![SongCatalogChart {
+                    chart_type: "std".to_string(),
+                    difficulty: "basic".to_string(),
+                    level: "6".to_string(),
+                    version_name: Some("CiRCLE".to_string()),
+                    internal_level: Some("6.0".to_string()),
+                    region: SongChartRegion {
+                        jp: true,
+                        intl: true,
+                    },
+                }],
+            },
+        ];
+
+        let response = search_song_metadata_items(
+            &songs,
+            &SongMetadataSearchRequest {
+                title: Some("link".to_string()),
+                genre: None,
+                artist: None,
+                chart_type: None,
+                diff_category: None,
+                limits: Some(10),
+            },
+        )
+        .expect("search should succeed");
+
+        assert_eq!(response.total, 1);
+        assert_eq!(response.items[0].title, "link");
+        assert_eq!(response.items[0].artist, "Artist B");
     }
 
     #[test]
