@@ -1,0 +1,18 @@
+# Stage 1: Build static assets
+FROM node:20-alpine AS builder
+
+WORKDIR /app
+COPY package.json package-lock.json ./
+RUN npm ci
+COPY . .
+RUN npm run build
+
+# Stage 2: lightweight assets image
+FROM alpine:3.20
+
+# Copy built static files to /assets
+COPY --from=builder /app/dist /assets
+
+# Sync assets into mounted destination path
+ENTRYPOINT ["sh", "-c", "find ${1:-/dst} -mindepth 1 -maxdepth 1 -exec rm -rf {} + 2>/dev/null; cp -R /assets/. ${1:-/dst}/", "sh"]
+CMD ["/dst"]
