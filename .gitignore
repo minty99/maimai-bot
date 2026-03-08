@@ -1,8 +1,15 @@
 /target
+/node_modules
 .env
 **/.env
 /data
 *.sqlite3
+/apps/maistats/node_modules
+/apps/maistats/dist
+/apps/maistats/.wrangler
+/apps/maistats/.dev.vars
+/apps/maistats/.dev.vars.*
+*.tsbuildinfo
 
 # OpenCode
 .sisyphus/

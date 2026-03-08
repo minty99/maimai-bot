@@ -17,16 +17,18 @@
 
 ## Quick Start
 
+이 앱은 monorepo의 npm workspace 멤버입니다. 아래 명령은 저장소 루트에서 실행하는 기준입니다.
+
 1. 의존성 설치:
 
 ```bash
-npm install
+npm ci
 ```
 
 2. 환경 변수 파일 생성:
 
 ```bash
-cp .env.example .env
+cp apps/maistats/.env.example apps/maistats/.env
 ```
 
 3. 필요하면 `.env` 값을 수정:
@@ -41,7 +43,7 @@ RECORD_COLLECTOR_SERVER_URL=<your-record-collector-server-origin>
 4. 개발 서버 실행:
 
 ```bash
-npm run dev
+npm run dev --workspace apps/maistats
 ```
 
 접속 가능한 로컬 주소는 Vite가 터미널에 출력합니다.
@@ -59,14 +61,14 @@ Cloudflare Pages에 배포할 때는 이 값을 저장소에 커밋하지 말고
 
 ## Scripts
 
-- `npm run dev`: 개발 서버 실행
-- `npm run build`: TypeScript 체크 후 프로덕션 빌드 생성
-- `npm run preview`: 빌드 결과 로컬 프리뷰
+- `npm run dev --workspace apps/maistats`: 개발 서버 실행
+- `npm run build --workspace apps/maistats`: TypeScript 체크 후 프로덕션 빌드 생성
+- `npm run preview --workspace apps/maistats`: 빌드 결과 로컬 프리뷰
 
 ## Build
 
 ```bash
-npm run build
+npm run build --workspace apps/maistats
 ```
 
 빌드 결과물은 `dist/`에 생성됩니다.
@@ -74,7 +76,7 @@ npm run build
 프리뷰가 필요하면 다음을 실행합니다.
 
 ```bash
-npm run preview
+npm run preview --workspace apps/maistats
 ```
 
 프리뷰 주소는 Vite가 터미널에 출력합니다.
@@ -88,18 +90,18 @@ npm run preview
 - GitHub 저장소 연결
 - Production branch: `main`
 - Framework preset: `Vite` 또는 `None`
-- Build command: `npm ci && npm run build`
-- Build output directory: `dist`
-- Root directory: `/`
+- Build command: `npm ci && npm run build --workspace apps/maistats`
+- Build output directory: `apps/maistats/dist`
+- Root directory: 저장소 루트
 - `NODE_VERSION=20`
-- Deploy command: `npx wrangler deploy`
+- Deploy command: `npx wrangler deploy --config apps/maistats/wrangler.jsonc`
 
 환경 변수:
 
 - Production과 Preview 모두에 `SONG_INFO_SERVER_URL`, `RECORD_COLLECTOR_SERVER_URL` 설정
 - 필요하면 custom domain 연결
 
-이 저장소는 `@cloudflare/vite-plugin`과 `wrangler.jsonc`를 포함하므로 `wrangler deploy` 기준 배포도 지원합니다.
+이 저장소는 `@cloudflare/vite-plugin`과 `wrangler.jsonc`를 포함하므로 루트에서 `npx wrangler deploy --config apps/maistats/wrangler.jsonc` 형태의 배포도 지원합니다.
 
 운영 방식:
 

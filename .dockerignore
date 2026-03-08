@@ -3,8 +3,12 @@ data/
 .env
 .git/
 .gitignore
+node_modules/
 README.md
 AGENTS.md
 *.md
 .dockerignore
 docker-compose.yml
+apps/maistats/node_modules/
+apps/maistats/dist/
+apps/maistats/.wrangler/

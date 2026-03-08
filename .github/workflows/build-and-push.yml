@@ -3,6 +3,18 @@ name: Build and Push Docker Images
 on:
   push:
     branches: [main]
+    paths:
+      - .github/workflows/build-and-push.yml
+      - .dockerignore
+      - Dockerfile
+      - Cargo.toml
+      - Cargo.lock
+      - rust-toolchain.toml
+      - .env.example
+      - crates/**
+      - song-info-server/**
+      - record-collector-server/**
+      - personal-discord-bot/**
   workflow_dispatch:  # 수동 트리거 허용
 
 env:

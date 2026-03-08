@@ -1,0 +1,15 @@
+{
+  "name": "maistats",
+  "private": true,
+  "workspaces": [
+    "apps/maistats"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "dev:maistats": "npm run dev --workspace apps/maistats",
+    "build:maistats": "npm run build --workspace apps/maistats",
+    "check:maistats": "npm run build --workspace apps/maistats"
+  }
+}

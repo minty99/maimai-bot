@@ -1,6 +1,6 @@
 # Agent Guidelines (maimai-bot)
 
-This repo is a **single-user** Rust app that logs in to **maimaidx-eng.com** (SEGA ID), crawls your data, stores it locally (SQLite), and exposes it via a Discord bot.
+This repo is a **single-user** monorepo centered on Rust services that log in to **maimaidx-eng.com** (SEGA ID), crawl your data, store it locally (SQLite), expose it via APIs/Discord, and ship a separate `apps/maistats` frontend.
 
 The goal of this file is to keep future changes consistent with the current implementation and constraints.
 
@@ -13,6 +13,11 @@ The goal of this file is to keep future changes consistent with the current impl
 - **Validation**: prefer `cargo fmt`, `cargo clippy`, `cargo test`.
 
 ## Runtime architecture (current)
+
+- Frontend app: `apps/maistats`
+  - Vite + React app deployed to Cloudflare Pages
+  - Uses root npm workspaces; prefer running npm commands from the repo root
+  - Consumes `song-info-server` and `record-collector-server` APIs via `SONG_INFO_SERVER_URL` and `RECORD_COLLECTOR_SERVER_URL`
 
 - CLI entrypoint: `src/main.rs` (clap). Key subcommands:
   - `auth check|login`
