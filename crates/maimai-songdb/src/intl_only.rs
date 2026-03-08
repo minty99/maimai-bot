@@ -53,7 +53,7 @@ fn map_to_rows(parsed: IntlOnlyData) -> eyre::Result<IntlOnlyRows> {
 
     for song in parsed.songs {
         let title = normalize_identity_component(&song.title);
-        let genre = SongGenre::from_name(&song.category).ok_or_else(|| {
+        let genre = song.category.parse::<SongGenre>().ok().ok_or_else(|| {
             eyre::eyre!(
                 "intl_only song '{}' has unknown category: {}",
                 title,

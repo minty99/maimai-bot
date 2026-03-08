@@ -1,6 +1,181 @@
 use serde::{Deserialize, Deserializer, Serialize, Serializer, de::Error as DeError};
 use std::fmt;
-use strum::{Display, EnumIter, EnumString, IntoEnumIterator};
+use std::str::FromStr;
+use strum::{Display, EnumIter, IntoEnumIterator};
+
+fn normalize_ascii_token(value: &str) -> String {
+    value
+        .trim()
+        .chars()
+        .filter(|ch| ch.is_ascii_alphanumeric())
+        .flat_map(char::to_lowercase)
+        .collect()
+}
+
+fn trim_file_stem(value: &str) -> &str {
+    let file = value.trim().rsplit('/').next().unwrap_or(value.trim());
+    let file = file.split('?').next().unwrap_or(file);
+    file.strip_suffix(".png").unwrap_or(file)
+}
+
+fn parse_song_genre(value: &str) -> Option<SongGenre> {
+    match value.trim() {
+        "POPS＆ANIME" | "POPS＆アニメ" => Some(SongGenre::PopsAnime),
+        "niconico＆VOCALOID™" | "niconico＆ボーカロイド" => {
+            Some(SongGenre::NiconicoVocaloid)
+        }
+        "東方Project" => Some(SongGenre::TouhouProject),
+        "GAME＆VARIETY" | "ゲーム＆バラエティ" => Some(SongGenre::GameVariety),
+        "maimai" => Some(SongGenre::Maimai),
+        "オンゲキ＆CHUNITHM" => Some(SongGenre::OngekiChunithm),
+        "宴会場" => Some(SongGenre::Utage),
+        _ => match normalize_ascii_token(value).as_str() {
+            "popsanime" => Some(SongGenre::PopsAnime),
+            "niconicovocaloid" => Some(SongGenre::NiconicoVocaloid),
+            "touhouproject" => Some(SongGenre::TouhouProject),
+            "gamevariety" => Some(SongGenre::GameVariety),
+            "maimai" => Some(SongGenre::Maimai),
+            "ongekichunithm" => Some(SongGenre::OngekiChunithm),
+            "utage" => Some(SongGenre::Utage),
+            _ => None,
+        },
+    }
+}
+
+fn parse_chart_type(value: &str) -> Option<ChartType> {
+    let stem = trim_file_stem(value);
+    match normalize_ascii_token(stem).as_str() {
+        "std" | "standard" | "musicstandard" => Some(ChartType::Std),
+        "dx" | "deluxe" | "musicdx" => Some(ChartType::Dx),
+        _ => None,
+    }
+}
+
+fn parse_difficulty_category(value: &str) -> Option<DifficultyCategory> {
+    let trimmed = trim_file_stem(value);
+    if trimmed.is_empty() {
+        return None;
+    }
+
+    if let Ok(index) = trimmed.parse::<u8>() {
+        if let Some(diff_category) = DifficultyCategory::from_index(index) {
+            return Some(diff_category);
+        }
+    }
+
+    match normalize_ascii_token(trimmed).as_str() {
+        "basic" => Some(DifficultyCategory::Basic),
+        "advanced" => Some(DifficultyCategory::Advanced),
+        "expert" | "exp" => Some(DifficultyCategory::Expert),
+        "master" | "mas" => Some(DifficultyCategory::Master),
+        "diffbasic" => Some(DifficultyCategory::Basic),
+        "diffadvanced" => Some(DifficultyCategory::Advanced),
+        "diffexpert" => Some(DifficultyCategory::Expert),
+        "diffmaster" => Some(DifficultyCategory::Master),
+        "remaster" => Some(DifficultyCategory::ReMaster),
+        "remas" | "diffremaster" => Some(DifficultyCategory::ReMaster),
+        _ => None,
+    }
+}
+
+fn parse_maimai_version(value: &str) -> Option<MaimaiVersion> {
+    let trimmed = value.trim();
+    if trimmed.is_empty() {
+        return None;
+    }
+
+    if let Ok(index) = trimmed.parse::<u8>() {
+        if let Some(version) = MaimaiVersion::from_index(index) {
+            return Some(version);
+        }
+    }
+
+    if let Some(version) = MaimaiVersion::iter().find(|version| version.as_str() == trimmed) {
+        return Some(version);
+    }
+
+    match normalize_ascii_token(trimmed).as_str() {
+        "maimai" => Some(MaimaiVersion::Maimai),
+        "maimaiplus" => Some(MaimaiVersion::MaimaiPlus),
+        "green" => Some(MaimaiVersion::Green),
+        "greenplus" => Some(MaimaiVersion::GreenPlus),
+        "orange" => Some(MaimaiVersion::Orange),
+        "orangeplus" => Some(MaimaiVersion::OrangePlus),
+        "pink" => Some(MaimaiVersion::Pink),
+        "pinkplus" => Some(MaimaiVersion::PinkPlus),
+        "murasaki" => Some(MaimaiVersion::Murasaki),
+        "murasakiplus" => Some(MaimaiVersion::MurasakiPlus),
+        "milk" => Some(MaimaiVersion::Milk),
+        "milkplus" => Some(MaimaiVersion::MilkPlus),
+        "finale" => Some(MaimaiVersion::Finale),
+        "deluxe" | "maimaideluxe" => Some(MaimaiVersion::Deluxe),
+        "deluxeplus" | "maimaideluxeplus" => Some(MaimaiVersion::DeluxePlus),
+        "splash" => Some(MaimaiVersion::Splash),
+        "splashplus" => Some(MaimaiVersion::SplashPlus),
+        "universe" => Some(MaimaiVersion::Universe),
+        "universeplus" => Some(MaimaiVersion::UniversePlus),
+        "festival" => Some(MaimaiVersion::Festival),
+        "festivalplus" => Some(MaimaiVersion::FestivalPlus),
+        "buddies" => Some(MaimaiVersion::Buddies),
+        "buddiesplus" => Some(MaimaiVersion::BuddiesPlus),
+        "prism" => Some(MaimaiVersion::Prism),
+        "prismplus" => Some(MaimaiVersion::PrismPlus),
+        "circle" => Some(MaimaiVersion::Circle),
+        _ => None,
+    }
+}
+
+fn parse_score_rank(value: &str) -> Option<ScoreRank> {
+    let normalized = normalize_ascii_token(trim_file_stem(value).trim_start_matches("music_icon_"));
+    match normalized.as_str() {
+        "sssp" | "sssplus" => Some(ScoreRank::SssPlus),
+        "sss" => Some(ScoreRank::Sss),
+        "ssp" | "ssplus" => Some(ScoreRank::SsPlus),
+        "ss" => Some(ScoreRank::Ss),
+        "sp" | "splus" => Some(ScoreRank::SPlus),
+        "s" => Some(ScoreRank::S),
+        "aaa" => Some(ScoreRank::Aaa),
+        "aa" => Some(ScoreRank::Aa),
+        "a" => Some(ScoreRank::A),
+        "bbb" => Some(ScoreRank::Bbb),
+        "bb" => Some(ScoreRank::Bb),
+        "b" => Some(ScoreRank::B),
+        "c" => Some(ScoreRank::C),
+        "d" => Some(ScoreRank::D),
+        _ => None,
+    }
+}
+
+fn parse_fc_status(value: &str) -> Option<FcStatus> {
+    let normalized = normalize_ascii_token(
+        trim_file_stem(value)
+            .trim_start_matches("music_icon_")
+            .trim_start_matches("fc_"),
+    );
+    match normalized.as_str() {
+        "app" | "applus" => Some(FcStatus::ApPlus),
+        "ap" => Some(FcStatus::Ap),
+        "fcp" | "fcplus" => Some(FcStatus::FcPlus),
+        "fc" => Some(FcStatus::Fc),
+        _ => None,
+    }
+}
+
+fn parse_sync_status(value: &str) -> Option<SyncStatus> {
+    let normalized = normalize_ascii_token(
+        trim_file_stem(value)
+            .trim_start_matches("music_icon_")
+            .trim_start_matches("sync_"),
+    );
+    match normalized.as_str() {
+        "fdxp" | "fdxplus" => Some(SyncStatus::FdxPlus),
+        "fdx" => Some(SyncStatus::Fdx),
+        "fsp" | "fsplus" => Some(SyncStatus::FsPlus),
+        "fs" => Some(SyncStatus::Fs),
+        "sync" => Some(SyncStatus::Sync),
+        _ => None,
+    }
+}
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum SongGenre {
@@ -14,21 +189,6 @@ pub enum SongGenre {
 }
 
 impl SongGenre {
-    pub fn from_name(name: &str) -> Option<Self> {
-        match name.trim() {
-            "POPS＆ANIME" | "POPS＆アニメ" => Some(Self::PopsAnime),
-            "niconico＆VOCALOID™" | "niconico＆ボーカロイド" => {
-                Some(Self::NiconicoVocaloid)
-            }
-            "東方Project" => Some(Self::TouhouProject),
-            "GAME＆VARIETY" | "ゲーム＆バラエティ" => Some(Self::GameVariety),
-            "maimai" => Some(Self::Maimai),
-            "オンゲキ＆CHUNITHM" => Some(Self::OngekiChunithm),
-            "宴会場" => Some(Self::Utage),
-            _ => None,
-        }
-    }
-
     pub fn as_str(&self) -> &str {
         match self {
             Self::PopsAnime => "POPS＆ANIME",
@@ -39,6 +199,14 @@ impl SongGenre {
             Self::OngekiChunithm => "オンゲキ＆CHUNITHM",
             Self::Utage => "宴会場",
         }
+    }
+}
+
+impl FromStr for SongGenre {
+    type Err = ();
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        parse_song_genre(s).ok_or(())
     }
 }
 
@@ -66,21 +234,18 @@ impl<'de> Deserialize<'de> for SongGenre {
         if value.trim().is_empty() {
             return Err(D::Error::custom("song genre cannot be empty"));
         }
-        Self::from_name(&value)
-            .ok_or_else(|| D::Error::custom(format!("unknown song genre: {}", value.trim())))
+        value
+            .parse::<Self>()
+            .map_err(|_| D::Error::custom(format!("unknown song genre: {}", value.trim())))
     }
 }
 
-#[derive(
-    Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize, EnumString,
-)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize)]
 #[repr(u8)]
 pub enum ChartType {
     #[serde(rename = "STD")]
-    #[strum(serialize = "STD", serialize = "std", ascii_case_insensitive)]
     Std = 0,
     #[serde(rename = "DX")]
-    #[strum(serialize = "DX", serialize = "dx", ascii_case_insensitive)]
     Dx = 1,
 }
 
@@ -96,15 +261,34 @@ impl ChartType {
         }
     }
 
-    pub fn from_lowercase(s: &str) -> Option<Self> {
-        s.trim().parse::<Self>().ok()
-    }
-
     pub const fn as_lowercase(&self) -> &'static str {
         match self {
             Self::Std => "std",
             Self::Dx => "dx",
         }
+    }
+}
+
+impl FromStr for ChartType {
+    type Err = ();
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        parse_chart_type(s).ok_or(())
+    }
+}
+
+impl<'de> Deserialize<'de> for ChartType {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let value = String::deserialize(deserializer)?;
+        if value.trim().is_empty() {
+            return Err(D::Error::custom("chart type cannot be empty"));
+        }
+        value
+            .parse::<Self>()
+            .map_err(|_| D::Error::custom(format!("unknown chart type: {}", value.trim())))
     }
 }
 
@@ -114,47 +298,22 @@ impl fmt::Display for ChartType {
     }
 }
 
-#[derive(
-    Debug,
-    Clone,
-    Copy,
-    PartialEq,
-    Eq,
-    PartialOrd,
-    Ord,
-    Hash,
-    Serialize,
-    Deserialize,
-    EnumString,
-    EnumIter,
-)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, EnumIter)]
 #[repr(u8)]
 pub enum DifficultyCategory {
     #[serde(rename = "BASIC")]
-    #[strum(serialize = "BASIC", serialize = "basic", ascii_case_insensitive)]
     Basic = 0,
 
     #[serde(rename = "ADVANCED")]
-    #[strum(serialize = "ADVANCED", serialize = "advanced", ascii_case_insensitive)]
     Advanced = 1,
 
     #[serde(rename = "EXPERT")]
-    #[strum(serialize = "EXPERT", serialize = "expert", ascii_case_insensitive)]
     Expert = 2,
 
     #[serde(rename = "MASTER")]
-    #[strum(serialize = "MASTER", serialize = "master", ascii_case_insensitive)]
     Master = 3,
 
     #[serde(rename = "Re:MASTER")]
-    #[strum(
-        serialize = "Re:MASTER",
-        serialize = "re:master",
-        serialize = "RE:MASTER",
-        serialize = "remaster",
-        serialize = "REMASTER",
-        ascii_case_insensitive
-    )]
     ReMaster = 4,
 }
 
@@ -177,10 +336,6 @@ impl DifficultyCategory {
         }
     }
 
-    pub fn from_lowercase(s: &str) -> Option<Self> {
-        s.trim().parse::<Self>().ok()
-    }
-
     pub const fn as_lowercase(&self) -> &'static str {
         match self {
             Self::Basic => "basic",
@@ -190,14 +345,28 @@ impl DifficultyCategory {
             Self::ReMaster => "remaster",
         }
     }
+}
 
-    pub fn from_sheet_abbreviation(s: &str) -> Option<Self> {
-        match s.trim() {
-            "EXP" => Some(Self::Expert),
-            "MAS" => Some(Self::Master),
-            "ReMAS" => Some(Self::ReMaster),
-            _ => None,
+impl FromStr for DifficultyCategory {
+    type Err = ();
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        parse_difficulty_category(s).ok_or(())
+    }
+}
+
+impl<'de> Deserialize<'de> for DifficultyCategory {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let value = String::deserialize(deserializer)?;
+        if value.trim().is_empty() {
+            return Err(D::Error::custom("difficulty category cannot be empty"));
         }
+        value
+            .parse::<Self>()
+            .map_err(|_| D::Error::custom(format!("unknown difficulty category: {}", value.trim())))
     }
 }
 
@@ -277,10 +446,13 @@ impl MaimaiVersion {
     pub fn from_index(index: u8) -> Option<Self> {
         Self::iter().find(|version| version.as_index() == index)
     }
+}
 
-    pub fn from_name(name: &str) -> Option<Self> {
-        let normalized = name.trim();
-        Self::iter().find(|version| version.as_str() == normalized)
+impl FromStr for MaimaiVersion {
+    type Err = ();
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        parse_maimai_version(s).ok_or(())
     }
 }
 
@@ -302,8 +474,9 @@ impl<'de> Deserialize<'de> for MaimaiVersion {
         if value.trim().is_empty() {
             return Err(D::Error::custom("maimai version cannot be empty"));
         }
-        Self::from_name(&value)
-            .ok_or_else(|| D::Error::custom(format!("unknown maimai version: {}", value.trim())))
+        value
+            .parse::<Self>()
+            .map_err(|_| D::Error::custom(format!("unknown maimai version: {}", value.trim())))
     }
 }
 
@@ -315,38 +488,38 @@ mod song_genre_tests {
     #[test]
     fn song_genre_loads_jp_and_intl_aliases() {
         assert_eq!(
-            SongGenre::from_name("POPS＆アニメ"),
+            "POPS＆アニメ".parse::<SongGenre>().ok(),
             Some(SongGenre::PopsAnime)
         );
         assert_eq!(
-            SongGenre::from_name("POPS＆ANIME"),
+            "POPS＆ANIME".parse::<SongGenre>().ok(),
             Some(SongGenre::PopsAnime)
         );
         assert_eq!(
-            SongGenre::from_name("niconico＆ボーカロイド"),
+            "niconico＆ボーカロイド".parse::<SongGenre>().ok(),
             Some(SongGenre::NiconicoVocaloid)
         );
         assert_eq!(
-            SongGenre::from_name("niconico＆VOCALOID™"),
+            "niconico＆VOCALOID™".parse::<SongGenre>().ok(),
             Some(SongGenre::NiconicoVocaloid)
         );
         assert_eq!(
-            SongGenre::from_name("ゲーム＆バラエティ"),
+            "ゲーム＆バラエティ".parse::<SongGenre>().ok(),
             Some(SongGenre::GameVariety)
         );
         assert_eq!(
-            SongGenre::from_name("GAME＆VARIETY"),
+            "GAME＆VARIETY".parse::<SongGenre>().ok(),
             Some(SongGenre::GameVariety)
         );
         assert_eq!(
-            SongGenre::from_name("東方Project"),
+            "東方Project".parse::<SongGenre>().ok(),
             Some(SongGenre::TouhouProject)
         );
         assert_eq!(
-            SongGenre::from_name("オンゲキ＆CHUNITHM"),
+            "オンゲキ＆CHUNITHM".parse::<SongGenre>().ok(),
             Some(SongGenre::OngekiChunithm)
         );
-        assert_eq!(SongGenre::from_name("宴会場"), Some(SongGenre::Utage));
+        assert_eq!("宴会場".parse::<SongGenre>().ok(), Some(SongGenre::Utage));
     }
 
     #[test]
@@ -379,56 +552,42 @@ mod song_genre_tests {
 
         for catcode in catcodes {
             assert!(
-                SongGenre::from_name(&catcode).is_some(),
+                catcode.parse::<SongGenre>().is_ok(),
                 "catcode should parse: {catcode}"
             );
         }
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, EnumString, Display)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Display)]
 pub enum ScoreRank {
     #[serde(rename = "SSS+")]
-    #[strum(serialize = "SSS+")]
     SssPlus,
     #[serde(rename = "SSS")]
-    #[strum(serialize = "SSS")]
     Sss,
     #[serde(rename = "SS+")]
-    #[strum(serialize = "SS+")]
     SsPlus,
     #[serde(rename = "SS")]
-    #[strum(serialize = "SS")]
     Ss,
     #[serde(rename = "S+")]
-    #[strum(serialize = "S+")]
     SPlus,
     #[serde(rename = "S")]
-    #[strum(serialize = "S")]
     S,
     #[serde(rename = "AAA")]
-    #[strum(serialize = "AAA")]
     Aaa,
     #[serde(rename = "AA")]
-    #[strum(serialize = "AA")]
     Aa,
     #[serde(rename = "A")]
-    #[strum(serialize = "A")]
     A,
     #[serde(rename = "BBB")]
-    #[strum(serialize = "BBB")]
     Bbb,
     #[serde(rename = "BB")]
-    #[strum(serialize = "BB")]
     Bb,
     #[serde(rename = "B")]
-    #[strum(serialize = "B")]
     B,
     #[serde(rename = "C")]
-    #[strum(serialize = "C")]
     C,
     #[serde(rename = "D")]
-    #[strum(serialize = "D")]
     D,
 }
 
@@ -451,62 +610,40 @@ impl ScoreRank {
             Self::D => "D",
         }
     }
+}
 
-    pub fn from_score_icon_key(key: &str) -> Option<Self> {
-        Some(match key {
-            "sssp" => Self::SssPlus,
-            "sss" => Self::Sss,
-            "ssp" => Self::SsPlus,
-            "ss" => Self::Ss,
-            "sp" => Self::SPlus,
-            "s" => Self::S,
-            "aaa" => Self::Aaa,
-            "aa" => Self::Aa,
-            "a" => Self::A,
-            "bbb" => Self::Bbb,
-            "bb" => Self::Bb,
-            "b" => Self::B,
-            "c" => Self::C,
-            "d" => Self::D,
-            _ => return None,
-        })
-    }
+impl FromStr for ScoreRank {
+    type Err = ();
 
-    pub fn from_playlog_stem(stem: &str) -> Option<Self> {
-        let s = stem.trim().to_ascii_lowercase();
-        Some(match s.as_str() {
-            "sssplus" => Self::SssPlus,
-            "sss" => Self::Sss,
-            "ssplus" => Self::SsPlus,
-            "ss" => Self::Ss,
-            "splus" => Self::SPlus,
-            "s" => Self::S,
-            "aaa" => Self::Aaa,
-            "aa" => Self::Aa,
-            "a" => Self::A,
-            "bbb" => Self::Bbb,
-            "bb" => Self::Bb,
-            "b" => Self::B,
-            "c" => Self::C,
-            "d" => Self::D,
-            _ => return None,
-        })
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        parse_score_rank(s).ok_or(())
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, EnumString, Display)]
+impl<'de> Deserialize<'de> for ScoreRank {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let value = String::deserialize(deserializer)?;
+        if value.trim().is_empty() {
+            return Err(D::Error::custom("score rank cannot be empty"));
+        }
+        value
+            .parse::<Self>()
+            .map_err(|_| D::Error::custom(format!("unknown score rank: {}", value.trim())))
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Display)]
 pub enum FcStatus {
     #[serde(rename = "AP+")]
-    #[strum(serialize = "AP+")]
     ApPlus,
     #[serde(rename = "AP")]
-    #[strum(serialize = "AP")]
     Ap,
     #[serde(rename = "FC+")]
-    #[strum(serialize = "FC+")]
     FcPlus,
     #[serde(rename = "FC")]
-    #[strum(serialize = "FC")]
     Fc,
 }
 
@@ -519,45 +656,42 @@ impl FcStatus {
             Self::Fc => "FC",
         }
     }
+}
 
-    pub fn from_score_icon_key(key: &str) -> Option<Self> {
-        Some(match key {
-            "app" => Self::ApPlus,
-            "ap" => Self::Ap,
-            "fcp" => Self::FcPlus,
-            "fc" => Self::Fc,
-            _ => return None,
-        })
-    }
+impl FromStr for FcStatus {
+    type Err = ();
 
-    pub fn from_playlog_key(key: &str) -> Option<Self> {
-        let s = key.trim().to_ascii_lowercase();
-        Some(match s.as_str() {
-            "app" => Self::ApPlus,
-            "ap" => Self::Ap,
-            "fcp" => Self::FcPlus,
-            "fc" => Self::Fc,
-            _ => return None,
-        })
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        parse_fc_status(s).ok_or(())
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, EnumString, Display)]
+impl<'de> Deserialize<'de> for FcStatus {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let value = String::deserialize(deserializer)?;
+        if value.trim().is_empty() {
+            return Err(D::Error::custom("fc status cannot be empty"));
+        }
+        value
+            .parse::<Self>()
+            .map_err(|_| D::Error::custom(format!("unknown fc status: {}", value.trim())))
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Display)]
 pub enum SyncStatus {
     #[serde(rename = "FDX+")]
-    #[strum(serialize = "FDX+")]
     FdxPlus,
     #[serde(rename = "FDX")]
-    #[strum(serialize = "FDX")]
     Fdx,
     #[serde(rename = "FS+")]
-    #[strum(serialize = "FS+")]
     FsPlus,
     #[serde(rename = "FS")]
-    #[strum(serialize = "FS")]
     Fs,
     #[serde(rename = "SYNC")]
-    #[strum(serialize = "SYNC")]
     Sync,
 }
 
@@ -581,34 +715,36 @@ impl SyncStatus {
             Self::Sync => 1,
         }
     }
+}
 
-    pub fn from_score_icon_key(key: &str) -> Option<Self> {
-        Some(match key {
-            "fdxp" => Self::FdxPlus,
-            "fdx" => Self::Fdx,
-            "fsp" => Self::FsPlus,
-            "fs" => Self::Fs,
-            "sync" => Self::Sync,
-            _ => return None,
-        })
+impl FromStr for SyncStatus {
+    type Err = ();
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        parse_sync_status(s).ok_or(())
     }
+}
 
-    pub fn from_playlog_key(key: &str) -> Option<Self> {
-        let s = key.trim().to_ascii_lowercase();
-        Some(match s.as_str() {
-            "fdxp" => Self::FdxPlus,
-            "fdx" => Self::Fdx,
-            "fsp" => Self::FsPlus,
-            "fs" => Self::Fs,
-            "sync" => Self::Sync,
-            _ => return None,
-        })
+impl<'de> Deserialize<'de> for SyncStatus {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let value = String::deserialize(deserializer)?;
+        if value.trim().is_empty() {
+            return Err(D::Error::custom("sync status cannot be empty"));
+        }
+        value
+            .parse::<Self>()
+            .map_err(|_| D::Error::custom(format!("unknown sync status: {}", value.trim())))
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{ChartType, DifficultyCategory, MaimaiVersion};
+    use super::{
+        ChartType, DifficultyCategory, FcStatus, MaimaiVersion, ScoreRank, SongGenre, SyncStatus,
+    };
     use strum::IntoEnumIterator;
 
     #[test]
@@ -625,7 +761,10 @@ mod tests {
     #[test]
     fn version_name_roundtrip() {
         for version in MaimaiVersion::iter() {
-            assert_eq!(MaimaiVersion::from_name(version.as_str()), Some(version));
+            assert_eq!(
+                version.as_str().parse::<MaimaiVersion>().ok(),
+                Some(version)
+            );
         }
     }
 
@@ -638,5 +777,52 @@ mod tests {
         assert_eq!(DifficultyCategory::Expert.to_string(), "EXPERT");
         assert_eq!(DifficultyCategory::Master.to_string(), "MASTER");
         assert_eq!(DifficultyCategory::ReMaster.to_string(), "Re:MASTER");
+    }
+
+    #[test]
+    fn raw_string_parsers_are_flexible() {
+        assert_eq!(
+            "pops anime".parse::<SongGenre>().ok(),
+            Some(SongGenre::PopsAnime)
+        );
+        assert_eq!(
+            "/img/music_standard.png".parse::<ChartType>().ok(),
+            Some(ChartType::Std)
+        );
+        assert_eq!("deluxe".parse::<ChartType>().ok(), Some(ChartType::Dx));
+        assert_eq!(
+            "diff_remaster.png".parse::<DifficultyCategory>().ok(),
+            Some(DifficultyCategory::ReMaster)
+        );
+        assert_eq!(
+            "ReMAS".parse::<DifficultyCategory>().ok(),
+            Some(DifficultyCategory::ReMaster)
+        );
+        assert_eq!(
+            "maimai deluxe plus".parse::<MaimaiVersion>().ok(),
+            Some(MaimaiVersion::DeluxePlus)
+        );
+        assert_eq!(
+            "25".parse::<MaimaiVersion>().ok(),
+            Some(MaimaiVersion::Circle)
+        );
+        assert_eq!(
+            "music_icon_sssp.png".parse::<ScoreRank>().ok(),
+            Some(ScoreRank::SssPlus)
+        );
+        assert_eq!(
+            "sssplus".parse::<ScoreRank>().ok(),
+            Some(ScoreRank::SssPlus)
+        );
+        assert_eq!("fcplus".parse::<FcStatus>().ok(), Some(FcStatus::FcPlus));
+        assert_eq!(
+            "fc_app.png".parse::<FcStatus>().ok(),
+            Some(FcStatus::ApPlus)
+        );
+        assert_eq!(
+            "sync_fdxplus.png".parse::<SyncStatus>().ok(),
+            Some(SyncStatus::FdxPlus)
+        );
+        assert_eq!("fsp".parse::<SyncStatus>().ok(), Some(SyncStatus::FsPlus));
     }
 }

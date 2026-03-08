@@ -8,15 +8,16 @@ use models::{
 pub(crate) use models::{PlayRecordApiResponse, ScoreApiResponse};
 
 pub(crate) fn score_response_from_entry(entry: StoredScoreEntry) -> Result<ScoreApiResponse> {
-    let chart_type = ChartType::from_str(&entry.chart_type).map_err(|e| {
-        AppError::InternalError(format!("invalid chart_type '{}': {}", entry.chart_type, e))
+    let chart_type = entry.chart_type.parse::<ChartType>().ok().ok_or_else(|| {
+        AppError::InternalError(format!("invalid chart_type '{}'", entry.chart_type))
     })?;
-    let diff_category = DifficultyCategory::from_str(&entry.diff_category).map_err(|e| {
-        AppError::InternalError(format!(
-            "invalid diff_category '{}': {}",
-            entry.diff_category, e
-        ))
-    })?;
+    let diff_category = entry
+        .diff_category
+        .parse::<DifficultyCategory>()
+        .ok()
+        .ok_or_else(|| {
+            AppError::InternalError(format!("invalid diff_category '{}'", entry.diff_category))
+        })?;
 
     let rank = parse_optional::<ScoreRank>(&entry.rank);
     let fc = parse_optional::<FcStatus>(&entry.fc);
@@ -42,17 +43,17 @@ pub(crate) fn score_response_from_entry(entry: StoredScoreEntry) -> Result<Score
 pub(crate) fn play_record_response_from_record(
     record: StoredPlayRecord,
 ) -> Result<PlayRecordApiResponse> {
-    let chart_type = ChartType::from_str(&record.chart_type).map_err(|e| {
-        AppError::InternalError(format!("invalid chart_type '{}': {}", record.chart_type, e))
+    let chart_type = record.chart_type.parse::<ChartType>().ok().ok_or_else(|| {
+        AppError::InternalError(format!("invalid chart_type '{}'", record.chart_type))
     })?;
     let diff_category = record
         .diff_category
         .as_deref()
         .filter(|s| !s.is_empty())
         .map(|s| {
-            DifficultyCategory::from_str(s).map_err(|e| {
-                AppError::InternalError(format!("invalid diff_category '{}': {}", s, e))
-            })
+            s.parse::<DifficultyCategory>()
+                .ok()
+                .ok_or_else(|| AppError::InternalError(format!("invalid diff_category '{}'", s)))
         })
         .transpose()?;
 

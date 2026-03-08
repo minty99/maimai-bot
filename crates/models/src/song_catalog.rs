@@ -85,7 +85,7 @@ impl SongInternalLevelIndex {
             let artist = normalize_identity_component(&song.artist);
 
             for sheet in song.sheets {
-                let Some(chart_type) = ChartType::from_lowercase(&sheet.chart_type) else {
+                let Ok(chart_type) = sheet.chart_type.parse::<ChartType>() else {
                     continue;
                 };
 
@@ -97,8 +97,7 @@ impl SongInternalLevelIndex {
                     continue;
                 };
 
-                let Some(diff_category) = DifficultyCategory::from_lowercase(&sheet.difficulty)
-                else {
+                let Ok(diff_category) = sheet.difficulty.parse::<DifficultyCategory>() else {
                     continue;
                 };
 
@@ -124,7 +123,8 @@ fn normalize_identity_component(s: &str) -> String {
 }
 
 fn normalize_genre_identity_component(s: &str) -> String {
-    SongGenre::from_name(s)
+    s.parse::<SongGenre>()
+        .ok()
         .map(|genre| genre.to_string())
         .unwrap_or_else(|| s.trim().to_string())
 }

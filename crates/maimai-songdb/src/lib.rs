@@ -568,7 +568,7 @@ fn extract_sheets(raw_song: &RawSong) -> eyre::Result<Vec<SheetRow>> {
 }
 
 fn derive_song_identity(raw_song: &RawSong) -> eyre::Result<SongIdentity> {
-    let genre = SongGenre::from_name(&raw_song.catcode).ok_or_else(|| {
+    let genre = raw_song.catcode.parse::<SongGenre>().ok().ok_or_else(|| {
         eyre::eyre!(
             "unknown official song genre in catcode: {}",
             raw_song.catcode.trim()

@@ -159,7 +159,9 @@ pub(crate) async fn random_song_by_level(
                 .clone()
                 .map(|v| v.trim().to_string())
                 .filter(|v| !v.is_empty());
-            let sheet_version_enum = sheet_version.as_deref().and_then(MaimaiVersion::from_name);
+            let sheet_version_enum = sheet_version
+                .as_deref()
+                .and_then(|value| value.parse::<MaimaiVersion>().ok());
 
             if include_versions.as_ref().is_some_and(|allowed| {
                 sheet_version_enum.is_none_or(|version| !allowed.contains(&version))
@@ -323,43 +325,20 @@ fn song_matches_search_request(
         && artist.is_none_or(|artist| song.artist == artist)
 }
 
-fn search_song_metadata_items(
+fn collect_song_metadata_items(
     songs: &[models::SongCatalogSong],
     params: &SongMetadataSearchRequest,
-) -> Result<SongMetadataSearchResponse> {
-    let parsed_genre =
-        match params.genre.as_deref() {
-            Some(genre) => Some(SongGenre::from_name(genre).ok_or_else(|| {
-                AppError::JsonError(format!("unknown song genre: {}", genre.trim()))
-            })?),
-            None => None,
-        };
-    let parsed_chart_type = match params.chart_type.as_deref() {
-        Some(chart_type) => Some(parse_chart_type_query_value(chart_type).ok_or_else(|| {
-            AppError::JsonError(format!(
-                "invalid chart type: {} (expected STD or DX)",
-                chart_type
-            ))
-        })?),
-        None => None,
-    };
-    let parsed_diff_category = match params.diff_category.as_deref() {
-        Some(diff_category) => Some(
-            DifficultyCategory::from_lowercase(diff_category).ok_or_else(|| {
-                AppError::JsonError(format!("invalid diff_category: {}", diff_category))
-            })?,
-        ),
-        None => None,
-    };
-    let limit = params.limits.unwrap_or(20).min(100);
-
+    parsed_genre: Option<&SongGenre>,
+    parsed_chart_type: Option<ChartType>,
+    parsed_diff_category: Option<DifficultyCategory>,
+) -> Vec<SongMetadataResponse> {
     let mut items = Vec::new();
 
     for song in songs {
         if !song_matches_search_request(
             song,
             params.title.as_deref(),
-            parsed_genre.as_ref(),
+            parsed_genre,
             params.artist.as_deref(),
         ) {
             continue;
@@ -407,6 +386,49 @@ fn search_song_metadata_items(
         }
     }
 
+    items
+}
+
+fn search_song_metadata_items(
+    songs: &[models::SongCatalogSong],
+    params: &SongMetadataSearchRequest,
+) -> Result<SongMetadataSearchResponse> {
+    let parsed_genre =
+        match params.genre.as_deref() {
+            Some(genre) => Some(genre.parse::<SongGenre>().ok().ok_or_else(|| {
+                AppError::JsonError(format!("unknown song genre: {}", genre.trim()))
+            })?),
+            None => None,
+        };
+    let parsed_chart_type = match params.chart_type.as_deref() {
+        Some(chart_type) => Some(parse_chart_type_query_value(chart_type).ok_or_else(|| {
+            AppError::JsonError(format!(
+                "invalid chart type: {} (expected STD or DX)",
+                chart_type
+            ))
+        })?),
+        None => None,
+    };
+    let parsed_diff_category = match params.diff_category.as_deref() {
+        Some(diff_category) => Some(
+            diff_category
+                .parse::<DifficultyCategory>()
+                .ok()
+                .ok_or_else(|| {
+                    AppError::JsonError(format!("invalid diff_category: {}", diff_category))
+                })?,
+        ),
+        None => None,
+    };
+    let limit = params.limits.unwrap_or(20).min(100);
+
+    let mut items = collect_song_metadata_items(
+        songs,
+        params,
+        parsed_genre.as_ref(),
+        parsed_chart_type,
+        parsed_diff_category,
+    );
     let total = items.len();
     items.truncate(limit);
 
@@ -481,16 +503,10 @@ fn parse_difficulty_filter(
 
     let mut parsed = HashSet::new();
     for value in values {
-        let index = value.parse::<u8>().map_err(|_| {
-            AppError::JsonError(format!(
-                "invalid include_difficulties value: {} (expected numeric difficulty index)",
-                value
-            ))
-        })?;
-        let Some(difficulty) = DifficultyCategory::from_index(index) else {
+        let Ok(difficulty) = value.parse::<DifficultyCategory>() else {
             return Err(AppError::JsonError(format!(
-                "unknown difficulty index: {}",
-                index
+                "invalid include_difficulties value: {}",
+                value
             )));
         };
         parsed.insert(difficulty);
@@ -508,17 +524,10 @@ fn parse_version_filter(
 
     let mut parsed = HashSet::new();
     for value in values {
-        let index = value.parse::<u8>().map_err(|_| {
-            AppError::JsonError(format!(
-                "invalid include_versions value: {} (expected numeric version_index)",
-                value
-            ))
-        })?;
-
-        let Some(version) = MaimaiVersion::from_index(index) else {
+        let Ok(version) = value.parse::<MaimaiVersion>() else {
             return Err(AppError::JsonError(format!(
-                "unknown version_index: {}",
-                index
+                "invalid include_versions value: {}",
+                value
             )));
         };
         parsed.insert(version);
@@ -528,15 +537,15 @@ fn parse_version_filter(
 }
 
 fn parse_sheet_chart_type(sheet_type: &str) -> Option<ChartType> {
-    ChartType::from_lowercase(sheet_type)
+    sheet_type.parse::<ChartType>().ok()
 }
 
 fn parse_sheet_difficulty(difficulty: &str) -> Option<DifficultyCategory> {
-    DifficultyCategory::from_lowercase(difficulty)
+    difficulty.parse::<DifficultyCategory>().ok()
 }
 
 fn parse_chart_type_query_value(value: &str) -> Option<ChartType> {
-    value.trim().parse::<ChartType>().ok()
+    value.parse::<ChartType>().ok()
 }
 
 fn is_intl_sheet(sheet: &models::SongCatalogChart) -> bool {
@@ -548,7 +557,7 @@ fn parse_intl_sheet_version(sheet: &models::SongCatalogChart) -> Option<MaimaiVe
         return None;
     }
     let version_name = sheet.version_name.as_deref()?;
-    MaimaiVersion::from_name(version_name)
+    version_name.parse::<MaimaiVersion>().ok()
 }
 
 fn select_random_index(len: usize) -> usize {
@@ -580,7 +589,10 @@ mod tests {
         SongMetadataSearchRequest, build_song_info_response, is_intl_sheet,
         parse_intl_sheet_version, search_song_metadata_items,
     };
-    use models::{MaimaiVersion, SongCatalogChart, SongCatalogSong, SongChartRegion, SongGenre};
+    use models::{
+        DifficultyCategory, MaimaiVersion, SongCatalogChart, SongCatalogSong, SongChartRegion,
+        SongGenre,
+    };
 
     #[test]
     fn intl_sheet_predicate_uses_region_flag() {
@@ -771,5 +783,47 @@ mod tests {
 
         assert_eq!(response.total, 1);
         assert_eq!(response.items[0].artist, "");
+    }
+
+    #[test]
+    fn metadata_search_accepts_flexible_diff_category_query_values() {
+        let songs = vec![SongCatalogSong {
+            title: "Link".to_string(),
+            genre: SongGenre::Maimai,
+            artist: "Artist A".to_string(),
+            image_name: Some("a.png".to_string()),
+            sheets: vec![SongCatalogChart {
+                chart_type: "std".to_string(),
+                difficulty: "remaster".to_string(),
+                level: "13+".to_string(),
+                version_name: Some("CiRCLE".to_string()),
+                internal_level: Some("13.7".to_string()),
+                region: SongChartRegion {
+                    jp: true,
+                    intl: true,
+                },
+            }],
+        }];
+
+        for diff_category in ["Re:MASTER", "re-master", "re master", "4"] {
+            let response = search_song_metadata_items(
+                &songs,
+                &SongMetadataSearchRequest {
+                    title: Some("Link".to_string()),
+                    genre: Some("maimai".to_string()),
+                    artist: Some("Artist A".to_string()),
+                    chart_type: Some("STD".to_string()),
+                    diff_category: Some(diff_category.to_string()),
+                    limits: Some(10),
+                },
+            )
+            .expect("search should succeed");
+
+            assert_eq!(response.total, 1, "diff_category={diff_category}");
+            assert_eq!(
+                response.items[0].diff_category,
+                DifficultyCategory::ReMaster
+            );
+        }
     }
 }

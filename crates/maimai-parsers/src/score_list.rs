@@ -168,17 +168,17 @@ fn parse_dx_score_pair(text: &str) -> Option<(i32, i32)> {
 
 fn parse_rank_from_icon_src(src: &str) -> Option<ScoreRank> {
     let key = icon_key(src)?;
-    ScoreRank::from_score_icon_key(&key)
+    key.parse::<ScoreRank>().ok()
 }
 
 fn parse_fc_from_icon_src(src: &str) -> Option<FcStatus> {
     let key = icon_key(src)?;
-    FcStatus::from_score_icon_key(&key)
+    key.parse::<FcStatus>().ok()
 }
 
 fn parse_sync_from_icon_src(src: &str) -> Option<SyncStatus> {
     let key = icon_key(src)?;
-    SyncStatus::from_score_icon_key(&key)
+    key.parse::<SyncStatus>().ok()
 }
 
 fn merge_sync(existing: Option<SyncStatus>, candidate: Option<SyncStatus>) -> Option<SyncStatus> {

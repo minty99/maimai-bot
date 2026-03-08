@@ -139,7 +139,7 @@ fn parse_percent(text: &str) -> Option<f32> {
 
 fn parse_rank_from_icon_src(src: &str) -> Option<ScoreRank> {
     let key = icon_key(src)?;
-    ScoreRank::from_score_icon_key(&key)
+    key.parse::<ScoreRank>().ok()
 }
 
 fn icon_key(src: &str) -> Option<String> {

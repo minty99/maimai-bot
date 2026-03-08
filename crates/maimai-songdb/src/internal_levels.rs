@@ -263,7 +263,7 @@ fn map_row_keys(
         _ => return None,
     };
 
-    let difficulty = DifficultyCategory::from_sheet_abbreviation(difficulty?.trim())?;
+    let difficulty = difficulty?.trim().parse::<DifficultyCategory>().ok()?;
 
     Some((song_identity, sheet_type, difficulty))
 }

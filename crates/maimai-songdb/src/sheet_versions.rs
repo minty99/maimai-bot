@@ -310,7 +310,7 @@ mod tests {
         include_str!("../examples/maimai/intl_version/version4_orange_diff0.html");
 
     fn official_song(title: &str, genre: &str, artist: &str) -> SongRow {
-        let genre = SongGenre::from_name(genre).expect("known test genre");
+        let genre = genre.parse::<SongGenre>().expect("known test genre");
         SongRow {
             identity: SongIdentity::new(title, genre, artist),
             image_name: "cover.png".to_string(),
