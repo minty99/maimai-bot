@@ -267,7 +267,7 @@ fn parse_rank_from_playlog_icon_src(src: &str) -> Option<ScoreRank> {
     let file = src.rsplit('/').next()?;
     let file = file.split('?').next().unwrap_or(file);
     let stem = file.strip_suffix(".png")?;
-    ScoreRank::from_playlog_stem(stem)
+    stem.parse::<ScoreRank>().ok()
 }
 
 fn parse_fc_from_playlog_icon_src(src: &str) -> Option<FcStatus> {
@@ -291,7 +291,7 @@ fn parse_fc_from_playlog_icon_src(src: &str) -> Option<FcStatus> {
         }
     };
 
-    FcStatus::from_playlog_key(key)
+    key.parse::<FcStatus>().ok()
 }
 
 fn parse_sync_from_playlog_icon_src(src: &str) -> Option<SyncStatus> {
@@ -316,7 +316,7 @@ fn parse_sync_from_playlog_icon_src(src: &str) -> Option<SyncStatus> {
         }
     };
 
-    SyncStatus::from_playlog_key(key)
+    key.parse::<SyncStatus>().ok()
 }
 
 fn merge_sync(existing: Option<SyncStatus>, candidate: Option<SyncStatus>) -> Option<SyncStatus> {

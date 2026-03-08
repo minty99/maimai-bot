@@ -6,10 +6,9 @@ use time::{Duration as TimeDuration, OffsetDateTime, UtcOffset};
 
 use crate::BotData;
 use crate::embeds::{
-    RecentRecordView, build_mai_recent_embeds, build_mai_today_detail_embed, build_mai_today_embed,
-    embed_base, embed_maintenance, format_level_with_internal,
+    RecentRecordView, build_mai_recent_embeds, build_mai_today_embed, embed_base,
+    embed_maintenance, format_level_with_internal,
 };
-use crate::rating_image::{RatingImageEntry, render_rating_image};
 
 type Context<'a> = poise::Context<'a, BotData, Box<dyn std::error::Error + Send + Sync>>;
 type Error = Box<dyn std::error::Error + Send + Sync>;
@@ -174,6 +173,8 @@ pub(crate) async fn mai_score(
         let metadata = fetch_song_metadata(
             &ctx.data().song_info_client,
             &score.title,
+            &resolved_genre,
+            &resolved_artist,
             score.chart_type,
             score.diff_category,
         )
@@ -248,13 +249,29 @@ pub(crate) async fn mai_song_info(
 ) -> Result<(), Error> {
     ctx.defer().await?;
 
-    let Some(song_info) = ctx
+    let response = ctx
         .data()
         .song_info_client
-        .get_song_info_by_title(&title)
+        .search_song_metadata(&crate::client::SongMetadataSearchRequest {
+            title: Some(title.trim().to_string()),
+            genre: None,
+            artist: None,
+            chart_type: None,
+            diff_category: None,
+            limits: Some(100),
+        })
         .await
-        .wrap_err("fetch song info")?
-    else {
+        .wrap_err("search song metadata")?;
+
+    let mut songs = BTreeMap::<(String, String, String), Vec<crate::client::SongMetadata>>::new();
+    for item in response.items {
+        songs
+            .entry((item.title.clone(), item.genre.clone(), item.artist.clone()))
+            .or_default()
+            .push(item);
+    }
+
+    if songs.is_empty() {
         ctx.send(
             CreateReply::default()
                 .ephemeral(true)
@@ -262,11 +279,64 @@ pub(crate) async fn mai_song_info(
         )
         .await?;
         return Ok(());
-    };
+    }
 
-    let mut sheets = song_info.sheets.clone();
-    sheets.sort_by_key(|sheet| (sheet.chart_type.as_u8(), sheet.difficulty.as_u8()));
-    let region_unreleased_line = build_region_unreleased_line(&sheets);
+    if songs.len() > 2 {
+        let candidates = songs
+            .keys()
+            .take(8)
+            .map(|(title, genre, artist)| format!("`{title}` / `{genre}` / `{artist}`"))
+            .collect::<Vec<_>>()
+            .join("\n");
+        ctx.send(CreateReply::default().ephemeral(true).embed(
+            embed_base("여러 곡이 검색됐어요").description(format!(
+                "정확히 일치하는 제목의 곡이 여러 개 있습니다.\n후보:\n{}",
+                candidates
+            )),
+        ))
+        .await?;
+        return Ok(());
+    }
+
+    let mut embeds = Vec::new();
+    let mut image_names = Vec::new();
+    for ((song_title, song_genre, song_artist), mut sheets) in songs {
+        sheets.sort_by_key(|sheet| (sheet.chart_type.as_u8(), sheet.diff_category.as_u8()));
+        let (embed, image_name) =
+            build_song_info_embed(&song_title, &song_genre, &song_artist, &sheets);
+        if let Some(image_name) = image_name {
+            image_names.push(image_name.to_string());
+        }
+        embeds.push(embed);
+    }
+
+    let mut attachments = Vec::new();
+    for image_name in image_names {
+        match ctx.data().song_info_client.get_cover(&image_name).await {
+            Ok(bytes) => {
+                attachments.push(serenity::CreateAttachment::bytes(bytes, image_name.clone()));
+            }
+            Err(e) => tracing::warn!("failed to fetch cover image {image_name}: {e:?}"),
+        }
+    }
+
+    ctx.send(CreateReply {
+        embeds,
+        attachments,
+        ..Default::default()
+    })
+    .await?;
+
+    Ok(())
+}
+
+fn build_song_info_embed(
+    song_title: &str,
+    song_genre: &str,
+    song_artist: &str,
+    sheets: &[crate::client::SongMetadata],
+) -> (serenity::CreateEmbed, Option<String>) {
+    let region_unreleased_line = build_region_unreleased_line(sheets);
 
     let std_version = sheets
         .iter()
@@ -290,7 +360,7 @@ pub(crate) async fn mai_song_info(
         for difficulty in ordered_difficulties {
             let Some(sheet) = sheets
                 .iter()
-                .find(|sheet| sheet.chart_type == chart_type && sheet.difficulty == difficulty)
+                .find(|sheet| sheet.chart_type == chart_type && sheet.diff_category == difficulty)
             else {
                 continue;
             };
@@ -303,7 +373,10 @@ pub(crate) async fn mai_song_info(
                 models::DifficultyCategory::ReMaster => "R",
             };
 
-            let mut part = format!("{short} {}", sheet.level);
+            let mut part = format!(
+                "{short} {}",
+                sheet.level.clone().unwrap_or_else(|| "N/A".to_string())
+            );
             if let Some(internal) = sheet.internal_level {
                 part.push_str(&format!(" ({internal:.1})"));
             }
@@ -332,6 +405,7 @@ pub(crate) async fn mai_song_info(
     if !version_lines.is_empty() {
         blocks.push(version_lines.join("\n"));
     }
+    blocks.push(format!("Genre: {}\nArtist: {}", song_genre, song_artist));
 
     if let Some(levels) = format_levels(models::ChartType::Std) {
         blocks.push(format!("Level (STD)\n{levels}"));
@@ -340,37 +414,17 @@ pub(crate) async fn mai_song_info(
         blocks.push(format!("Level (DX)\n{levels}"));
     }
 
-    let mut base = embed_base(&song_info.title);
+    let mut embed = embed_base(song_title);
     if !blocks.is_empty() {
-        base = base.description(blocks.join("\n\n"));
+        embed = embed.description(blocks.join("\n\n"));
     }
 
-    if let Some(image_name) = song_info.image_name.as_deref() {
-        base = base.thumbnail(format!("attachment://{image_name}"));
-    }
-    let embeds = vec![base];
-
-    let mut attachments = Vec::new();
-    if let Some(image_name) = song_info.image_name.as_deref() {
-        match ctx.data().song_info_client.get_cover(image_name).await {
-            Ok(bytes) => {
-                attachments.push(serenity::CreateAttachment::bytes(
-                    bytes,
-                    image_name.to_string(),
-                ));
-            }
-            Err(e) => tracing::warn!("failed to fetch cover image {image_name}: {e:?}"),
-        }
+    let image_name = sheets.iter().find_map(|sheet| sheet.image_name.clone());
+    if let Some(image_name) = image_name.as_deref() {
+        embed = embed.thumbnail(format!("attachment://{image_name}"));
     }
 
-    ctx.send(CreateReply {
-        embeds,
-        attachments,
-        ..Default::default()
-    })
-    .await?;
-
-    Ok(())
+    (embed, image_name)
 }
 
 /// Get most recent credit records
@@ -406,15 +460,20 @@ pub(crate) async fn mai_recent(ctx: Context<'_>) -> Result<(), Error> {
     let mut cover_image_names = std::collections::BTreeSet::new();
     for record in recent {
         let metadata = match record.diff_category {
-            Some(diff_category) => {
-                fetch_song_metadata(
-                    &ctx.data().song_info_client,
-                    &record.title,
-                    record.chart_type,
-                    diff_category,
-                )
-                .await
-            }
+            Some(diff_category) => match record.genre.as_deref().zip(record.artist.as_deref()) {
+                Some((genre, artist)) => {
+                    fetch_song_metadata(
+                        &ctx.data().song_info_client,
+                        &record.title,
+                        genre,
+                        artist,
+                        record.chart_type,
+                        diff_category,
+                    )
+                    .await
+                }
+                None => None,
+            },
             None => None,
         };
         let internal_level = metadata.as_ref().and_then(|m| m.internal_level);
@@ -530,367 +589,19 @@ pub(crate) async fn mai_today(ctx: Context<'_>) -> Result<(), Error> {
     Ok(())
 }
 
-/// Show today's (or a specified day's) play detail as a DM (day boundary: 04:00 JST)
-#[poise::command(slash_command, rename = "mai-today-detail")]
-pub(crate) async fn mai_today_detail(
-    ctx: Context<'_>,
-    #[description = "Date in YYYY-MM-DD (default: today JST, day boundary 04:00)"] date: Option<
-        String,
-    >,
-) -> Result<(), Error> {
-    ctx.defer().await?;
-
-    let offset = UtcOffset::from_hms(9, 0, 0).unwrap_or(UtcOffset::UTC);
-
-    let day_date = if let Some(date_str) = date.as_deref() {
-        let key = date_str.trim().replace('-', "/");
-        let parts = key.split('/').collect::<Vec<_>>();
-        if parts.len() != 3 {
-            return Err("date must be YYYY-MM-DD".into());
-        }
-        let year = parts[0].parse::<i32>().wrap_err("parse year")?;
-        let month = parts[1].parse::<u8>().wrap_err("parse month")?;
-        let day = parts[2].parse::<u8>().wrap_err("parse day")?;
-        time::Date::from_calendar_date(
-            year,
-            time::Month::try_from(month).wrap_err("parse month")?,
-            day,
-        )
-        .wrap_err("parse date")?
-    } else {
-        let now_jst = OffsetDateTime::now_utc().to_offset(offset);
-        if now_jst.hour() < 4 {
-            (now_jst - TimeDuration::days(1)).date()
-        } else {
-            now_jst.date()
-        }
-    };
-
-    let end_date = day_date + TimeDuration::days(1);
-
-    let day_key = format!(
-        "{:04}-{:02}-{:02}",
-        day_date.year(),
-        u8::from(day_date.month()),
-        day_date.day()
-    );
-    let end_key = format!(
-        "{:04}-{:02}-{:02}",
-        end_date.year(),
-        u8::from(end_date.month()),
-        end_date.day()
-    );
-
-    let start = format!("{} 04:00", day_key);
-    let end = format!("{} 04:00", end_key);
-
-    let plays = ctx
-        .data()
-        .record_collector_client
-        .get_today(&day_key)
-        .await?;
-
-    let mut rows = Vec::with_capacity(plays.len());
-    for play in plays {
-        let metadata = match play.diff_category {
-            Some(diff_category) => {
-                fetch_song_metadata(
-                    &ctx.data().song_info_client,
-                    &play.title,
-                    play.chart_type,
-                    diff_category,
-                )
-                .await
-            }
-            None => None,
-        };
-        let internal_level = metadata.as_ref().and_then(|m| m.internal_level);
-        let rating_points = match (internal_level, play.achievement_x10000) {
-            (Some(internal), Some(achievement_x10000)) => Some(chart_rating_points(
-                internal as f64,
-                achievement_x10000 as f64 / 10000.0,
-                is_ap_like(play.fc.as_ref()),
-            )),
-            _ => None,
-        };
-
-        rows.push(crate::embeds::TodayDetailRowView {
-            title: play.title,
-            chart_type: play.chart_type,
-            achievement_percent: play.achievement_x10000.map(|x| x as f64 / 10000.0),
-            rating_points,
-            achievement_new_record: play.achievement_new_record.unwrap_or(0) != 0,
-        });
-    }
-
-    rows.sort_by_key(|r| std::cmp::Reverse(r.rating_points.unwrap_or(0)));
-
-    let display_name = "Player";
-    let embed = build_mai_today_detail_embed(display_name, &day_key, &start, &end, &rows);
-
-    if let Ok(dm) = ctx
-        .author()
-        .create_dm_channel(&ctx.serenity_context().http)
-        .await
-    {
-        dm.send_message(
-            &ctx.serenity_context().http,
-            serenity::CreateMessage::new().embed(embed.clone()),
-        )
-        .await
-        .wrap_err("send DM")?;
-    }
-
-    ctx.send(CreateReply::default().ephemeral(true).embed(
-        embed_base("Sent").description(format!("Sent a DM with play details for `{day_key}`.")),
-    ))
-    .await?;
-
-    Ok(())
-}
-
-/// Show rating breakdown (CiRCLE baseline)
-#[poise::command(slash_command, rename = "mai-rating")]
-pub(crate) async fn mai_rating(ctx: Context<'_>) -> Result<(), Error> {
-    ctx.defer().await?;
-
-    let Some(targets) = fetch_rating_targets_or_maintenance(&ctx).await? else {
-        return Ok(());
-    };
-
-    let embeds = build_mai_rating_embeds(&ctx.data().song_info_client, targets).await;
-    ctx.send(CreateReply {
-        embeds,
-        ..Default::default()
-    })
-    .await?;
-
-    Ok(())
-}
-
-/// Generate a single image containing all 50 rating target songs
-#[poise::command(slash_command, rename = "mai-rating-img")]
-pub(crate) async fn mai_rating_img(ctx: Context<'_>) -> Result<(), Error> {
-    ctx.defer().await?;
-
-    let Some(targets) = fetch_rating_targets_or_maintenance(&ctx).await? else {
-        return Ok(());
-    };
-
-    let new_rows = build_rating_rows(&ctx.data().song_info_client, &targets.current_targets).await;
-    let old_rows = build_rating_rows(&ctx.data().song_info_client, &targets.legacy_targets).await;
-    let new_entries = new_rows
-        .iter()
-        .map(RatingImageEntry::from)
-        .collect::<Vec<_>>();
-    let old_entries = old_rows
-        .iter()
-        .map(RatingImageEntry::from)
-        .collect::<Vec<_>>();
-
-    let image_bytes =
-        match render_rating_image(&ctx.data().song_info_client, &new_entries, &old_entries).await {
-            Ok(bytes) => bytes,
-            Err(e) => {
-                tracing::error!("failed to render mai-rating image: {e:#}");
-                ctx.send(
-                    CreateReply::default().ephemeral(true).embed(
-                        embed_base("Failed to render rating image").description(e.to_string()),
-                    ),
-                )
-                .await?;
-                return Ok(());
-            }
-        };
-
-    ctx.send(CreateReply {
-        attachments: vec![serenity::CreateAttachment::bytes(
-            image_bytes,
-            "mai_rating.png",
-        )],
-        ..Default::default()
-    })
-    .await?;
-
-    Ok(())
-}
-
-async fn fetch_rating_targets_or_maintenance(
-    ctx: &Context<'_>,
-) -> Result<Option<models::ParsedRatingTargets>, Error> {
-    match ctx
-        .data()
-        .record_collector_client
-        .get_rating_targets()
-        .await
-    {
-        Ok(v) => Ok(Some(v)),
-        Err(e) => {
-            let msg = e.to_string();
-            if msg.contains("MAINTENANCE") || msg.contains("maintenance") {
-                ctx.send(
-                    CreateReply::default()
-                        .ephemeral(true)
-                        .embed(embed_maintenance()),
-                )
-                .await?;
-                return Ok(None);
-            }
-            Err(e.wrap_err("fetch rating targets").into())
-        }
-    }
-}
-
-#[derive(Debug, Clone)]
-struct RatedRow {
-    title: String,
-    chart_type: models::ChartType,
-    diff_category: models::DifficultyCategory,
-    level: String,
-    internal_level: Option<f32>,
-    achievement_percent: Option<f64>,
-    rank: Option<models::ScoreRank>,
-    rating_points: Option<u32>,
-    image_name: Option<String>,
-}
-
-impl From<&RatedRow> for RatingImageEntry {
-    fn from(value: &RatedRow) -> Self {
-        Self {
-            title: value.title.clone(),
-            chart_type: value.chart_type,
-            diff_category: value.diff_category,
-            level: value.level.clone(),
-            internal_level: value.internal_level,
-            achievement_percent: value.achievement_percent,
-            rank: value.rank,
-            rating_points: value.rating_points,
-            image_name: value.image_name.clone(),
-        }
-    }
-}
-
-async fn build_mai_rating_embeds(
-    song_info_client: &crate::client::SongInfoClient,
-    targets: models::ParsedRatingTargets,
-) -> Vec<serenity::builder::CreateEmbed> {
-    let new_rows = build_rating_rows(song_info_client, &targets.current_targets).await;
-    let old_rows = build_rating_rows(song_info_client, &targets.legacy_targets).await;
-
-    let new_sum = new_rows.iter().filter_map(|r| r.rating_points).sum::<u32>();
-    let old_sum = old_rows.iter().filter_map(|r| r.rating_points).sum::<u32>();
-    let total = new_sum.saturating_add(old_sum);
-    let missing_internal = new_rows
-        .iter()
-        .chain(old_rows.iter())
-        .filter(|r| r.internal_level.is_none())
-        .count();
-
-    fn list_desc(rows: &[RatedRow]) -> String {
-        let mut out = String::new();
-        for (idx, r) in rows.iter().enumerate() {
-            let rank = r.rank.map(|v| v.as_str()).unwrap_or("N/A");
-            let level = format_level_with_internal(&r.level, r.internal_level);
-            let achv = r
-                .achievement_percent
-                .map(|v| format!("{v:.4}%"))
-                .unwrap_or_else(|| "N/A".to_string());
-            let pt = r
-                .rating_points
-                .map(|v| format!("{v:>3}pt"))
-                .unwrap_or_else(|| "N/A".to_string());
-
-            out.push_str(&format!(
-                "- [{}] `{}` {} [{}] {} {} — {} • {}\n",
-                idx + 1,
-                pt,
-                r.title,
-                r.chart_type,
-                r.diff_category,
-                level,
-                achv,
-                rank
-            ));
-        }
-        out
-    }
-
-    let mut summary = embed_base("Rating (From Rating Target Music)")
-        .field("Computed", total.to_string(), true)
-        .field("NEW", new_sum.to_string(), true)
-        .field("OLD", old_sum.to_string(), true)
-        .field(
-            "Count",
-            format!("NEW {} / OLD {}", new_rows.len(), old_rows.len()),
-            false,
-        );
-    if missing_internal > 0 {
-        summary = summary.field(
-            "Notes",
-            format!("internal level missing for {missing_internal} chart(s)"),
-            false,
-        );
-    }
-
-    let new_embed = embed_base("Songs for Rating(New)").description(list_desc(&new_rows));
-    let old_embed = embed_base("Songs for Rating(Others)").description(list_desc(&old_rows));
-
-    vec![summary, new_embed, old_embed]
-}
-
-async fn build_rating_rows(
-    song_info_client: &crate::client::SongInfoClient,
-    entries: &[models::ParsedRatingTargetEntry],
-) -> Vec<RatedRow> {
-    let mut out = Vec::with_capacity(entries.len());
-    for entry in entries {
-        let metadata = fetch_song_metadata(
-            song_info_client,
-            &entry.title,
-            entry.chart_type,
-            entry.diff_category,
-        )
-        .await;
-
-        let level = metadata
-            .as_ref()
-            .and_then(|m| m.level.clone())
-            .unwrap_or_else(|| entry.level.clone());
-        let internal_level = metadata
-            .as_ref()
-            .and_then(|m| m.internal_level)
-            .or_else(|| fallback_internal_level(&level));
-        let achievement_percent = entry.achievement_percent.map(|v| v as f64);
-        let rating_points = match (internal_level, achievement_percent) {
-            (Some(internal), Some(achv)) => Some(chart_rating_points(internal as f64, achv, false)),
-            _ => None,
-        };
-
-        out.push(RatedRow {
-            title: entry.title.clone(),
-            chart_type: entry.chart_type,
-            diff_category: entry.diff_category,
-            level,
-            internal_level,
-            achievement_percent,
-            rank: entry.rank,
-            rating_points,
-            image_name: metadata.and_then(|m| m.image_name),
-        });
-    }
-    out
-}
-
 async fn fetch_song_metadata(
     song_info_client: &crate::client::SongInfoClient,
     title: &str,
+    genre: &str,
+    artist: &str,
     chart_type: models::ChartType,
     diff_category: models::DifficultyCategory,
 ) -> Option<crate::client::SongMetadata> {
-    match song_info_client
-        .get_song_metadata(title, chart_type.as_str(), diff_category.as_str())
-        .await
-    {
+    let response = song_info_client
+        .find_song_metadata(title, genre, artist, chart_type, diff_category)
+        .await;
+
+    match response {
         Ok(v) => v,
         Err(e) => {
             tracing::warn!(
@@ -916,7 +627,7 @@ fn duplicate_song_candidates_description(
     )
 }
 
-fn build_region_unreleased_line(sheets: &[crate::client::SongInfoSheet]) -> Option<String> {
+fn build_region_unreleased_line(sheets: &[crate::client::SongMetadata]) -> Option<String> {
     let has_jp = sheets.iter().any(|sheet| sheet.region.jp);
     let has_intl = sheets.iter().any(|sheet| sheet.region.intl);
 
@@ -1002,20 +713,4 @@ fn chart_rating_points(internal_level: f64, achievement_percent: f64, ap_bonus: 
     } else {
         base
     }
-}
-
-fn fallback_internal_level(level: &str) -> Option<f32> {
-    let level = level.trim();
-    if level.is_empty() || level == "N/A" {
-        return None;
-    }
-
-    let has_plus = level.ends_with('+');
-    let numeric = if has_plus {
-        level.trim_end_matches('+')
-    } else {
-        level
-    };
-    let base: f32 = numeric.trim().parse().ok()?;
-    Some(base + if has_plus { 0.6 } else { 0.0 })
 }

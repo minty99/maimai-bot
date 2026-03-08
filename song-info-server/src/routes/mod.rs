@@ -2,7 +2,10 @@ mod cover;
 mod health;
 mod songs;
 
-use axum::{Router, routing::get};
+use axum::{
+    Router,
+    routing::{get, post},
+};
 use tower_http::LatencyUnit;
 use tower_http::cors::CorsLayer;
 use tower_http::trace::{DefaultMakeSpan, DefaultOnResponse, TraceLayer};
@@ -16,14 +19,7 @@ pub(crate) fn create_router(state: AppState) -> Router {
         .route("/api/songs", get(songs::list_song_info))
         .route("/api/songs/random", get(songs::random_song_by_level))
         .route("/api/songs/versions", get(songs::list_versions))
-        .route(
-            "/api/songs/by-title/{title}",
-            get(songs::get_song_info_by_title),
-        )
-        .route(
-            "/api/songs/{title}/{chart_type}/{diff_category}",
-            get(songs::get_song_metadata),
-        )
+        .route("/api/songs/metadata", post(songs::search_song_metadata))
         .route("/api/cover/{image_name}", get(cover::get_cover))
         .layer(CorsLayer::permissive())
         .layer(
