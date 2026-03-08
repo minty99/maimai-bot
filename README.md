@@ -110,5 +110,5 @@ npm run preview
 
 - Score 화면의 Last Played/Days는 `record-collector-server`의 `/api/scores/rated` (`scores` 테이블 `last_played_at`) 기준입니다.
 - Playlog 화면은 `record-collector-server`의 `/api/recent?limit=10000` (`playlogs` 테이블) 기준입니다.
-- chart별 `play_count`는 playlog에서 추정하지 않고, 곡별 `/api/scores/detail/{title}` 조회 결과만 사용합니다.
+- chart별 `play_count`는 playlog에서 추정하지 않고, `record-collector-server` score API가 내려주는 값을 직접 사용합니다.
 - 더 긴 기간 분석이 필요하면 record collector에 추가 API(예: 전체 playlog 조회)가 필요합니다.

@@ -35,6 +35,8 @@ export interface ApiErrorResponse {
 
 export interface ScoreApiResponse {
   title: string;
+  genre: string;
+  artist: string;
   chart_type: ChartType;
   diff_category: DifficultyCategory;
   achievement_x10000: number | null;
@@ -50,6 +52,8 @@ export interface ScoreApiResponse {
 
 export interface SongDetailScoreApiResponse {
   title: string;
+  genre: string;
+  artist: string;
   chart_type: ChartType;
   diff_category: DifficultyCategory;
   achievement_x10000?: number | null;
@@ -64,14 +68,16 @@ export interface SongDetailScoreApiResponse {
 
 export interface SongDetailRow {
   key: string;
+  songKey: string;
   title: string;
+  genre: string;
+  artist: string;
   imageName: string | null;
   chartType: ChartType;
   difficulty: DifficultyCategory;
   level: string | null;
   internalLevel: number | null;
   isInternalLevelEstimated: boolean;
-  userLevel: string | null;
   achievementPercent: number | null;
   rank: ScoreRank | null;
   fc: FcStatus | null;
@@ -88,6 +94,8 @@ export interface PlayRecordApiResponse {
   played_at: string | null;
   track: number | null;
   title: string;
+  genre?: string | null;
+  artist?: string | null;
   chart_type: ChartType;
   diff_category: DifficultyCategory | null;
   achievement_x10000: number | null;
@@ -112,29 +120,19 @@ export interface SongSheetResponse {
   level: string;
   version: string | null;
   internal_level: number | null;
-  user_level: string | null;
   region: SongChartRegion;
 }
 
 export interface SongInfoResponse {
   title: string;
+  genre: string;
+  artist: string;
   image_name: string | null;
   sheets: SongSheetResponse[];
 }
 
 export interface SongInfoListResponse {
   songs: SongInfoResponse[];
-}
-
-export interface RandomSongApiResponse {
-  title: string;
-  version: string | null;
-  image_name: string | null;
-  sheets: SongSheetResponse[];
-  selection_stats?: {
-    level_song_count?: number | null;
-    filtered_song_count?: number | null;
-  } | null;
 }
 
 export interface SongVersionResponse {
@@ -149,13 +147,14 @@ export interface SongVersionsListResponse {
 
 export interface RandomPickerSong {
   title: string;
+  genre: string;
+  artist: string;
   version: string | null;
   imageName: string | null;
   chartType: ChartType;
   difficulty: DifficultyCategory;
   level: string;
   internalLevel: number | null;
-  userLevel: string | null;
   achievementX10000: number | null;
   rank: ScoreRank | null;
   fc: FcStatus | null;
@@ -170,8 +169,10 @@ export interface RandomPickerSong {
 
 export interface ScoreRow {
   key: string;
+  songKey: string;
   title: string;
-  normalizedTitle: string;
+  genre: string;
+  artist: string;
   chartType: ChartType;
   difficulty: DifficultyCategory;
   achievementX10000: number | null;
@@ -186,7 +187,6 @@ export interface ScoreRow {
   level: string | null;
   internalLevel: number | null;
   isInternalLevelEstimated: boolean;
-  userLevel: string | null;
   version: string | null;
   imageName: string | null;
   latestPlayedAtUnix: number | null;
@@ -204,8 +204,10 @@ export interface ScoreHistoryPoint {
 
 export interface PlaylogRow {
   key: string;
+  songKey: string;
   title: string;
-  normalizedTitle: string;
+  genre: string;
+  artist: string;
   chartType: ChartType;
   difficulty: DifficultyCategory | null;
   level: string | null;

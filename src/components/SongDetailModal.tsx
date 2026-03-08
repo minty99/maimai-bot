@@ -10,6 +10,8 @@ import {
 
 interface SongDetailModalProps {
   selectedDetailTitle: string | null;
+  selectedDetailGenre: string | null;
+  selectedDetailArtist: string | null;
   selectedDetailRows: SongDetailRow[];
   songInfoUrl: string;
   onClose: () => void;
@@ -17,6 +19,8 @@ interface SongDetailModalProps {
 
 export function SongDetailModal({
   selectedDetailTitle,
+  selectedDetailGenre,
+  selectedDetailArtist,
   selectedDetailRows,
   songInfoUrl,
   onClose,
@@ -78,7 +82,16 @@ export function SongDetailModal({
                 title={selectedDetailTitle}
                 className="detail-jacket"
               />
-              <strong>{selectedDetailTitle}</strong>
+              <div>
+                <strong>{selectedDetailTitle}</strong>
+                {selectedDetailGenre || selectedDetailArtist ? (
+                  <div className="muted">
+                    {[selectedDetailGenre, selectedDetailArtist]
+                      .filter((value): value is string => Boolean(value))
+                      .join(' / ')}
+                  </div>
+                ) : null}
+              </div>
             </div>
             <button type="button" onClick={onClose}>
               닫기
@@ -94,7 +107,6 @@ export function SongDetailModal({
                   <tr>
                     <th>Chart</th>
                     <th>Lv</th>
-                    <th>User Lv</th>
                     <th>Achv</th>
                     <th>Rank</th>
                     <th>FC</th>
@@ -112,7 +124,6 @@ export function SongDetailModal({
                         <ChartTypeLabel chartType={row.chartType} />
                       </td>
                       <td>{renderLevelCell(row)}</td>
-                      <td>{row.userLevel ?? '-'}</td>
                       <td>{formatPercent(row.achievementPercent)}</td>
                       <td>{row.rank ?? '-'}</td>
                       <td>{row.fc ?? '-'}</td>
