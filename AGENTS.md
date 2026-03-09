@@ -35,9 +35,9 @@ The goal of this file is to keep future changes consistent with the current impl
     - fetches `playerData` again
     - only if **total play count changed**: fetches recent page, upserts playlogs, then sends a DM embed for "New plays detected"
 - Slash commands:
-    - `/mai-score <title>`: exact title match only
-      - exact match: show that title
-      - non-exact: treat as not found (no fuzzy candidates/buttons)
+    - `/mai-score <title|alias>`: exact title or registered alias match
+      - exact title/alias match: resolve to the canonical song, then show that title
+      - ambiguous alias: show duplicate candidates
       - hide "unplayed" rows (`achievement_x10000 IS NULL`)
     - `/mai-recent`: shows the latest credit (based on recent page's TRACK numbering), formatted from `TRACK 01` upwards
 

@@ -72,6 +72,7 @@ export interface SongDetailRow {
   title: string;
   genre: string;
   artist: string;
+  aliases: SongAliases;
   imageName: string | null;
   chartType: ChartType;
   difficulty: DifficultyCategory;
@@ -114,6 +115,11 @@ export interface SongChartRegion {
   intl: boolean;
 }
 
+export interface SongAliases {
+  en?: string[];
+  ko?: string[];
+}
+
 export interface SongSheetResponse {
   chart_type: ChartType;
   difficulty: DifficultyCategory;
@@ -128,6 +134,7 @@ export interface SongInfoResponse {
   genre: string;
   artist: string;
   image_name: string | null;
+  aliases: SongAliases;
   sheets: SongSheetResponse[];
 }
 
@@ -173,6 +180,7 @@ export interface ScoreRow {
   title: string;
   genre: string;
   artist: string;
+  aliases: SongAliases;
   chartType: ChartType;
   difficulty: DifficultyCategory;
   achievementX10000: number | null;
@@ -208,6 +216,7 @@ export interface PlaylogRow {
   title: string;
   genre: string;
   artist: string;
+  aliases: SongAliases;
   chartType: ChartType;
   difficulty: DifficultyCategory | null;
   level: string | null;

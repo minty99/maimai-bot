@@ -10,6 +10,7 @@ import type {
 } from '../types';
 import type { ScoreSortKey } from '../app/constants';
 import {
+  formatAliasSummary,
   formatVersionLabel,
   formatNumber,
   sortIndicator,
@@ -128,12 +129,12 @@ export function ScoreExplorerSection({
           </div>
           <div className="filter-grid">
             <label className="search-box">
-              <span>검색 (곡명/버전/레벨)</span>
+              <span>검색 (곡명/alias/버전/레벨)</span>
               <input
                 type="search"
                 value={query}
                 onChange={(event) => setQuery(event.target.value)}
-                placeholder="예: VERTeX, PRiSM, 14+"
+                placeholder="예: VERTeX, 버텍스, PRiSM, 14+"
               />
             </label>
 
@@ -371,6 +372,7 @@ export function ScoreExplorerSection({
                         <SongTitleButton
                           target={row}
                           title={row.title}
+                          subtitle={showJackets ? formatAliasSummary(row.aliases) : null}
                           onOpenSongDetail={onOpenSongDetail}
                         />
                       </div>

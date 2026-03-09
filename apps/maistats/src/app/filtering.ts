@@ -1,5 +1,5 @@
 import { FC_ORDER_MAP, SCORE_RANK_ORDER_MAP, ScoreSortKey, SYNC_ORDER_MAP, PlaylogSortKey } from './constants';
-import { compareNullableNumber, includesText, sortByOrder } from './utils';
+import { aliasValues, compareNullableNumber, includesText, sortByOrder } from './utils';
 import type { FcStatus, PlaylogRow, ScoreRank, ScoreRow, SyncStatus } from '../types';
 
 export function computeScoreRankOptions(scoreData: ScoreRow[]): ScoreRank[] {
@@ -67,7 +67,7 @@ export function buildFilteredScoreRows({
   const oldSet = new Set(versionOptions.filter((version) => !latestSet.has(version)));
 
   const rows = scoreData.filter((row) => {
-    const targetText = `${row.title} ${row.version ?? ''} ${row.level ?? ''}`;
+    const targetText = `${row.title} ${aliasValues(row.aliases, 'en').join(' ')} ${aliasValues(row.aliases, 'ko').join(' ')} ${row.version ?? ''} ${row.level ?? ''}`;
     if (!includesText(targetText, query)) {
       return false;
     }
@@ -191,7 +191,12 @@ export function buildFilteredPlaylogRows({
       return false;
     }
 
-    if (!includesText(`${row.title} ${row.playedAtLabel ?? ''}`, playlogQuery)) {
+    if (
+      !includesText(
+        `${row.title} ${aliasValues(row.aliases, 'en').join(' ')} ${aliasValues(row.aliases, 'ko').join(' ')} ${row.playedAtLabel ?? ''}`,
+        playlogQuery,
+      )
+    ) {
       return false;
     }
 

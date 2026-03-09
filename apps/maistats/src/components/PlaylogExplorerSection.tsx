@@ -2,6 +2,7 @@ import type { Dispatch, ReactNode, SetStateAction } from 'react';
 
 import type { PlaylogSortKey } from '../app/constants';
 import {
+  formatAliasSummary,
   formatNumber,
   sortIndicator,
   toggleArrayValue,
@@ -116,12 +117,12 @@ export function PlaylogExplorerSection({
           </div>
           <div className="filter-grid">
             <label className="search-box">
-              <span>검색 (곡명/시각)</span>
+              <span>검색 (곡명/alias/시각)</span>
               <input
                 type="search"
                 value={playlogQuery}
                 onChange={(event) => setPlaylogQuery(event.target.value)}
-                placeholder="예: 2026/02/25, BUDDiES"
+                placeholder="예: 2026/02/25, BUDDiES, 배드애플"
               />
             </label>
 
@@ -298,6 +299,7 @@ export function PlaylogExplorerSection({
                         <SongTitleButton
                           target={getSongDetailTarget(row)}
                           title={row.title}
+                          subtitle={showJackets ? formatAliasSummary(row.aliases) : null}
                           onOpenSongDetail={onOpenSongDetail}
                         />
                       </div>
