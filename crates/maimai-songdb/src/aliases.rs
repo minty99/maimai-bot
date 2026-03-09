@@ -3,6 +3,7 @@ use models::SongAliases;
 use std::collections::HashMap;
 use std::path::Path;
 
+// The GCM-bot author granted permission to reuse these maimai alias files here.
 const EN_ALIAS_URL: &str =
     "https://raw.githubusercontent.com/lomotos10/GCM-bot/main/data/aliases/en/maimai.tsv";
 const KO_ALIAS_URL: &str =
