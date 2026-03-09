@@ -930,6 +930,28 @@ tbody tr:hover {
   text-decoration: underline;
 }
 
+.achievement-value-button {
+  height: auto;
+  min-height: 0;
+  display: inline-flex;
+  justify-content: center;
+  border: 0;
+  padding: 0;
+  background: transparent;
+  color: var(--accent);
+  font: inherit;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.achievement-value-button:hover {
+  text-decoration: underline;
+}
+
+.achievement-value-button .achievement-value {
+  justify-content: center;
+}
+
 .detail-content {
   display: grid;
   gap: 10px;

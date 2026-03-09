@@ -3,7 +3,6 @@ import type { Dispatch, ReactNode, SetStateAction } from 'react';
 import type { PlaylogSortKey } from '../app/constants';
 import {
   formatNumber,
-  formatPercent,
   sortIndicator,
   toggleArrayValue,
 } from '../app/utils';
@@ -12,6 +11,9 @@ import { toDateLabel } from '../derive';
 import { ChartTypeLabel, getChartTypeToneClass } from './ChartTypeLabel';
 import { DifficultyLabel, getDifficultyToneClass } from './DifficultyLabel';
 import { Jacket } from './Jacket';
+import { LevelCell } from './LevelCell';
+import type { SongDetailTarget } from './TableActionCells';
+import { AchievementHistoryButton, SongTitleButton } from './TableActionCells';
 import { ToggleGroup } from './ToggleGroup';
 
 interface PlaylogExplorerSectionProps {
@@ -43,6 +45,10 @@ interface PlaylogExplorerSectionProps {
   selectedPlaylogDaySongCount: number;
   filteredPlaylogRows: PlaylogRow[];
   songInfoUrl: string;
+  getSongDetailTarget: (row: PlaylogRow) => SongDetailTarget | null;
+  canOpenHistory: (row: PlaylogRow) => boolean;
+  onOpenSongDetail: (target: SongDetailTarget) => void;
+  onOpenHistory: (row: PlaylogRow) => void;
   playlogSortKey: PlaylogSortKey;
   playlogSortDesc: boolean;
   onSortBy: (key: PlaylogSortKey) => void;
@@ -74,48 +80,14 @@ export function PlaylogExplorerSection({
   selectedPlaylogDaySongCount,
   filteredPlaylogRows,
   songInfoUrl,
+  getSongDetailTarget,
+  canOpenHistory,
+  onOpenSongDetail,
+  onOpenHistory,
   playlogSortKey,
   playlogSortDesc,
   onSortBy,
 }: PlaylogExplorerSectionProps) {
-  const renderInternalLevel = (row: PlaylogRow) => {
-    if (row.internalLevel === null) {
-      return '-';
-    }
-
-    const [whole, fraction = '0'] = row.internalLevel.toFixed(1).split('.');
-    if (!row.isInternalLevelEstimated) {
-      return `${whole}.${fraction}`;
-    }
-
-    return (
-      <span className={`estimated-level ${getDifficultyToneClass(row.difficulty)}`}>
-        {whole}
-        <span className="estimated-level-fraction">.{fraction}</span>
-      </span>
-    );
-  };
-
-  const renderLevelCell = (row: PlaylogRow) => {
-    if (row.internalLevel === null) {
-      return '-';
-    }
-
-    return (
-      <span className={`level-badge ${getDifficultyToneClass(row.difficulty)}`}>
-        {renderInternalLevel(row)}
-      </span>
-    );
-  };
-
-  const renderAchievementCell = (row: PlaylogRow) => {
-    return (
-      <span className={`achievement-value ${row.isNewRecord ? 'achievement-value--new' : ''}`}>
-        {formatPercent(row.achievementPercent)}
-      </span>
-    );
-  };
-
   const handlePlaylogDayInputChange = (value: string) => {
     if (!value) {
       return;
@@ -321,12 +293,33 @@ export function PlaylogExplorerSection({
                     ) : null}
                     <td className="played-at-col">{row.playedAtLabel ?? toDateLabel(row.playedAtUnix) ?? '-'}</td>
                     <td className="track-col">{row.track ?? '-'}</td>
-                    <td className="title-col">{row.title}</td>
+                    <td className="title-col">
+                      <div className="title-cell">
+                        <SongTitleButton
+                          target={getSongDetailTarget(row)}
+                          title={row.title}
+                          onOpenSongDetail={onOpenSongDetail}
+                        />
+                      </div>
+                    </td>
                     <td className="chart-col">
                       <ChartTypeLabel chartType={row.chartType} />
                     </td>
-                    <td className="level-col">{renderLevelCell(row)}</td>
-                    <td className="achievement-col">{renderAchievementCell(row)}</td>
+                    <td className="level-col">
+                      <LevelCell
+                        internalLevel={row.internalLevel}
+                        isInternalLevelEstimated={row.isInternalLevelEstimated}
+                        difficulty={row.difficulty}
+                      />
+                    </td>
+                    <td className="achievement-col">
+                      <AchievementHistoryButton
+                        achievementPercent={row.achievementPercent}
+                        isHighlighted={row.isNewRecord}
+                        variant="playlog"
+                        onOpenHistory={canOpenHistory(row) ? () => onOpenHistory(row) : null}
+                      />
+                    </td>
                     <td className="rating-col">{formatNumber(row.ratingPoints)}</td>
                     <td className="rank-col">{row.rank ?? '-'}</td>
                     <td className="fc-col">{row.fc ?? '-'}</td>
