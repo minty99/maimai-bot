@@ -23,7 +23,8 @@ async fn main() -> eyre::Result<()> {
     let data_dir =
         std::path::PathBuf::from(std::env::var("DATA_DIR").unwrap_or_else(|_| "data".to_string()));
     std::fs::create_dir_all(&data_dir).wrap_err("create data dir")?;
-    let cookie_path = data_dir.join("cookies.json");
+    let cookie_path =
+        std::env::temp_dir().join(format!("maistats-cookies-{}.json", std::process::id()));
 
     let app_config = AppConfig {
         sega_id,
