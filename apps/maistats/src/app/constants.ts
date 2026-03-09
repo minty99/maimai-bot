@@ -12,7 +12,7 @@ const ENV_RECORD_COLLECTOR_URL =
   import.meta.env.RECORD_COLLECTOR_SERVER_URL?.trim();
 
 export const DEFAULT_SONG_INFO_URL =
-  ENV_SONG_INFO_URL || 'http://localhost:3001';
+  ENV_SONG_INFO_URL || 'https://maimai-songs.muhwan.dev';
 export const DEFAULT_RECORD_COLLECTOR_URL =
   ENV_RECORD_COLLECTOR_URL || 'http://localhost:3000';
 
