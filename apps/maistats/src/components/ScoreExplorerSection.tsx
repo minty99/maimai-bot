@@ -1,4 +1,5 @@
-import type { Dispatch, ReactNode, SetStateAction } from 'react';
+import { useEffect, useRef, type Dispatch, type ReactNode, type SetStateAction } from 'react';
+import { useVirtualizer } from '@tanstack/react-virtual';
 
 import { toDateLabel } from '../derive';
 import type {
@@ -123,6 +124,27 @@ export function ScoreExplorerSection({
   onSortBy,
   onResetFilters,
 }: ScoreExplorerSectionProps) {
+  const tableWrapRef = useRef<HTMLDivElement | null>(null);
+
+  const virtualizer = useVirtualizer({
+    count: filteredScoreRows.length,
+    getScrollElement: () => tableWrapRef.current,
+    estimateSize: () => (showJackets ? 80 : 36),
+    overscan: 10,
+  });
+
+  useEffect(() => {
+    if (tableWrapRef.current) tableWrapRef.current.scrollTop = 0;
+  }, [filteredScoreRows, showJackets]);
+
+  const virtualItems = virtualizer.getVirtualItems();
+  const colCount = showJackets ? 13 : 12;
+  const paddingTop = virtualItems[0]?.start ?? 0;
+  const paddingBottom =
+    virtualItems.length > 0
+      ? virtualizer.getTotalSize() - virtualItems[virtualItems.length - 1].end
+      : 0;
+
   return (
     <div className="explorer-layout">
       <aside className="sidebar-column">
@@ -329,7 +351,7 @@ export function ScoreExplorerSection({
               <span className="panel-count">{scoreCountLabel}</span>
             </div>
           </div>
-          <div className="table-wrap">
+          <div className="table-wrap" ref={tableWrapRef}>
             {isLoading ? <div className="table-loading-state">Loading charts...</div> : null}
             <table className="score-table compact-table">
               <thead>
@@ -397,56 +419,69 @@ export function ScoreExplorerSection({
                 </tr>
               </thead>
               <tbody>
-                {filteredScoreRows.map((row) => (
-                  <tr key={row.key}>
-                    {showJackets ? (
-                      <td className="jacket-col">
-                        <Jacket songInfoUrl={songInfoUrl} imageName={row.imageName} title={row.title} />
-                      </td>
-                    ) : null}
-                    <td className="title-col">
-                      <div className="title-cell">
-                        <SongTitleButton
-                          target={row}
-                          title={row.title}
-                          subtitle={showJackets ? formatAliasSummary(row.aliases) : null}
-                          onOpenSongDetail={onOpenSongDetail}
-                        />
-                      </div>
-                    </td>
-                    <td className="chart-col">
-                      <ChartTypeLabel chartType={row.chartType} />
-                    </td>
-                    <td className="level-col">
-                      <LevelCell
-                        internalLevel={row.internalLevel}
-                        isInternalLevelEstimated={row.isInternalLevelEstimated}
-                        difficulty={row.difficulty}
-                      />
-                    </td>
-                    <td className="achievement-col">
-                      <AchievementHistoryButton
-                        achievementPercent={row.achievementPercent}
-                        onOpenHistory={() => onOpenHistory(row)}
-                      />
-                    </td>
-                    <td className="rating-col">{formatNumber(row.ratingPoints)}</td>
-                    <td className="rank-col">{row.rank ?? '-'}</td>
-                    <td className="fc-col">{row.fc ?? '-'}</td>
-                    <td className="sync-col">{row.sync ?? '-'}</td>
-                    <td className="dx-col">
-                      {formatNumber(row.dxScore)} / {formatNumber(row.dxScoreMax)}
-                    </td>
-                    <td
-                      className="last-played-col"
-                      title={row.daysSinceLastPlayed === null ? undefined : `${row.daysSinceLastPlayed}일 전`}
-                    >
-                      {row.latestPlayedAtLabel ?? toDateLabel(row.latestPlayedAtUnix) ?? '-'}
-                    </td>
-                    <td className="play-count-col">{formatNumber(row.playCount)}</td>
-                    <td className="version-col">{formatVersionLabel(row.version)}</td>
+                {paddingTop > 0 && (
+                  <tr style={{ height: paddingTop }}>
+                    <td colSpan={colCount} />
                   </tr>
-                ))}
+                )}
+                {virtualItems.map((virtualRow) => {
+                  const row = filteredScoreRows[virtualRow.index];
+                  return (
+                    <tr key={row.key} data-index={virtualRow.index} ref={virtualizer.measureElement}>
+                      {showJackets ? (
+                        <td className="jacket-col">
+                          <Jacket songInfoUrl={songInfoUrl} imageName={row.imageName} title={row.title} />
+                        </td>
+                      ) : null}
+                      <td className="title-col">
+                        <div className="title-cell">
+                          <SongTitleButton
+                            target={row}
+                            title={row.title}
+                            subtitle={showJackets ? formatAliasSummary(row.aliases) : null}
+                            onOpenSongDetail={onOpenSongDetail}
+                          />
+                        </div>
+                      </td>
+                      <td className="chart-col">
+                        <ChartTypeLabel chartType={row.chartType} />
+                      </td>
+                      <td className="level-col">
+                        <LevelCell
+                          internalLevel={row.internalLevel}
+                          isInternalLevelEstimated={row.isInternalLevelEstimated}
+                          difficulty={row.difficulty}
+                        />
+                      </td>
+                      <td className="achievement-col">
+                        <AchievementHistoryButton
+                          achievementPercent={row.achievementPercent}
+                          onOpenHistory={() => onOpenHistory(row)}
+                        />
+                      </td>
+                      <td className="rating-col">{formatNumber(row.ratingPoints)}</td>
+                      <td className="rank-col">{row.rank ?? '-'}</td>
+                      <td className="fc-col">{row.fc ?? '-'}</td>
+                      <td className="sync-col">{row.sync ?? '-'}</td>
+                      <td className="dx-col">
+                        {formatNumber(row.dxScore)} / {formatNumber(row.dxScoreMax)}
+                      </td>
+                      <td
+                        className="last-played-col"
+                        title={row.daysSinceLastPlayed === null ? undefined : `${row.daysSinceLastPlayed}일 전`}
+                      >
+                        {row.latestPlayedAtLabel ?? toDateLabel(row.latestPlayedAtUnix) ?? '-'}
+                      </td>
+                      <td className="play-count-col">{formatNumber(row.playCount)}</td>
+                      <td className="version-col">{formatVersionLabel(row.version)}</td>
+                    </tr>
+                  );
+                })}
+                {paddingBottom > 0 && (
+                  <tr style={{ height: paddingBottom }}>
+                    <td colSpan={colCount} />
+                  </tr>
+                )}
               </tbody>
             </table>
           </div>
