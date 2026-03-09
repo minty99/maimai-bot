@@ -12,7 +12,8 @@ pub(crate) struct AppState {
 impl AppState {
     pub(crate) fn maimai_client(&self) -> eyre::Result<MaimaiClient> {
         let data_dir = PathBuf::from(&self.config.data_dir);
-        let cookie_path = data_dir.join("cookies.json");
+        let cookie_path =
+            std::env::temp_dir().join(format!("maistats-cookies-{}.json", std::process::id()));
 
         let app_config = models::config::AppConfig {
             sega_id: self.config.sega_id.clone(),

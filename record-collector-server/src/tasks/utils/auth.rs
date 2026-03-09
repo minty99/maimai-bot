@@ -19,7 +19,8 @@ pub(crate) fn to_app_config(config: &RecordCollectorConfig) -> AppConfig {
     use std::path::PathBuf;
 
     let data_dir = PathBuf::from(&config.data_dir);
-    let cookie_path = data_dir.join("cookies.json");
+    let cookie_path =
+        std::env::temp_dir().join(format!("maistats-cookies-{}.json", std::process::id()));
 
     AppConfig {
         sega_id: config.sega_id.clone(),
