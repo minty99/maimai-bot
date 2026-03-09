@@ -849,7 +849,7 @@ table {
 .score-table {
   width: max-content;
   min-width: 100%;
-  table-layout: auto;
+  table-layout: fixed;
 }
 
 thead {
