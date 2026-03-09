@@ -2,8 +2,8 @@
 
 use eyre::{ContextCompat, WrapErr};
 use models::{
-    ChartType, DifficultyCategory, SongCatalog, SongCatalogChart, SongCatalogSong, SongChartRegion,
-    SongGenre,
+    ChartType, DifficultyCategory, SongAliases, SongCatalog, SongCatalogChart, SongCatalogSong,
+    SongChartRegion, SongGenre,
 };
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
@@ -11,6 +11,7 @@ use std::collections::{HashMap, HashSet};
 use std::fmt;
 use std::path::Path;
 
+mod aliases;
 mod internal_levels;
 mod intl_only;
 mod sheet_versions;
@@ -186,6 +187,7 @@ pub struct SongDatabase {
     sheets: Vec<SheetRow>,
     sheet_versions: SheetVersionMap,
     internal_levels: HashMap<InternalLevelKey, InternalLevelRow>,
+    aliases: HashMap<String, SongAliases>,
 }
 
 impl SongDatabase {
@@ -245,6 +247,15 @@ impl SongDatabase {
         .await
         .wrap_err("fetch internal levels")?;
 
+        tracing::info!("Fetching song aliases...");
+        let alias_cache_dir = song_data_dir.join("aliases");
+        let aliases = aliases::fetch_song_aliases(&client, &alias_cache_dir)
+            .await
+            .unwrap_or_else(|err| {
+                tracing::warn!("failed to fetch song aliases; continuing without aliases: {err:#}");
+                HashMap::new()
+            });
+
         tracing::info!("Downloading covers...");
         let cover_dir = song_data_dir.join("cover");
         download_cover_images(&client, &songs, &cover_dir).await?;
@@ -254,6 +265,7 @@ impl SongDatabase {
             sheets,
             sheet_versions,
             internal_levels,
+            aliases,
         })
     }
 
@@ -263,6 +275,7 @@ impl SongDatabase {
             &self.sheets,
             &self.sheet_versions,
             &self.internal_levels,
+            &self.aliases,
         ))
     }
 }
@@ -272,6 +285,7 @@ fn build_data_root(
     sheets: &[SheetRow],
     sheet_versions: &SheetVersionMap,
     internal_levels: &HashMap<InternalLevelKey, InternalLevelRow>,
+    aliases: &HashMap<String, SongAliases>,
 ) -> SongCatalog {
     use std::collections::BTreeMap;
 
@@ -285,6 +299,10 @@ fn build_data_root(
                 genre: song.identity.genre.clone(),
                 artist: song.identity.artist.clone(),
                 image_name: Some(song.image_name.clone()),
+                aliases: aliases
+                    .get(&song.identity.title)
+                    .cloned()
+                    .unwrap_or_default(),
                 sheets: Vec::new(),
             },
         );
@@ -998,7 +1016,13 @@ mod tests {
             HashMap::from([(ChartType::Std, "Splash".to_string())]),
         );
 
-        let catalog = build_data_root(&songs, &sheets, &sheet_versions, &HashMap::new());
+        let catalog = build_data_root(
+            &songs,
+            &sheets,
+            &sheet_versions,
+            &HashMap::new(),
+            &HashMap::new(),
+        );
         let official = catalog
             .songs
             .iter()

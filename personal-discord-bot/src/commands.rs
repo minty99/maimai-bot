@@ -17,7 +17,7 @@ type Error = Box<dyn std::error::Error + Send + Sync>;
 #[poise::command(slash_command, rename = "mai-score")]
 pub(crate) async fn mai_score(
     ctx: Context<'_>,
-    #[description = "Song title to search for"] search: String,
+    #[description = "Song title or alias to search for"] search: String,
 ) -> Result<(), Error> {
     ctx.defer().await?;
 
@@ -32,51 +32,24 @@ pub(crate) async fn mai_score(
         return Ok(());
     }
 
-    let detailed_scores = match ctx
+    let response = ctx
         .data()
-        .record_collector_client
-        .search_scores(requested_title)
+        .song_info_client
+        .search_song_metadata(&crate::client::SongMetadataSearchRequest {
+            title: Some(requested_title.to_string()),
+            genre: None,
+            artist: None,
+            chart_type: None,
+            diff_category: None,
+            limits: Some(100),
+        })
         .await
-    {
-        Ok(v) => v,
-        Err(e) => {
-            if let Some(api_error) = e.downcast_ref::<crate::client::ApiError>()
-                && api_error.code() == "MAINTENANCE"
-            {
-                ctx.send(
-                    CreateReply::default()
-                        .ephemeral(true)
-                        .embed(embed_maintenance()),
-                )
-                .await?;
-                return Ok(());
-            }
-
-            let msg = e.to_string();
-            if msg.contains("maintenance") {
-                ctx.send(
-                    CreateReply::default()
-                        .ephemeral(true)
-                        .embed(embed_maintenance()),
-                )
-                .await?;
-                return Ok(());
-            }
-            return Err(e.wrap_err("search song scores").into());
-        }
-    };
+        .wrap_err("search song metadata")?;
 
     let mut unique_songs = BTreeMap::new();
-    for score in &detailed_scores {
-        if !score.title.eq_ignore_ascii_case(requested_title) {
-            continue;
-        }
+    for song in response.items {
         unique_songs
-            .entry((
-                score.title.clone(),
-                score.genre.clone(),
-                score.artist.clone(),
-            ))
+            .entry((song.title, song.genre, song.artist))
             .or_insert(());
     }
 
@@ -245,7 +218,7 @@ pub(crate) async fn mai_score(
 #[poise::command(slash_command, rename = "mai-song-info")]
 pub(crate) async fn mai_song_info(
     ctx: Context<'_>,
-    #[description = "Song title to search for"] title: String,
+    #[description = "Song title or alias to search for"] title: String,
 ) -> Result<(), Error> {
     ctx.defer().await?;
 
@@ -275,7 +248,7 @@ pub(crate) async fn mai_song_info(
         ctx.send(
             CreateReply::default()
                 .ephemeral(true)
-                .embed(embed_base("No song found").description("No exact title match.")),
+                .embed(embed_base("No song found").description("No matching title or alias.")),
         )
         .await?;
         return Ok(());

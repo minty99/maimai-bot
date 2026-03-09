@@ -896,6 +896,13 @@ tbody tr:hover {
   min-width: 0;
 }
 
+.title-cell-subtitle {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
 .link-button {
   height: auto;
   border: 0;
@@ -973,6 +980,11 @@ tbody tr:hover {
 
 .detail-song-summary strong {
   line-height: 1.35;
+}
+
+.detail-aliases {
+  margin-top: 2px;
+  overflow-wrap: anywhere;
 }
 
 .detail-jacket {

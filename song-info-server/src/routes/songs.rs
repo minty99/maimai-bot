@@ -2,7 +2,9 @@ use axum::{
     Json,
     extract::{Query, State},
 };
-use models::{ChartType, DifficultyCategory, MaimaiVersion, SongChartRegion, SongGenre};
+use models::{
+    ChartType, DifficultyCategory, MaimaiVersion, SongAliases, SongChartRegion, SongGenre,
+};
 use serde::Deserialize;
 use serde::Serialize;
 use std::collections::{HashMap, HashSet};
@@ -33,6 +35,7 @@ pub(crate) struct SongMetadataResponse {
     version: Option<String>,
     genre: String,
     artist: String,
+    aliases: SongAliases,
     region: SongChartRegion,
 }
 
@@ -42,6 +45,7 @@ pub(crate) struct SongInfoResponse {
     genre: String,
     artist: String,
     image_name: Option<String>,
+    aliases: SongAliases,
     sheets: Vec<SongSheetResponse>,
 }
 
@@ -310,6 +314,7 @@ fn build_song_info_response(song: &models::SongCatalogSong) -> Result<SongInfoRe
         genre: song.genre.to_string(),
         artist: song.artist.clone(),
         image_name: song.image_name.clone(),
+        aliases: song.aliases.clone(),
         sheets,
     })
 }
@@ -335,8 +340,16 @@ fn song_matches_flexible_search_request(
     genre: Option<&SongGenre>,
     artist: Option<&str>,
 ) -> bool {
-    title.is_none_or(|title| normalize_lookup_value(&song.title) == normalize_lookup_value(title))
-        && genre.is_none_or(|genre| song.genre == *genre)
+    title.is_none_or(|title| {
+        let normalized_title = normalize_lookup_value(title);
+        normalize_lookup_value(&song.title) == normalized_title
+            || song
+                .aliases
+                .en
+                .iter()
+                .chain(song.aliases.ko.iter())
+                .any(|alias| normalize_lookup_value(alias) == normalized_title)
+    }) && genre.is_none_or(|genre| song.genre == *genre)
         && artist.is_none_or(|artist| {
             normalize_lookup_value(&song.artist) == normalize_lookup_value(artist)
         })
@@ -410,6 +423,7 @@ fn collect_song_metadata_items(
                 version,
                 genre: song.genre.to_string(),
                 artist: song.artist.clone(),
+                aliases: song.aliases.clone(),
                 region: sheet.region.clone(),
             });
         }
@@ -630,8 +644,8 @@ mod tests {
         parse_intl_sheet_version, search_song_metadata_items,
     };
     use models::{
-        DifficultyCategory, MaimaiVersion, SongCatalogChart, SongCatalogSong, SongChartRegion,
-        SongGenre,
+        DifficultyCategory, MaimaiVersion, SongAliases, SongCatalogChart, SongCatalogSong,
+        SongChartRegion, SongGenre,
     };
 
     #[test]
@@ -702,6 +716,10 @@ mod tests {
             genre: SongGenre::Maimai,
             artist: "".to_string(),
             image_name: Some("cover.png".to_string()),
+            aliases: SongAliases {
+                en: vec!["Alias".to_string()],
+                ko: vec!["별칭".to_string()],
+            },
             sheets: vec![SongCatalogChart {
                 chart_type: "dx".to_string(),
                 difficulty: "master".to_string(),
@@ -721,6 +739,8 @@ mod tests {
         assert_eq!(response.genre, "maimai");
         assert_eq!(response.artist, "");
         assert_eq!(response.image_name.as_deref(), Some("cover.png"));
+        assert_eq!(response.aliases.en, vec!["Alias".to_string()]);
+        assert_eq!(response.aliases.ko, vec!["별칭".to_string()]);
         assert_eq!(response.sheets.len(), 1);
 
         let sheet = &response.sheets[0];
@@ -740,6 +760,7 @@ mod tests {
                 genre: SongGenre::Maimai,
                 artist: "Artist A".to_string(),
                 image_name: Some("a.png".to_string()),
+                aliases: SongAliases::default(),
                 sheets: vec![SongCatalogChart {
                     chart_type: "std".to_string(),
                     difficulty: "basic".to_string(),
@@ -757,6 +778,7 @@ mod tests {
                 genre: SongGenre::NiconicoVocaloid,
                 artist: "Artist B".to_string(),
                 image_name: Some("b.png".to_string()),
+                aliases: SongAliases::default(),
                 sheets: vec![SongCatalogChart {
                     chart_type: "std".to_string(),
                     difficulty: "basic".to_string(),
@@ -795,6 +817,7 @@ mod tests {
             genre: SongGenre::Maimai,
             artist: "".to_string(),
             image_name: None,
+            aliases: SongAliases::default(),
             sheets: vec![SongCatalogChart {
                 chart_type: "std".to_string(),
                 difficulty: "expert".to_string(),
@@ -832,6 +855,7 @@ mod tests {
             genre: SongGenre::Maimai,
             artist: "Artist A".to_string(),
             image_name: Some("a.png".to_string()),
+            aliases: SongAliases::default(),
             sheets: vec![SongCatalogChart {
                 chart_type: "std".to_string(),
                 difficulty: "basic".to_string(),
@@ -863,6 +887,51 @@ mod tests {
     }
 
     #[test]
+    fn metadata_search_can_match_alias_case_insensitively() {
+        let songs = vec![SongCatalogSong {
+            title: "Official Song".to_string(),
+            genre: SongGenre::Maimai,
+            artist: "Artist A".to_string(),
+            image_name: Some("a.png".to_string()),
+            aliases: SongAliases {
+                en: vec!["Test Alias".to_string()],
+                ko: vec!["테스트 별칭".to_string()],
+            },
+            sheets: vec![SongCatalogChart {
+                chart_type: "std".to_string(),
+                difficulty: "basic".to_string(),
+                level: "5".to_string(),
+                version_name: Some("CiRCLE".to_string()),
+                internal_level: Some("5.0".to_string()),
+                region: SongChartRegion {
+                    jp: true,
+                    intl: true,
+                },
+            }],
+        }];
+
+        let response = search_song_metadata_items(
+            &songs,
+            &SongMetadataSearchRequest {
+                title: Some("test alias".to_string()),
+                genre: None,
+                artist: None,
+                chart_type: None,
+                diff_category: None,
+                limits: Some(10),
+            },
+        )
+        .expect("search should succeed");
+
+        assert_eq!(response.total, 1);
+        assert_eq!(response.items[0].title, "Official Song");
+        assert_eq!(
+            response.items[0].aliases.ko,
+            vec!["테스트 별칭".to_string()]
+        );
+    }
+
+    #[test]
     fn metadata_search_keeps_exact_match_priority_over_fallback() {
         let songs = vec![
             SongCatalogSong {
@@ -870,6 +939,7 @@ mod tests {
                 genre: SongGenre::Maimai,
                 artist: "Artist A".to_string(),
                 image_name: Some("a.png".to_string()),
+                aliases: SongAliases::default(),
                 sheets: vec![SongCatalogChart {
                     chart_type: "std".to_string(),
                     difficulty: "basic".to_string(),
@@ -887,6 +957,7 @@ mod tests {
                 genre: SongGenre::Maimai,
                 artist: "Artist B".to_string(),
                 image_name: Some("b.png".to_string()),
+                aliases: SongAliases::default(),
                 sheets: vec![SongCatalogChart {
                     chart_type: "std".to_string(),
                     difficulty: "basic".to_string(),
@@ -926,6 +997,7 @@ mod tests {
             genre: SongGenre::Maimai,
             artist: "Artist A".to_string(),
             image_name: Some("a.png".to_string()),
+            aliases: SongAliases::default(),
             sheets: vec![SongCatalogChart {
                 chart_type: "std".to_string(),
                 difficulty: "remaster".to_string(),

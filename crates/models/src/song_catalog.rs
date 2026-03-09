@@ -15,7 +15,23 @@ pub struct SongCatalogSong {
     pub artist: String,
     #[serde(rename = "imageName", skip_serializing_if = "Option::is_none")]
     pub image_name: Option<String>,
+    #[serde(default, skip_serializing_if = "SongAliases::is_empty")]
+    pub aliases: SongAliases,
     pub sheets: Vec<SongCatalogChart>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SongAliases {
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub en: Vec<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub ko: Vec<String>,
+}
+
+impl SongAliases {
+    pub fn is_empty(&self) -> bool {
+        self.en.is_empty() && self.ko.is_empty()
+    }
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -155,6 +171,7 @@ mod tests {
                 genre: SongGenre::Maimai,
                 artist: " Artist ".to_string(),
                 image_name: None,
+                aliases: SongAliases::default(),
                 sheets: vec![chart()],
             }],
         });
@@ -180,6 +197,7 @@ mod tests {
                     genre: SongGenre::Maimai,
                     artist: "".to_string(),
                     image_name: None,
+                    aliases: SongAliases::default(),
                     sheets: vec![chart()],
                 },
                 SongCatalogSong {
@@ -187,6 +205,7 @@ mod tests {
                     genre: SongGenre::Maimai,
                     artist: "".to_string(),
                     image_name: None,
+                    aliases: SongAliases::default(),
                     sheets: vec![SongCatalogChart {
                         internal_level: Some("14.0".to_string()),
                         ..chart()

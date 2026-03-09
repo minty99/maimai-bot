@@ -1,3 +1,5 @@
+import type { SongAliases } from '../types';
+
 export function formatPercent(value: number | null, digits = 4): string {
   if (value === null) {
     return '-';
@@ -90,4 +92,32 @@ export function formatVersionLabel(value: string | null | undefined): string {
     return '-';
   }
   return value.replace(/^maimaiでらっくす/, 'DX');
+}
+
+export function aliasValues(aliases: SongAliases | null | undefined, language: 'en' | 'ko'): string[] {
+  const values = aliases?.[language];
+  return Array.isArray(values) ? values : [];
+}
+
+function formatAliasGroup(label: string, aliases: string[]): string | null {
+  if (aliases.length === 0) {
+    return null;
+  }
+  const visible = aliases.slice(0, 2);
+  const remaining = aliases.length - visible.length;
+  const suffix = remaining > 0 ? ` +${remaining}` : '';
+  return `${label}: ${visible.join(', ')}${suffix}`;
+}
+
+export function formatAliasSummary(aliases: SongAliases | null | undefined): string | null {
+  const groups = [
+    formatAliasGroup('EN', aliasValues(aliases, 'en')),
+    formatAliasGroup('KO', aliasValues(aliases, 'ko')),
+  ].filter((value): value is string => value !== null);
+
+  if (groups.length === 0) {
+    return null;
+  }
+
+  return groups.join(' | ');
 }

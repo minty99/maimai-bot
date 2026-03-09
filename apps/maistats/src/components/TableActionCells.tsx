@@ -9,26 +9,36 @@ export interface SongDetailTarget {
 interface SongTitleButtonProps {
   target: SongDetailTarget | null;
   title: string;
+  subtitle?: string | null;
   onOpenSongDetail: (target: SongDetailTarget) => void;
 }
 
 export function SongTitleButton({
   target,
   title,
+  subtitle = null,
   onOpenSongDetail,
 }: SongTitleButtonProps) {
   if (!target) {
-    return <span>{title}</span>;
+    return (
+      <>
+        <span>{title}</span>
+        {subtitle ? <small className="title-cell-subtitle">{subtitle}</small> : null}
+      </>
+    );
   }
 
   return (
-    <button
-      type="button"
-      className="link-button"
-      onClick={() => onOpenSongDetail(target)}
-    >
-      {title}
-    </button>
+    <>
+      <button
+        type="button"
+        className="link-button"
+        onClick={() => onOpenSongDetail(target)}
+      >
+        {title}
+      </button>
+      {subtitle ? <small className="title-cell-subtitle">{subtitle}</small> : null}
+    </>
   );
 }
 

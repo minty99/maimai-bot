@@ -1,8 +1,9 @@
 import { ChartTypeLabel } from './ChartTypeLabel';
 import { Jacket } from './Jacket';
 import { getDifficultyToneClass } from './DifficultyLabel';
-import type { SongDetailRow } from '../types';
+import type { SongAliases, SongDetailRow } from '../types';
 import {
+  aliasValues,
   formatVersionLabel,
   formatNumber,
   formatPercent,
@@ -12,6 +13,7 @@ interface SongDetailModalProps {
   selectedDetailTitle: string | null;
   selectedDetailGenre: string | null;
   selectedDetailArtist: string | null;
+  selectedDetailAliases: SongAliases | null;
   selectedDetailRows: SongDetailRow[];
   songInfoUrl: string;
   onClose: () => void;
@@ -21,6 +23,7 @@ export function SongDetailModal({
   selectedDetailTitle,
   selectedDetailGenre,
   selectedDetailArtist,
+  selectedDetailAliases,
   selectedDetailRows,
   songInfoUrl,
   onClose,
@@ -30,6 +33,8 @@ export function SongDetailModal({
   }
 
   const imageName = selectedDetailRows[0]?.imageName ?? null;
+  const englishAliases = aliasValues(selectedDetailAliases, 'en');
+  const koreanAliases = aliasValues(selectedDetailAliases, 'ko');
 
   const renderInternalLevel = (row: SongDetailRow) => {
     if (row.internalLevel === null) {
@@ -90,6 +95,12 @@ export function SongDetailModal({
                       .filter((value): value is string => Boolean(value))
                       .join(' / ')}
                   </div>
+                ) : null}
+                {englishAliases.length > 0 ? (
+                  <div className="muted detail-aliases">EN: {englishAliases.join(', ')}</div>
+                ) : null}
+                {koreanAliases.length > 0 ? (
+                  <div className="muted detail-aliases">KO: {koreanAliases.join(', ')}</div>
                 ) : null}
               </div>
             </div>

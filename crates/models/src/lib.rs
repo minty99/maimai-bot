@@ -14,6 +14,7 @@ pub use parser_models::{
     ParsedRatingTargets, ParsedScoreEntry, ParsedSongChartDetail, ParsedSongDetail,
 };
 pub use song_catalog::{
-    SongCatalog, SongCatalogChart, SongCatalogSong, SongChartRegion, SongInternalLevelIndex,
+    SongAliases, SongCatalog, SongCatalogChart, SongCatalogSong, SongChartRegion,
+    SongInternalLevelIndex,
 };
 pub use storage_models::{StoredPlayRecord, StoredScoreEntry};

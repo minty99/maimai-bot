@@ -152,7 +152,7 @@ HTML/raw fetch (로그인 필요):
 
 ## Discord 명령어
 
-- `/mai-score <title>`
+- `/mai-score <title|alias>`
   - 곡 제목 exact match만 조회합니다.
   - exact match가 없으면 조회 실패로 처리합니다.
   - 기록이 없는(미플레이) 항목은 출력하지 않습니다.

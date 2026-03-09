@@ -2,6 +2,7 @@ import type {
   ChartType,
   DifficultyCategory,
   PlayRecordApiResponse,
+  SongAliases,
   ScoreHistoryPoint,
   PlaylogRow,
   ScoreApiResponse,
@@ -12,6 +13,8 @@ import type {
 } from './types';
 import { chartIdentityKey, songIdentityKey } from './songIdentity';
 import { CHART_TYPES, DIFFICULTIES } from './app/constants';
+
+const EMPTY_ALIASES: SongAliases = { en: [], ko: [] };
 
 export function chartKey(
   title: string,
@@ -51,6 +54,10 @@ function listPreferredSheets(songInfo: SongInfoResponse): SongSheetResponse[] {
   }
 
   return Array.from(preferredSheets.values());
+}
+
+function songAliases(songInfo?: SongInfoResponse): SongAliases {
+  return songInfo?.aliases ?? EMPTY_ALIASES;
 }
 
 function toUnixMillis(unixtime: number): number {
@@ -246,6 +253,7 @@ export function buildScoreRows(
       title,
       genre,
       artist,
+      aliases: songAliases(songInfo),
       chartType,
       difficulty,
       achievementX10000: score?.achievement_x10000 ?? null,
@@ -348,6 +356,7 @@ export function buildPlaylogRows(
       title: log.title,
       genre,
       artist,
+      aliases: songAliases(songInfo),
       chartType: log.chart_type,
       difficulty: log.diff_category,
       level: sheet?.level ?? null,
@@ -454,6 +463,7 @@ export function buildSongDetailRows(
       title: row.title,
       genre: row.genre,
       artist: row.artist,
+      aliases: row.aliases,
       imageName: row.imageName,
       chartType: row.chartType,
       difficulty: row.difficulty,

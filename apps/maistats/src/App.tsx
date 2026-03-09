@@ -1104,6 +1104,7 @@ function App() {
         selectedDetailTitle={selectedDetailSong?.title ?? null}
         selectedDetailGenre={selectedDetailSong?.genre ?? null}
         selectedDetailArtist={selectedDetailSong?.artist ?? null}
+        selectedDetailAliases={selectedDetailSong?.aliases ?? null}
         selectedDetailRows={selectedDetailRows}
         songInfoUrl={songInfoUrl}
         onClose={closeSongDetail}
