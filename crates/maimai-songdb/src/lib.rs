@@ -383,14 +383,31 @@ async fn fetch_maimai_songs(client: &reqwest::Client) -> eyre::Result<Vec<RawSon
 fn parse_maimai_songs_json(json: &str) -> eyre::Result<Vec<RawSong>> {
     let raw_songs =
         serde_json::from_str::<Vec<RawSong>>(json).wrap_err("parse maimai songs json")?;
-    let (filtered, dropped_count) = filter_out_utage_entries(raw_songs);
+    let (mut filtered, dropped_count) = filter_out_utage_entries(raw_songs);
     if dropped_count > 0 {
         tracing::info!(
             "Skipped {} utage entries from official songs JSON",
             dropped_count
         );
     }
+    apply_jp_song_patches(&mut filtered);
     Ok(filtered)
+}
+
+/// Hardcoded patches for known JP/INTL artist discrepancies in maimai_songs.json.
+/// The JP data is used as the primary source, but some songs have different artist
+/// strings on INTL — which affects song identity matching against INTL score records.
+/// TODO: detect these mismatches automatically in the song info server.
+fn apply_jp_song_patches(songs: &mut [RawSong]) {
+    for song in songs.iter_mut() {
+        // "Hurtling Boys": JP artist is "さだきち イシカダス「太鼓の達人」より" but
+        // INTL uses "さだきち「太鼓の達人」より". Patch to match the INTL identity.
+        if song.title == "Hurtling Boys"
+            && song.artist.as_deref() == Some("さだきち イシカダス「太鼓の達人」より")
+        {
+            song.artist = Some("さだきち「太鼓の達人」より".to_string());
+        }
+    }
 }
 
 pub(crate) fn load_official_rows_from_json(
