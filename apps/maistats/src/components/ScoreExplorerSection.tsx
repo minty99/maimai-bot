@@ -4,9 +4,7 @@ import { toDateLabel } from '../derive';
 import type {
   ChartType,
   DifficultyCategory,
-  FcStatus,
   ScoreRow,
-  SyncStatus,
 } from '../types';
 import type { ScoreSortKey } from '../app/constants';
 import {
@@ -41,23 +39,26 @@ interface ScoreExplorerSectionProps {
   versionOptions: string[];
   versionSelection: string;
   setVersionSelection: Dispatch<SetStateAction<string>>;
+  internalLevelPresetOptions: string[];
+  selectedInternalLevelPresets: string[];
+  onToggleInternalLevelPreset: (value: string) => void;
   scoreRankOptions: string[];
-  rankFilter: string[];
-  onToggleRankFilter: (value: string) => void;
-  fcOptions: FcStatus[];
-  fcFilter: FcStatus[];
-  setFcFilter: Dispatch<SetStateAction<FcStatus[]>>;
-  syncOptions: SyncStatus[];
-  syncFilter: SyncStatus[];
-  setSyncFilter: Dispatch<SetStateAction<SyncStatus[]>>;
+  selectedScoreRankPresets: string[];
+  onToggleScoreRankPreset: (value: string) => void;
+  fcOptions: string[];
+  fcFilter: string[];
+  onToggleFcFilter: (value: string) => void;
+  syncOptions: string[];
+  syncFilter: string[];
+  onToggleSyncFilter: (value: string) => void;
   achievementMin: number;
-  setAchievementMin: Dispatch<SetStateAction<number>>;
+  onChangeAchievementMin: (value: number) => void;
   achievementMax: number;
-  setAchievementMax: Dispatch<SetStateAction<number>>;
+  onChangeAchievementMax: (value: number) => void;
   internalMin: number;
-  setInternalMin: Dispatch<SetStateAction<number>>;
+  onChangeInternalMin: (value: number) => void;
   internalMax: number;
-  setInternalMax: Dispatch<SetStateAction<number>>;
+  onChangeInternalMax: (value: number) => void;
   daysMin: number;
   setDaysMin: Dispatch<SetStateAction<number>>;
   daysMax: number;
@@ -69,6 +70,7 @@ interface ScoreExplorerSectionProps {
   scoreSortKey: ScoreSortKey;
   scoreSortDesc: boolean;
   onSortBy: (key: ScoreSortKey) => void;
+  onResetFilters: () => void;
 }
 
 export function ScoreExplorerSection({
@@ -88,23 +90,26 @@ export function ScoreExplorerSection({
   versionOptions,
   versionSelection,
   setVersionSelection,
+  internalLevelPresetOptions,
+  selectedInternalLevelPresets,
+  onToggleInternalLevelPreset,
   scoreRankOptions,
-  rankFilter,
-  onToggleRankFilter,
+  selectedScoreRankPresets,
+  onToggleScoreRankPreset,
   fcOptions,
   fcFilter,
-  setFcFilter,
+  onToggleFcFilter,
   syncOptions,
   syncFilter,
-  setSyncFilter,
+  onToggleSyncFilter,
   achievementMin,
-  setAchievementMin,
+  onChangeAchievementMin,
   achievementMax,
-  setAchievementMax,
+  onChangeAchievementMax,
   internalMin,
-  setInternalMin,
+  onChangeInternalMin,
   internalMax,
-  setInternalMax,
+  onChangeInternalMax,
   daysMin,
   setDaysMin,
   daysMax,
@@ -116,6 +121,7 @@ export function ScoreExplorerSection({
   scoreSortKey,
   scoreSortDesc,
   onSortBy,
+  onResetFilters,
 }: ScoreExplorerSectionProps) {
   return (
     <div className="explorer-layout">
@@ -126,6 +132,9 @@ export function ScoreExplorerSection({
             <div>
               <h2>Filters</h2>
             </div>
+            <button type="button" className="filter-reset-button" onClick={onResetFilters}>
+              전체 초기화
+            </button>
           </div>
           <div className="filter-grid">
             <label className="search-box">
@@ -139,7 +148,7 @@ export function ScoreExplorerSection({
             </label>
 
             <ToggleGroup
-              label="Chart Type"
+              label="채보 유형"
               options={chartTypes}
               selected={chartFilter}
               onToggle={(value) => setChartFilter((prev) => toggleArrayValue(prev, value))}
@@ -147,118 +156,146 @@ export function ScoreExplorerSection({
             />
 
             <ToggleGroup
-              label="Difficulty"
+              label="난이도"
               options={difficulties}
               selected={difficultyFilter}
               onToggle={(value) => setDifficultyFilter((prev) => toggleArrayValue(prev, value))}
               renderLabel={(value) => <DifficultyLabel difficulty={value} short />}
               optionClassName={(value) => `difficulty-chip ${getDifficultyToneClass(value)}`}
             />
-            <label>
-              <span>Version</span>
-              <select
-                value={versionSelection}
-                onChange={(event) => setVersionSelection(event.target.value)}
-              >
-                <option value="ALL">ALL</option>
-                <option value="NEW">NEW</option>
-                <option value="OLD">OLD</option>
-                {versionOptions.map((version) => (
-                  <option key={version} value={version}>
-                    {formatVersionLabel(version)}
-                  </option>
-                ))}
-              </select>
-            </label>
 
-            <ToggleGroup
-              label="Rank"
-              options={scoreRankOptions}
-              selected={rankFilter}
-              onToggle={onToggleRankFilter}
-            />
+            <div className="filter-block">
+              <div className="filter-label">레벨</div>
+              <div className="range-pair">
+                <label>
+                  <input
+                    type="number"
+                    value={internalMin}
+                    min={1}
+                    max={15}
+                    step={0.1}
+                    aria-label="레벨 최소"
+                    onChange={(event) => onChangeInternalMin(Number(event.target.value))}
+                  />
+                </label>
+                <span className="range-separator">~</span>
+                <label>
+                  <input
+                    type="number"
+                    value={internalMax}
+                    min={1}
+                    max={15}
+                    step={0.1}
+                    aria-label="레벨 최대"
+                    onChange={(event) => onChangeInternalMax(Number(event.target.value))}
+                  />
+                </label>
+              </div>
+              <ToggleGroup
+                label=""
+                options={internalLevelPresetOptions}
+                selected={selectedInternalLevelPresets}
+                onToggle={onToggleInternalLevelPreset}
+                hideLabel
+              />
+            </div>
+
+            <div className="filter-block">
+              <div className="filter-label">스코어</div>
+              <div className="range-pair">
+                <label>
+                  <input
+                    type="number"
+                    value={achievementMin}
+                    min={0}
+                    max={101}
+                    step={0.0001}
+                    aria-label="달성률 최소"
+                    onChange={(event) => onChangeAchievementMin(Number(event.target.value))}
+                  />
+                </label>
+                <span className="range-separator">~</span>
+                <label>
+                  <input
+                    type="number"
+                    value={achievementMax}
+                    min={0}
+                    max={101}
+                    step={0.0001}
+                    aria-label="달성률 최대"
+                    onChange={(event) => onChangeAchievementMax(Number(event.target.value))}
+                  />
+                </label>
+              </div>
+              <ToggleGroup
+                label=""
+                options={scoreRankOptions}
+                selected={selectedScoreRankPresets}
+                onToggle={onToggleScoreRankPreset}
+                hideLabel
+              />
+            </div>
 
             <ToggleGroup
               label="FC"
               options={fcOptions}
               selected={fcFilter}
-              onToggle={(value) => setFcFilter((prev) => toggleArrayValue(prev, value))}
+              onToggle={onToggleFcFilter}
             />
 
             <ToggleGroup
               label="Sync"
               options={syncOptions}
               selected={syncFilter}
-              onToggle={(value) => setSyncFilter((prev) => toggleArrayValue(prev, value))}
+              onToggle={onToggleSyncFilter}
             />
 
-            <div className="range-grid">
+            <div className="filter-block">
+              <div className="filter-label">버전</div>
               <label>
-                <span>달성률 최소</span>
-                <input
-                  type="number"
-                  value={achievementMin}
-                  min={0}
-                  max={101}
-                  step={0.0001}
-                  onChange={(event) => setAchievementMin(Number(event.target.value))}
-                />
+                <select
+                  value={versionSelection}
+                  onChange={(event) => setVersionSelection(event.target.value)}
+                >
+                  <option value="ALL">ALL</option>
+                  <option value="NEW">NEW</option>
+                  <option value="OLD">OLD</option>
+                  {versionOptions.map((version) => (
+                    <option key={version} value={version}>
+                      {formatVersionLabel(version)}
+                    </option>
+                  ))}
+                </select>
               </label>
-              <label>
-                <span>달성률 최대</span>
-                <input
-                  type="number"
-                  value={achievementMax}
-                  min={0}
-                  max={101}
-                  step={0.0001}
-                  onChange={(event) => setAchievementMax(Number(event.target.value))}
-                />
-              </label>
-              <label>
-                <span>내부레벨 최소</span>
-                <input
-                  type="number"
-                  value={internalMin}
-                  min={1}
-                  max={15.5}
-                  step={0.1}
-                  onChange={(event) => setInternalMin(Number(event.target.value))}
-                />
-              </label>
-              <label>
-                <span>내부레벨 최대</span>
-                <input
-                  type="number"
-                  value={internalMax}
-                  min={1}
-                  max={15.5}
-                  step={0.1}
-                  onChange={(event) => setInternalMax(Number(event.target.value))}
-                />
-              </label>
-              <label>
-                <span>경과일 최소</span>
-                <input
-                  type="number"
-                  value={daysMin}
-                  min={0}
-                  max={5000}
-                  step={1}
-                  onChange={(event) => setDaysMin(Number(event.target.value))}
-                />
-              </label>
-              <label>
-                <span>경과일 최대</span>
-                <input
-                  type="number"
-                  value={daysMax}
-                  min={0}
-                  max={5000}
-                  step={1}
-                  onChange={(event) => setDaysMax(Number(event.target.value))}
-                />
-              </label>
+            </div>
+
+            <div className="filter-block">
+              <div className="filter-label">경과일</div>
+              <div className="range-pair">
+                <label>
+                  <input
+                    type="number"
+                    value={daysMin}
+                    min={0}
+                    max={5000}
+                    step={1}
+                    aria-label="경과일 최소"
+                    onChange={(event) => setDaysMin(Number(event.target.value))}
+                  />
+                </label>
+                <span className="range-separator">~</span>
+                <label>
+                  <input
+                    type="number"
+                    value={daysMax}
+                    min={0}
+                    max={5000}
+                    step={1}
+                    aria-label="경과일 최대"
+                    onChange={(event) => setDaysMax(Number(event.target.value))}
+                  />
+                </label>
+              </div>
             </div>
 
           </div>
@@ -356,7 +393,7 @@ export function ScoreExplorerSection({
                       </span>
                     </button>
                   </th>
-                  <th className="version-col">Version</th>
+                  <th className="version-col">버전</th>
                 </tr>
               </thead>
               <tbody>

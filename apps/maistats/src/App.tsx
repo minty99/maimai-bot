@@ -4,26 +4,39 @@ import {
   fetchExplorerPayload,
 } from './api';
 import {
-  AAA_OR_BELOW_RANKS,
   CHART_TYPES,
   DEFAULT_RECORD_COLLECTOR_URL,
   DEFAULT_SONG_INFO_URL,
   DIFFICULTIES,
-  FC_ORDER,
   PLAYLOG_FILTERS_STORAGE_KEY,
   PlaylogSortKey,
   RECORD_STORAGE_KEY,
-  RANK_FILTER_AAA_OR_BELOW_LABEL,
   SCORE_FILTERS_STORAGE_KEY,
-  SCORE_RANK_ORDER,
-  SCORE_RANK_ORDER_MAP,
   SONG_INFO_STORAGE_KEY,
   TABLE_LAYOUT_STORAGE_KEY,
   ScoreSortKey,
-  SYNC_ORDER,
   VERSION_ORDER_MAP,
 } from './app/constants';
-import { sortByOrder, toggleArrayValue } from './app/utils';
+import { sortByOrder } from './app/utils';
+import {
+  ALL_FILTER_PRESET_ID,
+  DEFAULT_SCORE_FILTERS,
+  DirectionalRangeSelectionState,
+  FC_FILTER_OPTIONS,
+  getPresetSelectionRange,
+  INTERNAL_LEVEL_CONTIGUOUS_PRESET_ORDER,
+  InternalLevelPresetId,
+  INTERNAL_LEVEL_PRESETS,
+  NA_FILTER_OPTION_ID,
+  resolvePresetSelectionFromRange,
+  SCORE_ACHIEVEMENT_PRESET_ORDER,
+  SCORE_ACHIEVEMENT_PRESETS,
+  ScoreAchievementPresetId,
+  SyncFilterOptionId,
+  FcFilterOptionId,
+  SYNC_FILTER_OPTIONS,
+  updateDirectionalRangeSelection,
+} from './app/scoreFilterPresets';
 import {
   coerceArray,
   coerceNumber,
@@ -43,7 +56,6 @@ import {
   buildFilteredPlaylogRows,
   buildFilteredScoreRows,
   computeFcOptions,
-  computeScoreRankOptions,
   computeSyncOptions,
 } from './app/filtering';
 import { PlaylogExplorerSection } from './components/PlaylogExplorerSection';
@@ -58,15 +70,12 @@ import { songIdentityKey } from './songIdentity';
 import type {
   ChartType,
   DifficultyCategory,
-  FcStatus,
   PlayRecordApiResponse,
   PlaylogRow,
   ScoreApiResponse,
   ScoreRow,
-  ScoreRank,
   SongInfoResponse,
   SongVersionResponse,
-  SyncStatus,
 } from './types';
 
 type AppPage = 'scores' | 'rating' | 'playlogs' | 'picker' | 'settings';
@@ -258,38 +267,51 @@ function App() {
     if (legacy.length === 1) {
       return legacy[0];
     }
-    return 'ALL';
+    return DEFAULT_SCORE_FILTERS.versionSelection;
   });
-  const [rankFilter, setRankFilter] = useState<ScoreRank[]>(
-    () => {
-      const values = coerceArray(savedScoreFilters?.rankFilter, SCORE_RANK_ORDER);
-      if (!values.some((value) => AAA_OR_BELOW_RANKS.includes(value))) {
-        return values;
-      }
-      return sortByOrder(Array.from(new Set([...values, ...AAA_OR_BELOW_RANKS])), SCORE_RANK_ORDER_MAP);
-    },
-  );
-  const [fcFilter, setFcFilter] = useState<FcStatus[]>(
-    () => coerceArray(savedScoreFilters?.fcFilter, FC_ORDER),
-  );
-  const [syncFilter, setSyncFilter] = useState<SyncStatus[]>(
-    () => coerceArray(savedScoreFilters?.syncFilter, SYNC_ORDER),
-  );
+  const [fcFilter, setFcFilter] = useState<FcFilterOptionId[]>(() => {
+    const values = coerceStringArray(savedScoreFilters?.fcFilter).filter((value): value is FcFilterOptionId =>
+      FC_FILTER_OPTIONS.includes(value as FcFilterOptionId),
+    );
+    return values.length > 0 ? values : [ALL_FILTER_PRESET_ID];
+  });
+  const [syncFilter, setSyncFilter] = useState<SyncFilterOptionId[]>(() => {
+    const values = coerceStringArray(savedScoreFilters?.syncFilter).filter((value): value is SyncFilterOptionId =>
+      SYNC_FILTER_OPTIONS.includes(value as SyncFilterOptionId),
+    );
+    return values.length > 0 ? values : [ALL_FILTER_PRESET_ID];
+  });
 
   const [achievementMin, setAchievementMin] = useState(() =>
-    coerceNumber(savedScoreFilters?.achievementMin, 0),
+    coerceNumber(savedScoreFilters?.achievementMin, DEFAULT_SCORE_FILTERS.achievementMin),
   );
   const [achievementMax, setAchievementMax] = useState(() =>
-    coerceNumber(savedScoreFilters?.achievementMax, 101),
+    coerceNumber(savedScoreFilters?.achievementMax, DEFAULT_SCORE_FILTERS.achievementMax),
   );
   const [internalMin, setInternalMin] = useState(() =>
-    coerceNumber(savedScoreFilters?.internalMin, 1),
+    coerceNumber(savedScoreFilters?.internalMin, DEFAULT_SCORE_FILTERS.internalMin),
   );
   const [internalMax, setInternalMax] = useState(() =>
-    coerceNumber(savedScoreFilters?.internalMax, 15.5),
+    coerceNumber(savedScoreFilters?.internalMax, DEFAULT_SCORE_FILTERS.internalMax),
   );
-  const [daysMin, setDaysMin] = useState(() => coerceNumber(savedScoreFilters?.daysMin, 0));
-  const [daysMax, setDaysMax] = useState(() => coerceNumber(savedScoreFilters?.daysMax, 2000));
+  const [daysMin, setDaysMin] = useState(() =>
+    coerceNumber(savedScoreFilters?.daysMin, DEFAULT_SCORE_FILTERS.daysMin),
+  );
+  const [daysMax, setDaysMax] = useState(() =>
+    coerceNumber(savedScoreFilters?.daysMax, DEFAULT_SCORE_FILTERS.daysMax),
+  );
+  const [internalLevelSelectionState, setInternalLevelSelectionState] = useState<
+    DirectionalRangeSelectionState<Exclude<InternalLevelPresetId, 'ALL'>> | null
+  >(null);
+  const [scoreAchievementSelectionState, setScoreAchievementSelectionState] = useState<
+    DirectionalRangeSelectionState<Exclude<ScoreAchievementPresetId, 'ALL'>> | null
+  >(null);
+  const [fcSelectionState, setFcSelectionState] = useState<
+    DirectionalRangeSelectionState<Exclude<FcFilterOptionId, 'ALL'>> | null
+  >(null);
+  const [syncSelectionState, setSyncSelectionState] = useState<
+    DirectionalRangeSelectionState<Exclude<SyncFilterOptionId, 'ALL'>> | null
+  >(null);
 
   const [scoreSortKey, setScoreSortKey] = useState<ScoreSortKey>('lastPlayed');
   const [scoreSortDesc, setScoreSortDesc] = useState(true);
@@ -470,7 +492,6 @@ function App() {
       chartFilter,
       difficultyFilter,
       versionSelection,
-      rankFilter,
       fcFilter,
       syncFilter,
       achievementMin,
@@ -491,7 +512,6 @@ function App() {
     fcFilter,
     internalMax,
     internalMin,
-    rankFilter,
     syncFilter,
     versionSelection,
   ]);
@@ -644,57 +664,144 @@ function App() {
     [playlogSortKey],
   );
 
-  const scoreRankOptions = useMemo(() => computeScoreRankOptions(scoreData), [scoreData]);
   const fcOptions = useMemo(() => computeFcOptions(scoreData), [scoreData]);
   const syncOptions = useMemo(() => computeSyncOptions(scoreData), [scoreData]);
-  const rankFilterOptions = useMemo(() => {
-    const next: string[] = [];
-    let groupedAdded = false;
-    for (const rank of scoreRankOptions) {
-      if (AAA_OR_BELOW_RANKS.includes(rank)) {
-        if (!groupedAdded) {
-          next.push(RANK_FILTER_AAA_OR_BELOW_LABEL);
-          groupedAdded = true;
-        }
-        continue;
-      }
-      next.push(rank);
-    }
-    return next;
-  }, [scoreRankOptions]);
+  const selectedInternalLevelPresets = useMemo(
+    () => resolvePresetSelectionFromRange(INTERNAL_LEVEL_PRESETS, internalMin, internalMax),
+    [internalMax, internalMin],
+  );
+  const selectedScoreRankPresets = useMemo(
+    () => resolvePresetSelectionFromRange(SCORE_ACHIEVEMENT_PRESETS, achievementMin, achievementMax),
+    [achievementMax, achievementMin],
+  );
+  const filteredFcOptions = useMemo(() => {
+    const available = new Set(fcOptions);
+    return FC_FILTER_OPTIONS.filter((value) => value === ALL_FILTER_PRESET_ID || value === NA_FILTER_OPTION_ID || available.has(value));
+  }, [fcOptions]);
+  const filteredSyncOptions = useMemo(() => {
+    const available = new Set(syncOptions);
+    return SYNC_FILTER_OPTIONS.filter((value) => value === ALL_FILTER_PRESET_ID || value === NA_FILTER_OPTION_ID || available.has(value));
+  }, [syncOptions]);
 
-  const selectedRankFilterOptions = useMemo(() => {
-    const next: string[] = [];
-    const hasGroupedOption = rankFilterOptions.includes(RANK_FILTER_AAA_OR_BELOW_LABEL);
-    if (hasGroupedOption && AAA_OR_BELOW_RANKS.every((rank) => rankFilter.includes(rank))) {
-      next.push(RANK_FILTER_AAA_OR_BELOW_LABEL);
-    }
-    for (const rank of scoreRankOptions) {
-      if (!AAA_OR_BELOW_RANKS.includes(rank) && rankFilter.includes(rank)) {
-        next.push(rank);
-      }
-    }
-    return next;
-  }, [rankFilter, rankFilterOptions, scoreRankOptions]);
+  const handleInternalMinChange = useCallback((value: number) => {
+    setInternalLevelSelectionState(null);
+    setInternalMin(value);
+  }, []);
 
-  const handleRankFilterToggle = useCallback((value: string) => {
-    if (value === RANK_FILTER_AAA_OR_BELOW_LABEL) {
-      setRankFilter((current) => {
-        if (AAA_OR_BELOW_RANKS.every((rank) => current.includes(rank))) {
-          return current.filter((rank) => !AAA_OR_BELOW_RANKS.includes(rank));
-        }
-        return sortByOrder(
-          Array.from(new Set([...current, ...AAA_OR_BELOW_RANKS])),
-          SCORE_RANK_ORDER_MAP,
-        );
-      });
+  const handleInternalMaxChange = useCallback((value: number) => {
+    setInternalLevelSelectionState(null);
+    setInternalMax(value);
+  }, []);
+
+  const handleAchievementMinChange = useCallback((value: number) => {
+    setScoreAchievementSelectionState(null);
+    setAchievementMin(value);
+  }, []);
+
+  const handleAchievementMaxChange = useCallback((value: number) => {
+    setScoreAchievementSelectionState(null);
+    setAchievementMax(value);
+  }, []);
+
+  const handleInternalLevelPresetToggle = useCallback((value: string) => {
+    const next = updateDirectionalRangeSelection({
+      order: INTERNAL_LEVEL_CONTIGUOUS_PRESET_ORDER,
+      currentSelection: selectedInternalLevelPresets,
+      currentState: internalLevelSelectionState,
+      clicked: value as InternalLevelPresetId,
+    });
+    const range = getPresetSelectionRange(
+      INTERNAL_LEVEL_PRESETS,
+      next.selection as InternalLevelPresetId[],
+    );
+    if (!range) {
       return;
     }
 
-    if (!SCORE_RANK_ORDER.includes(value as ScoreRank)) {
+    setInternalLevelSelectionState(
+      next.state as DirectionalRangeSelectionState<Exclude<InternalLevelPresetId, 'ALL'>> | null,
+    );
+    setInternalMin(range.min);
+    setInternalMax(range.max);
+  }, [internalLevelSelectionState, selectedInternalLevelPresets]);
+
+  const handleScoreRankPresetToggle = useCallback((value: string) => {
+    const next = updateDirectionalRangeSelection({
+      order: SCORE_ACHIEVEMENT_PRESET_ORDER,
+      currentSelection: selectedScoreRankPresets,
+      currentState: scoreAchievementSelectionState,
+      clicked: value as ScoreAchievementPresetId,
+    });
+    const range = getPresetSelectionRange(
+      SCORE_ACHIEVEMENT_PRESETS,
+      next.selection as ScoreAchievementPresetId[],
+    );
+    if (!range) {
       return;
     }
-    setRankFilter((current) => toggleArrayValue(current, value as ScoreRank));
+
+    setScoreAchievementSelectionState(
+      next.state as DirectionalRangeSelectionState<Exclude<ScoreAchievementPresetId, 'ALL'>> | null,
+    );
+    setAchievementMin(range.min);
+    setAchievementMax(range.max);
+  }, [scoreAchievementSelectionState, selectedScoreRankPresets]);
+
+  const handleFcFilterToggle = useCallback((value: string) => {
+    const next = updateDirectionalRangeSelection({
+      order: filteredFcOptions.filter((item) => item !== ALL_FILTER_PRESET_ID) as Exclude<FcFilterOptionId, 'ALL'>[],
+      currentSelection: fcFilter,
+      currentState: fcSelectionState,
+      clicked: value as FcFilterOptionId,
+    });
+    const selectableOptions = filteredFcOptions.filter((item) => item !== ALL_FILTER_PRESET_ID);
+    const nextSelection = next.selection as FcFilterOptionId[];
+    const shouldCollapseToAll = selectableOptions.every((item) => nextSelection.includes(item));
+
+    setFcSelectionState(
+      shouldCollapseToAll
+        ? null
+        : next.state as DirectionalRangeSelectionState<Exclude<FcFilterOptionId, 'ALL'>> | null,
+    );
+    setFcFilter(shouldCollapseToAll ? [ALL_FILTER_PRESET_ID] : nextSelection);
+  }, [fcFilter, fcSelectionState, filteredFcOptions]);
+
+  const handleSyncFilterToggle = useCallback((value: string) => {
+    const next = updateDirectionalRangeSelection({
+      order: filteredSyncOptions.filter((item) => item !== ALL_FILTER_PRESET_ID) as Exclude<SyncFilterOptionId, 'ALL'>[],
+      currentSelection: syncFilter,
+      currentState: syncSelectionState,
+      clicked: value as SyncFilterOptionId,
+    });
+    const selectableOptions = filteredSyncOptions.filter((item) => item !== ALL_FILTER_PRESET_ID);
+    const nextSelection = next.selection as SyncFilterOptionId[];
+    const shouldCollapseToAll = selectableOptions.every((item) => nextSelection.includes(item));
+
+    setSyncSelectionState(
+      shouldCollapseToAll
+        ? null
+        : next.state as DirectionalRangeSelectionState<Exclude<SyncFilterOptionId, 'ALL'>> | null,
+    );
+    setSyncFilter(shouldCollapseToAll ? [ALL_FILTER_PRESET_ID] : nextSelection);
+  }, [filteredSyncOptions, syncFilter, syncSelectionState]);
+
+  const handleResetScoreFilters = useCallback(() => {
+    setQuery('');
+    setChartFilter([...CHART_TYPES]);
+    setDifficultyFilter([...DIFFICULTIES]);
+    setVersionSelection(DEFAULT_SCORE_FILTERS.versionSelection);
+    setFcFilter([ALL_FILTER_PRESET_ID]);
+    setSyncFilter([ALL_FILTER_PRESET_ID]);
+    setAchievementMin(DEFAULT_SCORE_FILTERS.achievementMin);
+    setAchievementMax(DEFAULT_SCORE_FILTERS.achievementMax);
+    setInternalMin(DEFAULT_SCORE_FILTERS.internalMin);
+    setInternalMax(DEFAULT_SCORE_FILTERS.internalMax);
+    setDaysMin(DEFAULT_SCORE_FILTERS.daysMin);
+    setDaysMax(DEFAULT_SCORE_FILTERS.daysMax);
+    setInternalLevelSelectionState(null);
+    setScoreAchievementSelectionState(null);
+    setFcSelectionState(null);
+    setSyncSelectionState(null);
   }, []);
 
   const filteredScoreRows = useMemo(
@@ -706,7 +813,6 @@ function App() {
         difficultyFilter,
         versionSelection,
         versionOptions,
-        rankFilter,
         fcFilter,
         syncFilter,
         achievementMin,
@@ -729,7 +835,6 @@ function App() {
       internalMax,
       internalMin,
       query,
-      rankFilter,
       scoreData,
       scoreSortDesc,
       scoreSortKey,
@@ -994,23 +1099,26 @@ function App() {
               versionOptions={versionOptions}
               versionSelection={versionSelection}
               setVersionSelection={setVersionSelection}
-              scoreRankOptions={rankFilterOptions}
-              rankFilter={selectedRankFilterOptions}
-              onToggleRankFilter={handleRankFilterToggle}
-              fcOptions={fcOptions}
+              internalLevelPresetOptions={INTERNAL_LEVEL_PRESETS.map((preset) => preset.label)}
+              selectedInternalLevelPresets={selectedInternalLevelPresets}
+              onToggleInternalLevelPreset={handleInternalLevelPresetToggle}
+              scoreRankOptions={SCORE_ACHIEVEMENT_PRESETS.map((preset) => preset.label)}
+              selectedScoreRankPresets={selectedScoreRankPresets}
+              onToggleScoreRankPreset={handleScoreRankPresetToggle}
+              fcOptions={filteredFcOptions}
               fcFilter={fcFilter}
-              setFcFilter={setFcFilter}
-              syncOptions={syncOptions}
+              onToggleFcFilter={handleFcFilterToggle}
+              syncOptions={filteredSyncOptions}
               syncFilter={syncFilter}
-              setSyncFilter={setSyncFilter}
+              onToggleSyncFilter={handleSyncFilterToggle}
               achievementMin={achievementMin}
-              setAchievementMin={setAchievementMin}
+              onChangeAchievementMin={handleAchievementMinChange}
               achievementMax={achievementMax}
-              setAchievementMax={setAchievementMax}
+              onChangeAchievementMax={handleAchievementMaxChange}
               internalMin={internalMin}
-              setInternalMin={setInternalMin}
+              onChangeInternalMin={handleInternalMinChange}
               internalMax={internalMax}
-              setInternalMax={setInternalMax}
+              onChangeInternalMax={handleInternalMaxChange}
               daysMin={daysMin}
               setDaysMin={setDaysMin}
               daysMax={daysMax}
@@ -1022,6 +1130,7 @@ function App() {
               scoreSortKey={scoreSortKey}
               scoreSortDesc={scoreSortDesc}
               onSortBy={handleScoreSortBy}
+              onResetFilters={handleResetScoreFilters}
             />
           </>
         ) : activePage === 'playlogs' ? (
