@@ -390,7 +390,7 @@ impl RecordCollectorClient {
                     }
                     return Err(ApiError::from_http_text(status, &body).into());
                 }
-                Err(e) if attempt < 2 => {
+                Err(_e) if attempt < 2 => {
                     sleep(Duration::from_millis(100 * 2_u64.pow(attempt))).await;
                     continue;
                 }
