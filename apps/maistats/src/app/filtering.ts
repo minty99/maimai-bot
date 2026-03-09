@@ -100,7 +100,7 @@ export function buildFilteredScoreRows({
     versionOptions.filter((version) => !latestSet.has(version)),
   );
 
-  const rows = scoreData.filter((row) => {
+  const isIncluded = (row: ScoreRow): boolean => {
     const targetText = `${row.title} ${aliasValues(row.aliases, "en").join(" ")} ${aliasValues(row.aliases, "ko").join(" ")} ${row.version ?? ""} ${row.level ?? ""}`;
     if (!includesText(targetText, query)) {
       return false;
@@ -180,7 +180,9 @@ export function buildFilteredScoreRows({
     }
 
     return true;
-  });
+  };
+
+  const rows = scoreData.filter(isIncluded);
 
   rows.sort((left, right) => {
     let result = 0;
