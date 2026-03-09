@@ -282,7 +282,7 @@ export function buildScoreRows(
   };
 
   for (const songInfo of songInfoByIdentity.values()) {
-    for (const sheet of listPreferredSheets(songInfo)) {
+    for (const sheet of listPreferredSheets(songInfo).filter((s) => s.region.intl)) {
       includedKeys.add(
         chartKey(
           songInfo.title,
