@@ -12,6 +12,15 @@ fn normalize_ascii_token(value: &str) -> String {
         .collect()
 }
 
+fn normalize_ascii_token_with_plus(value: &str) -> String {
+    value
+        .trim()
+        .chars()
+        .filter(|ch| ch.is_ascii_alphanumeric() || *ch == '+')
+        .flat_map(char::to_lowercase)
+        .collect()
+}
+
 fn trim_file_stem(value: &str) -> &str {
     let file = value.trim().rsplit('/').next().unwrap_or(value.trim());
     let file = file.split('?').next().unwrap_or(file);
@@ -57,10 +66,10 @@ fn parse_difficulty_category(value: &str) -> Option<DifficultyCategory> {
         return None;
     }
 
-    if let Ok(index) = trimmed.parse::<u8>() {
-        if let Some(diff_category) = DifficultyCategory::from_index(index) {
-            return Some(diff_category);
-        }
+    if let Ok(index) = trimmed.parse::<u8>()
+        && let Some(diff_category) = DifficultyCategory::from_index(index)
+    {
+        return Some(diff_category);
     }
 
     match normalize_ascii_token(trimmed).as_str() {
@@ -84,10 +93,10 @@ fn parse_maimai_version(value: &str) -> Option<MaimaiVersion> {
         return None;
     }
 
-    if let Ok(index) = trimmed.parse::<u8>() {
-        if let Some(version) = MaimaiVersion::from_index(index) {
-            return Some(version);
-        }
+    if let Ok(index) = trimmed.parse::<u8>()
+        && let Some(version) = MaimaiVersion::from_index(index)
+    {
+        return Some(version);
     }
 
     if let Some(version) = MaimaiVersion::iter().find(|version| version.as_str() == trimmed) {
@@ -126,13 +135,14 @@ fn parse_maimai_version(value: &str) -> Option<MaimaiVersion> {
 }
 
 fn parse_score_rank(value: &str) -> Option<ScoreRank> {
-    let normalized = normalize_ascii_token(trim_file_stem(value).trim_start_matches("music_icon_"));
+    let normalized =
+        normalize_ascii_token_with_plus(trim_file_stem(value).trim_start_matches("music_icon_"));
     match normalized.as_str() {
-        "sssp" | "sssplus" => Some(ScoreRank::SssPlus),
+        "sss+" | "sssp" | "sssplus" => Some(ScoreRank::SssPlus),
+        "ss+" | "ssp" | "ssplus" => Some(ScoreRank::SsPlus),
+        "s+" | "sp" | "splus" => Some(ScoreRank::SPlus),
         "sss" => Some(ScoreRank::Sss),
-        "ssp" | "ssplus" => Some(ScoreRank::SsPlus),
         "ss" => Some(ScoreRank::Ss),
-        "sp" | "splus" => Some(ScoreRank::SPlus),
         "s" => Some(ScoreRank::S),
         "aaa" => Some(ScoreRank::Aaa),
         "aa" => Some(ScoreRank::Aa),
@@ -147,30 +157,30 @@ fn parse_score_rank(value: &str) -> Option<ScoreRank> {
 }
 
 fn parse_fc_status(value: &str) -> Option<FcStatus> {
-    let normalized = normalize_ascii_token(
+    let normalized = normalize_ascii_token_with_plus(
         trim_file_stem(value)
             .trim_start_matches("music_icon_")
             .trim_start_matches("fc_"),
     );
     match normalized.as_str() {
-        "app" | "applus" => Some(FcStatus::ApPlus),
+        "ap+" | "app" | "applus" => Some(FcStatus::ApPlus),
         "ap" => Some(FcStatus::Ap),
-        "fcp" | "fcplus" => Some(FcStatus::FcPlus),
+        "fc+" | "fcp" | "fcplus" => Some(FcStatus::FcPlus),
         "fc" => Some(FcStatus::Fc),
         _ => None,
     }
 }
 
 fn parse_sync_status(value: &str) -> Option<SyncStatus> {
-    let normalized = normalize_ascii_token(
+    let normalized = normalize_ascii_token_with_plus(
         trim_file_stem(value)
             .trim_start_matches("music_icon_")
             .trim_start_matches("sync_"),
     );
     match normalized.as_str() {
-        "fdxp" | "fdxplus" => Some(SyncStatus::FdxPlus),
+        "fdx+" | "fdxp" | "fdxplus" => Some(SyncStatus::FdxPlus),
+        "fs+" | "fsp" | "fsplus" => Some(SyncStatus::FsPlus),
         "fdx" => Some(SyncStatus::Fdx),
-        "fsp" | "fsplus" => Some(SyncStatus::FsPlus),
         "fs" => Some(SyncStatus::Fs),
         "sync" => Some(SyncStatus::Sync),
         _ => None,
@@ -814,7 +824,12 @@ mod tests {
             "sssplus".parse::<ScoreRank>().ok(),
             Some(ScoreRank::SssPlus)
         );
+        assert_eq!("SSS+".parse::<ScoreRank>().ok(), Some(ScoreRank::SssPlus));
+        assert_eq!("SS+".parse::<ScoreRank>().ok(), Some(ScoreRank::SsPlus));
+        assert_eq!("S+".parse::<ScoreRank>().ok(), Some(ScoreRank::SPlus));
         assert_eq!("fcplus".parse::<FcStatus>().ok(), Some(FcStatus::FcPlus));
+        assert_eq!("FC+".parse::<FcStatus>().ok(), Some(FcStatus::FcPlus));
+        assert_eq!("AP+".parse::<FcStatus>().ok(), Some(FcStatus::ApPlus));
         assert_eq!(
             "fc_app.png".parse::<FcStatus>().ok(),
             Some(FcStatus::ApPlus)
@@ -824,5 +839,7 @@ mod tests {
             Some(SyncStatus::FdxPlus)
         );
         assert_eq!("fsp".parse::<SyncStatus>().ok(), Some(SyncStatus::FsPlus));
+        assert_eq!("FS+".parse::<SyncStatus>().ok(), Some(SyncStatus::FsPlus));
+        assert_eq!("FDX+".parse::<SyncStatus>().ok(), Some(SyncStatus::FdxPlus));
     }
 }
