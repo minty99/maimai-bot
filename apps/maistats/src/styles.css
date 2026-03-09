@@ -487,13 +487,15 @@ select {
 }
 
 .chart-type-chip.chart-type-std {
-  border-color: color-mix(in srgb, var(--chart-std) 28%, white);
-  background: color-mix(in srgb, var(--chart-std) 10%, white);
+  border-color: #cbd5e1;
+  background: #f1f5f9;
+  color: #94a3b8;
 }
 
 .chart-type-chip.chart-type-dx {
-  border-color: color-mix(in srgb, var(--chart-dx) 28%, white);
-  background: color-mix(in srgb, var(--chart-dx) 10%, white);
+  border-color: #cbd5e1;
+  background: #f1f5f9;
+  color: #94a3b8;
 }
 
 .chart-type-chip.active {
@@ -503,36 +505,43 @@ select {
 .chart-type-chip.active.chart-type-std {
   border-color: var(--chart-std);
   background: color-mix(in srgb, var(--chart-std) 18%, white);
+  color: var(--chart-std);
 }
 
 .chart-type-chip.active.chart-type-dx {
   border-color: var(--chart-dx);
   background: color-mix(in srgb, var(--chart-dx) 18%, white);
+  color: var(--chart-dx);
 }
 
 .difficulty-chip.diff-basic {
-  border-color: color-mix(in srgb, var(--diff-basic) 30%, white);
-  background: color-mix(in srgb, var(--diff-basic) 10%, white);
+  border-color: #cbd5e1;
+  background: #f1f5f9;
+  color: #94a3b8;
 }
 
 .difficulty-chip.diff-advanced {
-  border-color: color-mix(in srgb, var(--diff-advanced) 34%, white);
-  background: color-mix(in srgb, var(--diff-advanced) 14%, white);
+  border-color: #cbd5e1;
+  background: #f1f5f9;
+  color: #94a3b8;
 }
 
 .difficulty-chip.diff-expert {
-  border-color: color-mix(in srgb, var(--diff-expert) 30%, white);
-  background: color-mix(in srgb, var(--diff-expert) 10%, white);
+  border-color: #cbd5e1;
+  background: #f1f5f9;
+  color: #94a3b8;
 }
 
 .difficulty-chip.diff-master {
-  border-color: color-mix(in srgb, var(--diff-master) 30%, white);
-  background: color-mix(in srgb, var(--diff-master) 10%, white);
+  border-color: #cbd5e1;
+  background: #f1f5f9;
+  color: #94a3b8;
 }
 
 .difficulty-chip.diff-remaster {
-  border-color: color-mix(in srgb, var(--diff-remaster) 34%, white);
-  background: color-mix(in srgb, var(--diff-remaster) 14%, white);
+  border-color: #cbd5e1;
+  background: #f1f5f9;
+  color: #94a3b8;
 }
 
 .difficulty-chip.active {
@@ -542,26 +551,31 @@ select {
 .difficulty-chip.active.diff-basic {
   border-color: var(--diff-basic);
   background: color-mix(in srgb, var(--diff-basic) 18%, white);
+  color: var(--diff-basic);
 }
 
 .difficulty-chip.active.diff-advanced {
   border-color: var(--diff-advanced);
   background: color-mix(in srgb, var(--diff-advanced) 22%, white);
+  color: var(--diff-advanced);
 }
 
 .difficulty-chip.active.diff-expert {
   border-color: var(--diff-expert);
   background: color-mix(in srgb, var(--diff-expert) 18%, white);
+  color: var(--diff-expert);
 }
 
 .difficulty-chip.active.diff-master {
   border-color: var(--diff-master);
   background: color-mix(in srgb, var(--diff-master) 18%, white);
+  color: var(--diff-master);
 }
 
 .difficulty-chip.active.diff-remaster {
   border-color: var(--diff-remaster);
   background: color-mix(in srgb, var(--diff-remaster) 22%, white);
+  color: var(--diff-remaster);
 }
 
 .level-badge {
@@ -654,6 +668,27 @@ select:focus-visible {
   gap: 10px;
 }
 
+.range-pair {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  align-items: center;
+  gap: 8px;
+}
+
+.range-pair label {
+  display: block;
+}
+
+.range-pair input {
+  width: 100%;
+}
+
+.range-separator {
+  color: var(--muted);
+  font-weight: 700;
+  text-align: center;
+}
+
 .range-grid.compact {
   grid-template-columns: repeat(5, minmax(140px, 1fr));
 }
@@ -688,6 +723,11 @@ select:focus-visible {
   gap: 10px;
 }
 
+.filter-panel .panel-heading.compact {
+  align-items: center;
+  justify-content: space-between;
+}
+
 .filter-panel .filter-grid {
   gap: 10px;
 }
@@ -702,6 +742,11 @@ select:focus-visible {
 
 .filter-panel .chip {
   border-radius: 2px;
+}
+
+.filter-reset-button {
+  padding: 0 10px;
+  white-space: nowrap;
 }
 
 .filter-panel > .filter-grid > label {
@@ -741,7 +786,6 @@ select:focus-visible {
 .filter-panel .toggle-grid input {
   margin-top: 2px;
 }
-
 
 .rating-stat-grid {
   display: grid;

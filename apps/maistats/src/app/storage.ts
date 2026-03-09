@@ -1,4 +1,4 @@
-import type { ChartType, DifficultyCategory, FcStatus, ScoreRank, SyncStatus } from '../types';
+import type { ChartType, DifficultyCategory } from '../types';
 
 export interface StoredScoreFilters {
   chartFilter?: ChartType[];
@@ -6,9 +6,9 @@ export interface StoredScoreFilters {
   versionSelection?: string;
   // legacy multi-select key for backward compatibility
   versionFilter?: string[];
-  rankFilter?: ScoreRank[];
-  fcFilter?: FcStatus[];
-  syncFilter?: SyncStatus[];
+  rankFilter?: string[];
+  fcFilter?: string[];
+  syncFilter?: string[];
   achievementMin?: number;
   achievementMax?: number;
   internalMin?: number;

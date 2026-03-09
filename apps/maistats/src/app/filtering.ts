@@ -1,24 +1,58 @@
-import { FC_ORDER_MAP, SCORE_RANK_ORDER_MAP, ScoreSortKey, SYNC_ORDER_MAP, PlaylogSortKey } from './constants';
-import { aliasValues, compareNullableNumber, includesText, sortByOrder } from './utils';
-import type { FcStatus, PlaylogRow, ScoreRank, ScoreRow, SyncStatus } from '../types';
+import {
+  FC_ORDER_MAP,
+  SCORE_RANK_ORDER_MAP,
+  ScoreSortKey,
+  SYNC_ORDER_MAP,
+  PlaylogSortKey,
+} from "./constants";
+import {
+  aliasValues,
+  compareNullableNumber,
+  includesText,
+  sortByOrder,
+} from "./utils";
+
+import {
+  ALL_FILTER_PRESET_ID,
+  NA_FILTER_OPTION_ID,
+} from "./scoreFilterPresets";
+import type {
+  FcStatus,
+  PlaylogRow,
+  ScoreRank,
+  ScoreRow,
+  SyncStatus,
+} from "../types";
 
 export function computeScoreRankOptions(scoreData: ScoreRow[]): ScoreRank[] {
   const values = Array.from(
-    new Set(scoreData.map((row) => row.rank).filter((rank): rank is ScoreRank => rank !== null)),
+    new Set(
+      scoreData
+        .map((row) => row.rank)
+        .filter((rank): rank is ScoreRank => rank !== null),
+    ),
   );
   return sortByOrder(values, SCORE_RANK_ORDER_MAP);
 }
 
 export function computeFcOptions(scoreData: ScoreRow[]): FcStatus[] {
   const values = Array.from(
-    new Set(scoreData.map((row) => row.fc).filter((status): status is FcStatus => status !== null)),
+    new Set(
+      scoreData
+        .map((row) => row.fc)
+        .filter((status): status is FcStatus => status !== null),
+    ),
   );
   return sortByOrder(values, FC_ORDER_MAP);
 }
 
 export function computeSyncOptions(scoreData: ScoreRow[]): SyncStatus[] {
   const values = Array.from(
-    new Set(scoreData.map((row) => row.sync).filter((status): status is SyncStatus => status !== null)),
+    new Set(
+      scoreData
+        .map((row) => row.sync)
+        .filter((status): status is SyncStatus => status !== null),
+    ),
   );
   return sortByOrder(values, SYNC_ORDER_MAP);
 }
@@ -26,13 +60,12 @@ export function computeSyncOptions(scoreData: ScoreRow[]): SyncStatus[] {
 interface BuildFilteredScoreRowsParams {
   scoreData: ScoreRow[];
   query: string;
-  chartFilter: ScoreRow['chartType'][];
-  difficultyFilter: ScoreRow['difficulty'][];
+  chartFilter: ScoreRow["chartType"][];
+  difficultyFilter: ScoreRow["difficulty"][];
   versionSelection: string;
   versionOptions: string[];
-  rankFilter: ScoreRank[];
-  fcFilter: FcStatus[];
-  syncFilter: SyncStatus[];
+  fcFilter: string[];
+  syncFilter: string[];
   achievementMin: number;
   achievementMax: number;
   internalMin: number;
@@ -50,7 +83,6 @@ export function buildFilteredScoreRows({
   difficultyFilter,
   versionSelection,
   versionOptions,
-  rankFilter,
   fcFilter,
   syncFilter,
   achievementMin,
@@ -64,10 +96,12 @@ export function buildFilteredScoreRows({
 }: BuildFilteredScoreRowsParams): ScoreRow[] {
   const latestVersions = versionOptions.slice(-2);
   const latestSet = new Set(latestVersions);
-  const oldSet = new Set(versionOptions.filter((version) => !latestSet.has(version)));
+  const oldSet = new Set(
+    versionOptions.filter((version) => !latestSet.has(version)),
+  );
 
   const rows = scoreData.filter((row) => {
-    const targetText = `${row.title} ${aliasValues(row.aliases, 'en').join(' ')} ${aliasValues(row.aliases, 'ko').join(' ')} ${row.version ?? ''} ${row.level ?? ''}`;
+    const targetText = `${row.title} ${aliasValues(row.aliases, "en").join(" ")} ${aliasValues(row.aliases, "ko").join(" ")} ${row.version ?? ""} ${row.level ?? ""}`;
     if (!includesText(targetText, query)) {
       return false;
     }
@@ -80,38 +114,61 @@ export function buildFilteredScoreRows({
       return false;
     }
 
-    if (versionSelection === 'NEW') {
+    if (versionSelection === "NEW") {
       if (!row.version || !latestSet.has(row.version)) {
         return false;
       }
-    } else if (versionSelection === 'OLD') {
+    } else if (versionSelection === "OLD") {
       if (!row.version || !oldSet.has(row.version)) {
         return false;
       }
-    } else if (versionSelection !== 'ALL') {
+    } else if (versionSelection !== "ALL") {
       if (!row.version || row.version !== versionSelection) {
         return false;
       }
     }
 
-    if (rankFilter.length > 0 && (!row.rank || !rankFilter.includes(row.rank))) {
-      return false;
+    if (fcFilter.length > 0 && !fcFilter.includes(ALL_FILTER_PRESET_ID)) {
+      const includeNull = fcFilter.includes(NA_FILTER_OPTION_ID);
+      const selectedStatuses = new Set(
+        fcFilter.filter((value) => value !== NA_FILTER_OPTION_ID),
+      );
+      if (row.fc === null) {
+        if (!includeNull) {
+          return false;
+        }
+      } else if (!selectedStatuses.has(row.fc)) {
+        return false;
+      }
     }
 
-    if (fcFilter.length > 0 && (!row.fc || !fcFilter.includes(row.fc))) {
-      return false;
-    }
-
-    if (syncFilter.length > 0 && (!row.sync || !syncFilter.includes(row.sync))) {
-      return false;
+    if (syncFilter.length > 0 && !syncFilter.includes(ALL_FILTER_PRESET_ID)) {
+      const includeNull = syncFilter.includes(NA_FILTER_OPTION_ID);
+      const selectedStatuses = new Set(
+        syncFilter.filter((value) => value !== NA_FILTER_OPTION_ID),
+      );
+      if (row.sync === null) {
+        if (!includeNull) {
+          return false;
+        }
+      } else if (!selectedStatuses.has(row.sync)) {
+        return false;
+      }
     }
 
     const achievementPercent = row.achievementPercent ?? 0;
-    if (achievementPercent < achievementMin || achievementPercent > achievementMax) {
+    if (
+      achievementPercent < achievementMin ||
+      achievementPercent > achievementMax
+    ) {
       return false;
     }
 
-    if (row.internalLevel === null || row.internalLevel < internalMin || row.internalLevel > internalMax) {
+    if (
+      row.internalLevel === null ||
+      row.internalLevel < internalMin ||
+      row.internalLevel > internalMax
+    ) {
       return false;
     }
 
@@ -128,26 +185,32 @@ export function buildFilteredScoreRows({
   rows.sort((left, right) => {
     let result = 0;
     switch (scoreSortKey) {
-      case 'title':
-        result = left.title.localeCompare(right.title, 'ko');
+      case "title":
+        result = left.title.localeCompare(right.title, "ko");
         break;
-      case 'achievement':
-        result = compareNullableNumber(left.achievementPercent, right.achievementPercent);
+      case "achievement":
+        result = compareNullableNumber(
+          left.achievementPercent,
+          right.achievementPercent,
+        );
         break;
-      case 'rating':
+      case "rating":
         result = compareNullableNumber(left.ratingPoints, right.ratingPoints);
         break;
-      case 'internal':
+      case "internal":
         result = compareNullableNumber(left.internalLevel, right.internalLevel);
         break;
-      case 'dxRatio':
+      case "dxRatio":
         result = compareNullableNumber(left.dxRatio, right.dxRatio);
         break;
-      case 'playCount':
+      case "playCount":
         result = compareNullableNumber(left.playCount, right.playCount);
         break;
-      case 'lastPlayed':
-        result = compareNullableNumber(left.latestPlayedAtUnix, right.latestPlayedAtUnix);
+      case "lastPlayed":
+        result = compareNullableNumber(
+          left.latestPlayedAtUnix,
+          right.latestPlayedAtUnix,
+        );
         break;
     }
 
@@ -160,8 +223,8 @@ export function buildFilteredScoreRows({
 interface BuildFilteredPlaylogRowsParams {
   playlogData: PlaylogRow[];
   playlogQuery: string;
-  playlogChartFilter: PlaylogRow['chartType'][];
-  playlogDifficultyFilter: Array<NonNullable<PlaylogRow['difficulty']>>;
+  playlogChartFilter: PlaylogRow["chartType"][];
+  playlogDifficultyFilter: Array<NonNullable<PlaylogRow["difficulty"]>>;
   playlogAchievementMin: number;
   playlogAchievementMax: number;
   playlogSortKey: PlaylogSortKey;
@@ -186,14 +249,15 @@ export function buildFilteredPlaylogRows({
     if (
       playlogDayStartUnix !== null &&
       playlogDayEndUnix !== null &&
-      (row.playedAtUnix < playlogDayStartUnix || row.playedAtUnix >= playlogDayEndUnix)
+      (row.playedAtUnix < playlogDayStartUnix ||
+        row.playedAtUnix >= playlogDayEndUnix)
     ) {
       return false;
     }
 
     if (
       !includesText(
-        `${row.title} ${aliasValues(row.aliases, 'en').join(' ')} ${aliasValues(row.aliases, 'ko').join(' ')} ${row.playedAtLabel ?? ''}`,
+        `${row.title} ${aliasValues(row.aliases, "en").join(" ")} ${aliasValues(row.aliases, "ko").join(" ")} ${row.playedAtLabel ?? ""}`,
         playlogQuery,
       )
     ) {
@@ -204,13 +268,17 @@ export function buildFilteredPlaylogRows({
       return false;
     }
 
-    if (row.difficulty !== null && !playlogDifficultyFilter.includes(row.difficulty)) {
+    if (
+      row.difficulty !== null &&
+      !playlogDifficultyFilter.includes(row.difficulty)
+    ) {
       return false;
     }
 
     if (
       row.achievementPercent !== null &&
-      (row.achievementPercent < playlogAchievementMin || row.achievementPercent > playlogAchievementMax)
+      (row.achievementPercent < playlogAchievementMin ||
+        row.achievementPercent > playlogAchievementMax)
     ) {
       return false;
     }
@@ -221,23 +289,26 @@ export function buildFilteredPlaylogRows({
   rows.sort((left, right) => {
     let result = 0;
     switch (playlogSortKey) {
-      case 'playedAt':
+      case "playedAt":
         result = left.playedAtUnix - right.playedAtUnix;
         break;
-      case 'achievement':
-        result = compareNullableNumber(left.achievementPercent, right.achievementPercent);
+      case "achievement":
+        result = compareNullableNumber(
+          left.achievementPercent,
+          right.achievementPercent,
+        );
         break;
-      case 'rating':
+      case "rating":
         result = compareNullableNumber(left.ratingPoints, right.ratingPoints);
         break;
-      case 'dxRatio':
+      case "dxRatio":
         result = compareNullableNumber(left.dxRatio, right.dxRatio);
         break;
-      case 'playCount':
+      case "playCount":
         result = compareNullableNumber(left.creditId, right.creditId);
         break;
-      case 'title':
-        result = left.title.localeCompare(right.title, 'ko');
+      case "title":
+        result = left.title.localeCompare(right.title, "ko");
         break;
     }
 

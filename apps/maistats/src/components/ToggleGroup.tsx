@@ -8,6 +8,7 @@ interface ToggleGroupProps<T extends string> {
   formatLabel?: (value: T) => string;
   renderLabel?: (value: T) => ReactNode;
   optionClassName?: (value: T) => string | undefined;
+  hideLabel?: boolean;
 }
 
 export function ToggleGroup<T extends string>({
@@ -18,10 +19,11 @@ export function ToggleGroup<T extends string>({
   formatLabel,
   renderLabel,
   optionClassName,
+  hideLabel,
 }: ToggleGroupProps<T>) {
   return (
     <div className="filter-block">
-      <div className="filter-label">{label}</div>
+      {hideLabel ? null : <div className="filter-label">{label}</div>}
       <div className="chip-row">
         {options.map((option) => (
           <button
