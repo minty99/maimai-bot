@@ -12,13 +12,15 @@ import type { ScoreSortKey } from '../app/constants';
 import {
   formatVersionLabel,
   formatNumber,
-  formatPercent,
   sortIndicator,
   toggleArrayValue,
 } from '../app/utils';
 import { ChartTypeLabel, getChartTypeToneClass } from './ChartTypeLabel';
 import { DifficultyLabel, getDifficultyToneClass } from './DifficultyLabel';
 import { Jacket } from './Jacket';
+import { LevelCell } from './LevelCell';
+import type { SongDetailTarget } from './TableActionCells';
+import { AchievementHistoryButton, SongTitleButton } from './TableActionCells';
 import { ToggleGroup } from './ToggleGroup';
 
 interface ScoreExplorerSectionProps {
@@ -61,7 +63,7 @@ interface ScoreExplorerSectionProps {
   setDaysMax: Dispatch<SetStateAction<number>>;
   filteredScoreRows: ScoreRow[];
   songInfoUrl: string;
-  onOpenSongDetail: (row: ScoreRow) => void;
+  onOpenSongDetail: (target: SongDetailTarget) => void;
   onOpenHistory: (row: ScoreRow) => void;
   scoreSortKey: ScoreSortKey;
   scoreSortDesc: boolean;
@@ -114,44 +116,6 @@ export function ScoreExplorerSection({
   scoreSortDesc,
   onSortBy,
 }: ScoreExplorerSectionProps) {
-  const renderInternalLevel = (row: ScoreRow) => {
-    if (row.internalLevel === null) {
-      return '-';
-    }
-
-    const [whole, fraction = '0'] = row.internalLevel.toFixed(1).split('.');
-    if (!row.isInternalLevelEstimated) {
-      return `${whole}.${fraction}`;
-    }
-
-    return (
-      <span className={`estimated-level ${getDifficultyToneClass(row.difficulty)}`}>
-        {whole}
-        <span className="estimated-level-fraction">.{fraction}</span>
-      </span>
-    );
-  };
-
-  const renderLevelCell = (row: ScoreRow) => {
-    if (row.internalLevel === null) {
-      return '-';
-    }
-
-    if (row.isInternalLevelEstimated) {
-      return (
-        <span className={`level-badge ${getDifficultyToneClass(row.difficulty)}`}>
-          {renderInternalLevel(row)}
-        </span>
-      );
-    }
-
-    return (
-      <span className={`level-badge ${getDifficultyToneClass(row.difficulty)}`}>
-        {row.internalLevel.toFixed(1)}
-      </span>
-    );
-  };
-
   return (
     <div className="explorer-layout">
       <aside className="sidebar-column">
@@ -404,31 +368,28 @@ export function ScoreExplorerSection({
                     ) : null}
                     <td className="title-col">
                       <div className="title-cell">
-                        <button
-                          type="button"
-                          className="link-button"
-                          onClick={() => void onOpenSongDetail(row)}
-                        >
-                          {row.title}
-                        </button>
+                        <SongTitleButton
+                          target={row}
+                          title={row.title}
+                          onOpenSongDetail={onOpenSongDetail}
+                        />
                       </div>
                     </td>
                     <td className="chart-col">
                       <ChartTypeLabel chartType={row.chartType} />
                     </td>
-                    <td className="level-col">{renderLevelCell(row)}</td>
+                    <td className="level-col">
+                      <LevelCell
+                        internalLevel={row.internalLevel}
+                        isInternalLevelEstimated={row.isInternalLevelEstimated}
+                        difficulty={row.difficulty}
+                      />
+                    </td>
                     <td className="achievement-col">
-                      {row.achievementPercent === null ? (
-                        '-'
-                      ) : (
-                        <button
-                          type="button"
-                          className="achievement-history-button"
-                          onClick={() => onOpenHistory(row)}
-                        >
-                          {formatPercent(row.achievementPercent)}
-                        </button>
-                      )}
+                      <AchievementHistoryButton
+                        achievementPercent={row.achievementPercent}
+                        onOpenHistory={() => onOpenHistory(row)}
+                      />
                     </td>
                     <td className="rating-col">{formatNumber(row.ratingPoints)}</td>
                     <td className="rank-col">{row.rank ?? '-'}</td>

@@ -53,6 +53,7 @@ import { ScoreExplorerSection } from './components/ScoreExplorerSection';
 import { SettingsPage } from './components/SettingsPage';
 import { SongDetailModal } from './components/SongDetailModal';
 import { ScoreHistoryModal } from './components/ScoreHistoryModal';
+import type { SongDetailTarget } from './components/TableActionCells';
 import { songIdentityKey } from './songIdentity';
 import type {
   ChartType,
@@ -341,6 +342,18 @@ function App() {
     () => buildScoreHistoryPoints(playlogData, selectedHistoryRow),
     [playlogData, selectedHistoryRow],
   );
+  const scoreRowsByTitle = useMemo(() => {
+    const grouped = new Map<string, ScoreRow[]>();
+    for (const row of scoreData) {
+      const existing = grouped.get(row.title);
+      if (existing) {
+        existing.push(row);
+      } else {
+        grouped.set(row.title, [row]);
+      }
+    }
+    return grouped;
+  }, [scoreData]);
 
   const versionOptions = useMemo(() => {
     if (versionsResponse.length > 0) {
@@ -548,8 +561,8 @@ function App() {
     };
   }, [isMobileNavOpen]);
 
-  const handleOpenSongDetail = useCallback((row: ScoreRow) => {
-    setSelectedDetailSongKey(songIdentityKey(row.title, row.genre, row.artist));
+  const handleOpenSongDetail = useCallback((target: SongDetailTarget) => {
+    setSelectedDetailSongKey(songIdentityKey(target.title, target.genre, target.artist));
   }, []);
 
   const closeSongDetail = useCallback(() => {
@@ -563,6 +576,49 @@ function App() {
   const closeHistory = useCallback(() => {
     setSelectedHistoryKey(null);
   }, []);
+
+  const resolvePlaylogScoreRow = useCallback((row: PlaylogRow): ScoreRow | null => {
+    if (row.difficulty === null) {
+      return null;
+    }
+
+    const titleMatches = scoreRowsByTitle.get(row.title) ?? [];
+    const chartMatches = titleMatches.filter(
+      (scoreRow) => scoreRow.chartType === row.chartType && scoreRow.difficulty === row.difficulty,
+    );
+
+    if (chartMatches.length === 1) {
+      return chartMatches[0];
+    }
+
+    return chartMatches.find((scoreRow) => scoreRow.songKey === row.songKey) ?? null;
+  }, [scoreRowsByTitle]);
+
+  const getPlaylogSongDetailTarget = useCallback((row: PlaylogRow): SongDetailTarget | null => {
+    const matchedScoreRow = resolvePlaylogScoreRow(row);
+    if (matchedScoreRow) {
+      return matchedScoreRow;
+    }
+
+    if (!row.genre && !row.artist) {
+      return null;
+    }
+
+    return row;
+  }, [resolvePlaylogScoreRow]);
+
+  const handleOpenPlaylogHistory = useCallback((row: PlaylogRow) => {
+    const matchedScoreRow = resolvePlaylogScoreRow(row);
+    if (!matchedScoreRow) {
+      return;
+    }
+
+    handleOpenHistory(matchedScoreRow);
+  }, [handleOpenHistory, resolvePlaylogScoreRow]);
+
+  const canOpenPlaylogHistory = useCallback((row: PlaylogRow) => {
+    return resolvePlaylogScoreRow(row) !== null;
+  }, [resolvePlaylogScoreRow]);
 
   const handleScoreSortBy = useCallback(
     (key: ScoreSortKey) => {
@@ -998,6 +1054,10 @@ function App() {
               selectedPlaylogDaySongCount={selectedPlaylogDaySongCount}
               filteredPlaylogRows={filteredPlaylogRows}
               songInfoUrl={songInfoUrl}
+              getSongDetailTarget={getPlaylogSongDetailTarget}
+              canOpenHistory={canOpenPlaylogHistory}
+              onOpenSongDetail={handleOpenSongDetail}
+              onOpenHistory={handleOpenPlaylogHistory}
               playlogSortKey={playlogSortKey}
               playlogSortDesc={playlogSortDesc}
               onSortBy={handlePlaylogSortBy}
@@ -1014,6 +1074,8 @@ function App() {
               oldRatingTotal={oldRatingTotal}
               newRows={newRatingRows}
               oldRows={oldRatingRows}
+              onOpenSongDetail={handleOpenSongDetail}
+              onOpenHistory={handleOpenHistory}
             />
           </>
         ) : activePage === 'picker' ? (

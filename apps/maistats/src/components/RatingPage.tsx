@@ -1,10 +1,13 @@
 import type { ReactNode } from 'react';
 
 import { toDateLabel } from '../derive';
-import { formatNumber, formatPercent, formatVersionLabel } from '../app/utils';
+import { formatNumber, formatVersionLabel } from '../app/utils';
 import type { ScoreRow } from '../types';
 import { ChartTypeLabel } from './ChartTypeLabel';
 import { Jacket } from './Jacket';
+import { LevelCell } from './LevelCell';
+import type { SongDetailTarget } from './TableActionCells';
+import { AchievementHistoryButton, SongTitleButton } from './TableActionCells';
 
 interface RatingPageProps {
   sidebarTopContent?: ReactNode;
@@ -14,6 +17,8 @@ interface RatingPageProps {
   oldRatingTotal: number;
   newRows: ScoreRow[];
   oldRows: ScoreRow[];
+  onOpenSongDetail: (target: SongDetailTarget) => void;
+  onOpenHistory: (row: ScoreRow) => void;
 }
 
 function RatingTable({
@@ -21,11 +26,15 @@ function RatingTable({
   description,
   rows,
   songInfoUrl,
+  onOpenSongDetail,
+  onOpenHistory,
 }: {
   title: string;
   description: string;
   rows: ScoreRow[];
   songInfoUrl: string;
+  onOpenSongDetail: (target: SongDetailTarget) => void;
+  onOpenHistory: (row: ScoreRow) => void;
 }) {
   return (
     <section className="panel">
@@ -61,13 +70,30 @@ function RatingTable({
                 <td className="jacket-col">
                   <Jacket songInfoUrl={songInfoUrl} imageName={row.imageName} title={row.title} />
                 </td>
-                <td className="title-col">{row.title}</td>
+                <td className="title-col">
+                  <div className="title-cell">
+                    <SongTitleButton
+                      target={row}
+                      title={row.title}
+                      onOpenSongDetail={onOpenSongDetail}
+                    />
+                  </div>
+                </td>
                 <td className="chart-col">
                   <ChartTypeLabel chartType={row.chartType} />
                 </td>
-                <td className="level-col">{row.internalLevel?.toFixed(1) ?? '-'}</td>
+                <td className="level-col">
+                  <LevelCell
+                    internalLevel={row.internalLevel}
+                    isInternalLevelEstimated={row.isInternalLevelEstimated}
+                    difficulty={row.difficulty}
+                  />
+                </td>
                 <td className="achievement-col">
-                  {row.achievementPercent === null ? '-' : formatPercent(row.achievementPercent)}
+                  <AchievementHistoryButton
+                    achievementPercent={row.achievementPercent}
+                    onOpenHistory={() => onOpenHistory(row)}
+                  />
                 </td>
                 <td className="rating-col">{formatNumber(row.ratingPoints)}</td>
                 <td className="rank-col">{row.rank ?? '-'}</td>
@@ -96,6 +122,8 @@ export function RatingPage({
   oldRatingTotal,
   newRows,
   oldRows,
+  onOpenSongDetail,
+  onOpenHistory,
 }: RatingPageProps) {
   return (
     <div className="explorer-layout">
@@ -131,12 +159,16 @@ export function RatingPage({
           description="NEW 분류에서 레이팅이 높은 15곡"
           rows={newRows}
           songInfoUrl={songInfoUrl}
+          onOpenSongDetail={onOpenSongDetail}
+          onOpenHistory={onOpenHistory}
         />
         <RatingTable
           title="OLD"
           description="OLD 분류에서 레이팅이 높은 35곡"
           rows={oldRows}
           songInfoUrl={songInfoUrl}
+          onOpenSongDetail={onOpenSongDetail}
+          onOpenHistory={onOpenHistory}
         />
       </div>
     </div>
