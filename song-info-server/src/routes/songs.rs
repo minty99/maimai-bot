@@ -1,14 +1,10 @@
-use axum::{
-    Json,
-    extract::{Query, State},
-};
+use axum::{Json, extract::State};
 use models::{
     ChartType, DifficultyCategory, MaimaiVersion, SongAliases, SongChartRegion, SongGenre,
 };
 use serde::Deserialize;
 use serde::Serialize;
 use std::collections::{HashMap, HashSet};
-use std::time::{SystemTime, UNIX_EPOCH};
 use strum::IntoEnumIterator;
 
 use crate::error::{AppError, Result};
@@ -55,22 +51,6 @@ pub(crate) struct SongCatalogResponse {
 }
 
 #[derive(Serialize)]
-pub(crate) struct SongSelectionStatsResponse {
-    level_song_count: usize,
-    filtered_song_count: usize,
-}
-
-#[derive(Serialize)]
-pub(crate) struct SongResponse {
-    title: String,
-    genre: String,
-    artist: String,
-    image_name: Option<String>,
-    sheets: Vec<SongSheetResponse>,
-    selection_stats: SongSelectionStatsResponse,
-}
-
-#[derive(Serialize)]
 pub(crate) struct SongVersionResponse {
     version_index: u8,
     version_name: String,
@@ -102,136 +82,6 @@ pub(crate) struct SongMetadataSearchRequest {
 pub(crate) struct SongMetadataSearchResponse {
     total: usize,
     items: Vec<SongMetadataResponse>,
-}
-
-pub(crate) async fn random_song_by_level(
-    State(state): State<AppState>,
-    Query(params): Query<HashMap<String, String>>,
-) -> Result<Json<SongResponse>> {
-    let min_level = parse_level_param(&params, "min_level")?;
-    let max_level = parse_level_param(&params, "max_level")?;
-    if min_level > max_level {
-        return Err(AppError::JsonError(
-            "min_level must be less than or equal to max_level".to_string(),
-        ));
-    }
-
-    let include_chart_types = parse_chart_type_filter(&params)?;
-    let include_difficulties = parse_difficulty_filter(&params)?;
-    let include_versions = parse_version_filter(&params)?;
-
-    let mut candidates = Vec::new();
-    let mut level_song_count = 0usize;
-    let song_data_root = state
-        .song_data_root
-        .read()
-        .map_err(|_| AppError::IoError("Failed to read song data".to_string()))?;
-
-    for song in song_data_root.iter() {
-        let mut song_has_sheet_in_level_range = false;
-        let mut sheets = Vec::new();
-
-        for sheet in &song.sheets {
-            if !is_intl_sheet(sheet) {
-                continue;
-            }
-
-            let internal_level = sheet
-                .internal_level
-                .as_deref()
-                .and_then(|value| value.trim().parse::<f32>().ok());
-
-            let Some(level) = internal_level else {
-                continue;
-            };
-
-            if level < min_level || level > max_level {
-                continue;
-            }
-
-            song_has_sheet_in_level_range = true;
-
-            let Some(chart_type) = parse_sheet_chart_type(&sheet.chart_type) else {
-                continue;
-            };
-            let Some(difficulty) = parse_sheet_difficulty(&sheet.difficulty) else {
-                continue;
-            };
-
-            let sheet_version = sheet
-                .version_name
-                .clone()
-                .map(|v| v.trim().to_string())
-                .filter(|v| !v.is_empty());
-            let sheet_version_enum = sheet_version
-                .as_deref()
-                .and_then(|value| value.parse::<MaimaiVersion>().ok());
-
-            if include_versions.as_ref().is_some_and(|allowed| {
-                sheet_version_enum.is_none_or(|version| !allowed.contains(&version))
-            }) {
-                continue;
-            }
-
-            if include_chart_types
-                .as_ref()
-                .is_some_and(|allowed| !allowed.contains(&chart_type))
-            {
-                continue;
-            }
-
-            if include_difficulties
-                .as_ref()
-                .is_some_and(|allowed| !allowed.contains(&difficulty))
-            {
-                continue;
-            }
-
-            sheets.push(SongSheetResponse {
-                chart_type,
-                difficulty,
-                level: sheet.level.clone(),
-                version: sheet_version,
-                internal_level,
-                region: sheet.region.clone(),
-            });
-        }
-
-        if song_has_sheet_in_level_range {
-            level_song_count += 1;
-        }
-
-        if !sheets.is_empty() {
-            candidates.push(SongResponse {
-                title: song.title.clone(),
-                genre: song.genre.to_string(),
-                artist: song.artist.clone(),
-                image_name: song.image_name.clone(),
-                sheets,
-                selection_stats: SongSelectionStatsResponse {
-                    level_song_count: 0,
-                    filtered_song_count: 0,
-                },
-            });
-        }
-    }
-
-    let filtered_song_count = candidates.len();
-    if filtered_song_count == 0 {
-        return Err(AppError::NotFound(format!(
-            "No songs found with internal_level between {} and {} after filters",
-            min_level, max_level
-        )));
-    }
-
-    let idx = select_random_index(filtered_song_count);
-    let mut selected = candidates.swap_remove(idx);
-    selected.selection_stats = SongSelectionStatsResponse {
-        level_song_count,
-        filtered_song_count,
-    };
-
-    Ok(Json(selected))
 }
 
 pub(crate) async fn list_versions(
@@ -505,91 +355,6 @@ pub(crate) async fn list_song_info(
     Ok(Json(SongCatalogResponse { songs }))
 }
 
-fn parse_level_param(params: &HashMap<String, String>, key: &str) -> Result<f32> {
-    let value = params
-        .get(key)
-        .ok_or_else(|| AppError::JsonError(format!("missing query param: {}", key)))?;
-    value
-        .parse::<f32>()
-        .map_err(|_| AppError::JsonError(format!("{} must be a valid number", key)))
-}
-
-fn parse_csv_param<'a>(params: &'a HashMap<String, String>, key: &str) -> Option<Vec<&'a str>> {
-    let raw = params.get(key)?;
-    if raw.trim().is_empty() {
-        return Some(Vec::new());
-    }
-
-    let values = raw
-        .split(',')
-        .map(str::trim)
-        .filter(|value| !value.is_empty())
-        .collect::<Vec<_>>();
-
-    Some(values)
-}
-
-fn parse_chart_type_filter(params: &HashMap<String, String>) -> Result<Option<HashSet<ChartType>>> {
-    let Some(values) = parse_csv_param(params, "chart_types") else {
-        return Ok(None);
-    };
-
-    let mut parsed = HashSet::new();
-    for value in values {
-        let Some(chart_type) = parse_chart_type_query_value(value) else {
-            return Err(AppError::JsonError(format!(
-                "invalid chart type: {} (expected STD or DX)",
-                value
-            )));
-        };
-        parsed.insert(chart_type);
-    }
-
-    Ok(Some(parsed))
-}
-
-fn parse_difficulty_filter(
-    params: &HashMap<String, String>,
-) -> Result<Option<HashSet<DifficultyCategory>>> {
-    let Some(values) = parse_csv_param(params, "include_difficulties") else {
-        return Ok(None);
-    };
-
-    let mut parsed = HashSet::new();
-    for value in values {
-        let Ok(difficulty) = value.parse::<DifficultyCategory>() else {
-            return Err(AppError::JsonError(format!(
-                "invalid include_difficulties value: {}",
-                value
-            )));
-        };
-        parsed.insert(difficulty);
-    }
-
-    Ok(Some(parsed))
-}
-
-fn parse_version_filter(
-    params: &HashMap<String, String>,
-) -> Result<Option<HashSet<MaimaiVersion>>> {
-    let Some(values) = parse_csv_param(params, "include_versions") else {
-        return Ok(None);
-    };
-
-    let mut parsed = HashSet::new();
-    for value in values {
-        let Ok(version) = value.parse::<MaimaiVersion>() else {
-            return Err(AppError::JsonError(format!(
-                "invalid include_versions value: {}",
-                value
-            )));
-        };
-        parsed.insert(version);
-    }
-
-    Ok(Some(parsed))
-}
-
 fn parse_sheet_chart_type(sheet_type: &str) -> Option<ChartType> {
     sheet_type.parse::<ChartType>().ok()
 }
@@ -612,14 +377,6 @@ fn parse_intl_sheet_version(sheet: &models::SongCatalogChart) -> Option<MaimaiVe
     }
     let version_name = sheet.version_name.as_deref()?;
     version_name.parse::<MaimaiVersion>().ok()
-}
-
-fn select_random_index(len: usize) -> usize {
-    let nanos = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map(|duration| duration.as_nanos())
-        .unwrap_or(0);
-    (nanos % len as u128) as usize
 }
 
 pub(crate) async fn search_song_metadata(

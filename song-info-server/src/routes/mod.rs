@@ -17,7 +17,6 @@ pub(crate) fn create_router(state: AppState) -> Router {
         .route("/health", get(health::health))
         .route("/health/ready", get(health::ready))
         .route("/api/songs", get(songs::list_song_info))
-        .route("/api/songs/random", get(songs::random_song_by_level))
         .route("/api/songs/versions", get(songs::list_versions))
         .route("/api/songs/metadata", post(songs::search_song_metadata))
         .route("/api/cover/{image_name}", get(cover::get_cover))
