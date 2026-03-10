@@ -1,10 +1,10 @@
 [package]
-name = "record-collector-server"
+name = "maistats-record-collector"
 version.workspace = true
 edition.workspace = true
 
 [[bin]]
-name = "record-collector-server"
+name = "maistats-record-collector"
 path = "src/main.rs"
 
 [dependencies]

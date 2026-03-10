@@ -18,17 +18,17 @@ RUN apt-get update && apt-get install -y \
 COPY Cargo.toml ./
 COPY Cargo.lock ./
 COPY crates/ ./crates/
-COPY record-collector-server/ ./record-collector-server/
-COPY song-info-server/ ./song-info-server/
+COPY maistats-record-collector/ ./maistats-record-collector/
+COPY maistats-song-info/ ./maistats-song-info/
 COPY maistats-discord-bot/ ./maistats-discord-bot/
 
 # Build entire workspace (both binaries)
 RUN cargo build --release
 
 # ============================================
-# Target: maimai-song-info
+# Target: maistats-song-info
 # ============================================
-FROM ubuntu:noble as maimai-song-info
+FROM ubuntu:noble as maistats-song-info
 
 RUN apt-get update && apt-get install -y \
     ca-certificates \
@@ -39,19 +39,19 @@ RUN apt-get update && apt-get install -y \
 WORKDIR /app
 
 # Copy song info binary
-COPY --from=builder /app/target/release/song-info-server /usr/local/bin/song-info-server
+COPY --from=builder /app/target/release/maistats-song-info /usr/local/bin/maistats-song-info
 
 # Create data directory
 RUN mkdir -p /app/data
 
 EXPOSE 3001
 
-CMD ["song-info-server"]
+CMD ["maistats-song-info"]
 
 # ============================================
-# Target: maimai-record-collector-server
+# Target: maistats-record-collector
 # ============================================
-FROM ubuntu:noble as maimai-record-collector-server
+FROM ubuntu:noble as maistats-record-collector
 
 RUN apt-get update && apt-get install -y \
     ca-certificates \
@@ -62,22 +62,22 @@ RUN apt-get update && apt-get install -y \
 WORKDIR /app
 
 # Copy record collector binary
-COPY --from=builder /app/target/release/record-collector-server /usr/local/bin/record-collector-server
+COPY --from=builder /app/target/release/maistats-record-collector /usr/local/bin/maistats-record-collector
 
 # Copy migrations
-COPY record-collector-server/migrations /app/migrations
+COPY maistats-record-collector/migrations /app/migrations
 
 # Create data directory
 RUN mkdir -p /app/data
 
 EXPOSE 3000
 
-CMD ["record-collector-server"]
+CMD ["maistats-record-collector"]
 
 # ============================================
-# Target: maimai-maistats-discord-bot
+# Target: maistats-discord-bot
 # ============================================
-FROM ubuntu:noble as maimai-maistats-discord-bot
+FROM ubuntu:noble as maistats-discord-bot
 
 RUN apt-get update && apt-get install -y \
     ca-certificates \

@@ -9,8 +9,8 @@ on:
       - rust-toolchain.toml
       - crates/**
       - maistats-discord-bot/**
-      - record-collector-server/**
-      - song-info-server/**
+      - maistats-record-collector/**
+      - maistats-song-info/**
       - tests/**
   push:
     branches: [main]
@@ -21,8 +21,8 @@ on:
       - rust-toolchain.toml
       - crates/**
       - maistats-discord-bot/**
-      - record-collector-server/**
-      - song-info-server/**
+      - maistats-record-collector/**
+      - maistats-song-info/**
       - tests/**
 
 jobs:
