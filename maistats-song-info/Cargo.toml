@@ -1,5 +1,5 @@
 [package]
-name = "song-info-server"
+name = "maistats-song-info"
 version.workspace = true
 edition.workspace = true
 

@@ -2004,6 +2004,53 @@ dependencies = [
 ]
 
 [[package]]
+name = "maistats-record-collector"
+version = "0.1.0"
+dependencies = [
+ "axum",
+ "chrono",
+ "chrono-tz",
+ "cookie_store",
+ "dotenvy",
+ "eyre",
+ "maimai-auth",
+ "maimai-parsers",
+ "models",
+ "rand 0.8.5",
+ "reqwest",
+ "reqwest_cookie_store",
+ "serde",
+ "serde_json",
+ "sqlx",
+ "time",
+ "tokio",
+ "tower-http",
+ "tracing",
+ "tracing-subscriber",
+]
+
+[[package]]
+name = "maistats-song-info"
+version = "0.1.0"
+dependencies = [
+ "axum",
+ "chrono",
+ "chrono-tz",
+ "dotenvy",
+ "eyre",
+ "maimai-songdb",
+ "models",
+ "serde",
+ "serde_json",
+ "strum",
+ "tokio",
+ "tower-http",
+ "tracing",
+ "tracing-subscriber",
+ "urlencoding",
+]
+
+[[package]]
 name = "markup5ever"
 version = "0.36.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2923,32 +2970,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "record-collector-server"
-version = "0.1.0"
-dependencies = [
- "axum",
- "chrono",
- "chrono-tz",
- "cookie_store",
- "dotenvy",
- "eyre",
- "maimai-auth",
- "maimai-parsers",
- "models",
- "rand 0.8.5",
- "reqwest",
- "reqwest_cookie_store",
- "serde",
- "serde_json",
- "sqlx",
- "time",
- "tokio",
- "tower-http",
- "tracing",
- "tracing-subscriber",
-]
-
-[[package]]
 name = "redox_syscall"
 version = "0.5.18"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3555,27 +3576,6 @@ checksum = "86f4aa3ad99f2088c990dfa82d367e19cb29268ed67c574d10d0a4bfe71f07e0"
 dependencies = [
  "libc",
  "windows-sys 0.60.2",
-]
-
-[[package]]
-name = "song-info-server"
-version = "0.1.0"
-dependencies = [
- "axum",
- "chrono",
- "chrono-tz",
- "dotenvy",
- "eyre",
- "maimai-songdb",
- "models",
- "serde",
- "serde_json",
- "strum",
- "tokio",
- "tower-http",
- "tracing",
- "tracing-subscriber",
- "urlencoding",
 ]
 
 [[package]]

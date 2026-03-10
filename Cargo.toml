@@ -1,7 +1,7 @@
 [workspace]
 members = [
-    "record-collector-server",
-    "song-info-server",
+    "maistats-record-collector",
+    "maistats-song-info",
     "crates/maimai-auth",
     "crates/maimai-parsers",
     "crates/maimai-songdb",
