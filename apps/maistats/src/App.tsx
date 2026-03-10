@@ -3,9 +3,9 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   fetchExplorerPayload,
 } from './api';
+import { HomePage } from './components/HomePage';
 import {
   CHART_TYPES,
-  DEFAULT_RECORD_COLLECTOR_URL,
   DEFAULT_SONG_INFO_URL,
   DIFFICULTIES,
   PLAYLOG_FILTERS_STORAGE_KEY,
@@ -75,9 +75,12 @@ import type {
   SongVersionResponse,
 } from './types';
 
-type AppPage = 'scores' | 'rating' | 'playlogs' | 'picker' | 'settings';
+type AppPage = 'home' | 'scores' | 'rating' | 'playlogs' | 'picker' | 'settings';
 
 function readPageFromHash(hash: string): AppPage {
+  if (hash === '#home') {
+    return 'home';
+  }
   if (hash === '#rating') {
     return 'rating';
   }
@@ -138,6 +141,15 @@ function countCredits(rows: PlaylogRow[]): number | null {
   }
 
   return new Set(creditIds).size;
+}
+
+function HomeIcon() {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
+      <path d="M9 22V12h6v10" />
+    </svg>
+  );
 }
 
 function ScoresIcon() {
@@ -205,6 +217,7 @@ function ChevronDownIcon() {
 }
 
 const NAV_ITEMS: Array<{ page: AppPage; label: string; Icon: () => JSX.Element }> = [
+  { page: 'home', label: 'Home', Icon: HomeIcon },
   { page: 'scores', label: 'Scores', Icon: ScoresIcon },
   { page: 'rating', label: 'Rating', Icon: RatingIcon },
   { page: 'playlogs', label: 'Playlogs', Icon: PlaylogsIcon },
@@ -223,15 +236,25 @@ function App() {
     [],
   );
 
-  const [activePage, setActivePage] = useState<AppPage>(() => readPageFromHash(window.location.hash));
+  const [activePage, setActivePage] = useState<AppPage>(() => {
+    const stored = localStorage.getItem(RECORD_STORAGE_KEY)?.trim();
+    const envUrl = (import.meta.env.RECORD_COLLECTOR_SERVER_URL as string | undefined)?.trim();
+    const hasUrl = Boolean(stored ?? envUrl);
+    if (!hasUrl) {
+      return 'home';
+    }
+    return readPageFromHash(window.location.hash);
+  });
   const [isMobileNavOpen, setIsMobileNavOpen] = useState(false);
 
   const [songInfoUrl, setSongInfoUrl] = useState<string>(() =>
     readStoredValue(SONG_INFO_STORAGE_KEY, DEFAULT_SONG_INFO_URL),
   );
-  const [recordCollectorUrl, setRecordCollectorUrl] = useState<string>(() =>
-    readStoredValue(RECORD_STORAGE_KEY, DEFAULT_RECORD_COLLECTOR_URL),
-  );
+  const [recordCollectorUrl, setRecordCollectorUrl] = useState<string>(() => {
+    const stored = localStorage.getItem(RECORD_STORAGE_KEY)?.trim();
+    if (stored) return stored;
+    return (import.meta.env.RECORD_COLLECTOR_SERVER_URL as string | undefined)?.trim() ?? '';
+  });
   const [songInfoUrlDraft, setSongInfoUrlDraft] = useState(songInfoUrl);
   const [recordCollectorUrlDraft, setRecordCollectorUrlDraft] =
     useState(recordCollectorUrl);
@@ -462,6 +485,7 @@ function App() {
       loadAbortRef.current?.abort();
     };
   }, [loadData]);
+
 
   useEffect(() => {
     const onHashChange = () => {
@@ -952,32 +976,35 @@ function App() {
     };
   }, [scoreData, versionOptions]);
 
-  const handleApplyUrls = () => {
-    const nextSongInfoUrl = songInfoUrlDraft.trim();
-    const nextRecordUrl = recordCollectorUrlDraft.trim();
-
-    if (!nextSongInfoUrl) {
-      return;
-    }
-
-    setSongInfoUrl(nextSongInfoUrl);
-    setRecordCollectorUrl(nextRecordUrl);
+  const handleApplySongInfoUrl = () => {
+    const next = songInfoUrlDraft.trim();
+    if (!next) return;
+    setSongInfoUrl(next);
   };
 
+  const handleApplyRecordCollectorUrl = useCallback((url: string) => {
+    setRecordCollectorUrl(url);
+    setRecordCollectorUrlDraft(url);
+  }, []);
+
+  const handleConnectUrl = handleApplyRecordCollectorUrl;
+
   const handleNavigatePage = useCallback((page: AppPage) => {
-    if (page === 'settings') {
+    if (page === 'settings' || page === 'home') {
       setSongInfoUrlDraft(songInfoUrl);
       setRecordCollectorUrlDraft(recordCollectorUrl);
     }
-    const nextHash = page === 'playlogs'
-      ? '#playlogs'
-      : page === 'rating'
-        ? '#rating'
-      : page === 'picker'
-        ? '#picker'
-        : page === 'settings'
-          ? '#settings'
-          : '#scores';
+    const nextHash = page === 'home'
+      ? '#home'
+      : page === 'playlogs'
+        ? '#playlogs'
+        : page === 'rating'
+          ? '#rating'
+          : page === 'picker'
+            ? '#picker'
+            : page === 'settings'
+              ? '#settings'
+              : '#scores';
     if (window.location.hash !== nextHash) {
       window.location.hash = nextHash;
       return;
@@ -1004,6 +1031,7 @@ function App() {
               type="button"
               className={activePage === page ? 'active' : ''}
               onClick={() => handleNavigatePage(page)}
+              disabled={!recordCollectorUrl.trim() && page !== 'home' && page !== 'settings'}
             >
               <Icon />
               <span>{label}</span>
@@ -1044,6 +1072,7 @@ function App() {
                 type="button"
                 className={activePage === page ? 'active' : ''}
                 onClick={() => handleNavigatePage(page)}
+                disabled={!recordCollectorUrl.trim() && page !== 'home' && page !== 'settings'}
               >
                 <Icon />
                 <span>{label}</span>
@@ -1057,6 +1086,7 @@ function App() {
                 type="button"
                 className={activePage === page ? 'active' : ''}
                 onClick={() => handleNavigatePage(page)}
+                disabled={!recordCollectorUrl.trim() && page !== 'home' && page !== 'settings'}
               >
                 <Icon />
                 <span>{label}</span>
@@ -1067,7 +1097,14 @@ function App() {
       </aside>
 
       <main className="app-main">
-        {activePage === 'scores' ? (
+        {activePage === 'home' ? (
+          <HomePage
+            sidebarTopContent={desktopSidebarTopContent}
+            recordCollectorUrl={recordCollectorUrl}
+            onConnect={handleConnectUrl}
+            onNavigateToScores={() => handleNavigatePage('scores')}
+          />
+        ) : activePage === 'scores' ? (
           <>
             {loadingError ? <section className="error-banner">에러: {loadingError}</section> : null}
 
@@ -1187,13 +1224,12 @@ function App() {
         ) : (
           <SettingsPage
             sidebarTopContent={desktopSidebarTopContent}
-            songInfoUrl={songInfoUrl}
-            recordCollectorUrl={recordCollectorUrl}
             songInfoUrlDraft={songInfoUrlDraft}
             setSongInfoUrlDraft={setSongInfoUrlDraft}
             recordCollectorUrlDraft={recordCollectorUrlDraft}
             setRecordCollectorUrlDraft={setRecordCollectorUrlDraft}
-            onApply={handleApplyUrls}
+            onApplySongInfoUrl={handleApplySongInfoUrl}
+            onApplyRecordCollectorUrl={handleApplyRecordCollectorUrl}
           />
         )}
       </main>
