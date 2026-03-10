@@ -21,6 +21,17 @@ interface RatingPageProps {
   onOpenHistory: (row: ScoreRow) => void;
 }
 
+function formatRatingAvg(total: number, count: number): string {
+  if (count === 0) return '-';
+  return (total / count).toFixed(2);
+}
+
+function formatRatingProjection(total: number, count: number): string {
+  if (count === 0) return '-';
+  const avg = total / count;
+  return Math.round(avg * 50).toLocaleString();
+}
+
 function RatingTable({
   title,
   description,
@@ -133,21 +144,24 @@ export function RatingPage({
           <div className="panel-heading compact">
             <div>
               <h2>RATING</h2>
-              <p>NEW 상위 15곡과 OLD 상위 35곡의 레이팅 합계입니다.</p>
+              <p>NEW 상위 15곡과 OLD 상위 35곡의 레이팅 합계입니다. 보면상수가 알려지지 않은 곡의 경우 계산값이 잘못될 수 있습니다.</p>
             </div>
           </div>
           <div className="rating-stat-grid">
             <div className="rating-stat-card">
               <span>Current Rating</span>
               <strong>{formatNumber(ratingTotal)}</strong>
+              <small className="rating-stat-sub">avg {formatRatingAvg(ratingTotal, newRows.length + oldRows.length)}</small>
             </div>
             <div className="rating-stat-card">
               <span>NEW TOP 15</span>
               <strong>{formatNumber(newRatingTotal)}</strong>
+              <small className="rating-stat-sub">avg {formatRatingAvg(newRatingTotal, newRows.length)}, ~{formatRatingProjection(newRatingTotal, newRows.length)}</small>
             </div>
             <div className="rating-stat-card">
               <span>OLD TOP 35</span>
               <strong>{formatNumber(oldRatingTotal)}</strong>
+              <small className="rating-stat-sub">avg {formatRatingAvg(oldRatingTotal, oldRows.length)}, ~{formatRatingProjection(oldRatingTotal, oldRows.length)}</small>
             </div>
           </div>
         </section>
