@@ -1,10 +1,17 @@
-use eyre::{Result, WrapErr};
+use eyre::WrapErr;
 use poise::CreateReply;
 use poise::serenity_prelude as serenity;
 use std::collections::BTreeMap;
 use time::{Duration as TimeDuration, OffsetDateTime, UtcOffset};
+use tracing::warn;
 
 use crate::BotData;
+use crate::client::{
+    ApiError, RecordCollectorClient, SongInfoClient, SongMetadata, SongMetadataSearchRequest,
+    normalize_record_collector_url,
+};
+use crate::db;
+use crate::dm;
 use crate::embeds::{
     RecentRecordView, build_mai_recent_embeds, build_mai_today_embed, embed_base,
     embed_maintenance, format_level_with_internal,
@@ -13,6 +20,93 @@ use crate::embeds::{
 type Context<'a> = poise::Context<'a, BotData, Box<dyn std::error::Error + Send + Sync>>;
 type Error = Box<dyn std::error::Error + Send + Sync>;
 
+/// Register your record collector server
+#[poise::command(slash_command)]
+pub(crate) async fn register(
+    ctx: Context<'_>,
+    #[description = "Record collector server base URL"] url: String,
+) -> Result<(), Error> {
+    ctx.defer().await?;
+
+    let normalized_url = match normalize_record_collector_url(&url) {
+        Ok(url) => url,
+        Err(err) => {
+            ctx.send(
+                CreateReply::default()
+                    .ephemeral(true)
+                    .embed(embed_base("Registration failed").description(err.to_string())),
+            )
+            .await?;
+            return Ok(());
+        }
+    };
+
+    let record_collector_client = RecordCollectorClient::new(normalized_url.clone())
+        .wrap_err("create record collector client")?;
+
+    if let Err(err) = record_collector_client.health_check().await {
+        send_registration_validation_error(ctx, "Registration failed", &err.to_string()).await?;
+        return Ok(());
+    }
+
+    let player_profile = match record_collector_client.get_player_profile().await {
+        Ok(player_profile) => player_profile,
+        Err(err) => {
+            if let Some(api_error) = err.downcast_ref::<ApiError>()
+                && api_error.code() == "MAINTENANCE"
+            {
+                ctx.send(
+                    CreateReply::default()
+                        .ephemeral(true)
+                        .embed(embed_maintenance()),
+                )
+                .await?;
+                return Ok(());
+            }
+
+            let description = match err.downcast_ref::<ApiError>() {
+                Some(api_error) if !api_error.message().is_empty() => api_error.message(),
+                _ => "Record collector validation failed.",
+            };
+            send_registration_validation_error(ctx, "Registration failed", description).await?;
+            return Ok(());
+        }
+    };
+
+    db::upsert_registration(
+        &ctx.data().db_pool,
+        ctx.author().id,
+        &normalized_url,
+        OffsetDateTime::now_utc().unix_timestamp(),
+    )
+    .await
+    .wrap_err("save registration")?;
+
+    ctx.send(CreateReply::default().ephemeral(true).embed(
+        embed_base("Registration saved").description(format!(
+            "**Player**: {}\n**Record collector**: {}",
+            player_profile.user_name, normalized_url
+        )),
+    ))
+    .await?;
+
+    if let Err(err) = dm::send_registration_confirmation_dm(
+        &ctx.data().discord_http,
+        ctx.author().id,
+        &player_profile.user_name,
+        &normalized_url,
+    )
+    .await
+    {
+        warn!(
+            "Failed to send registration confirmation DM to {}: {err}",
+            ctx.author().id
+        );
+    }
+
+    Ok(())
+}
+
 /// Get song records by song title or key
 #[poise::command(slash_command, rename = "mai-score")]
 pub(crate) async fn mai_score(
@@ -20,6 +114,10 @@ pub(crate) async fn mai_score(
     #[description = "Song title or alias to search for"] search: String,
 ) -> Result<(), Error> {
     ctx.defer().await?;
+
+    let Some(record_collector_client) = registered_record_collector_client(ctx).await? else {
+        return Ok(());
+    };
 
     let requested_title = search.trim();
     if requested_title.is_empty() {
@@ -35,7 +133,7 @@ pub(crate) async fn mai_score(
     let response = ctx
         .data()
         .song_info_client
-        .search_song_metadata(&crate::client::SongMetadataSearchRequest {
+        .search_song_metadata(&SongMetadataSearchRequest {
             title: Some(requested_title.to_string()),
             genre: None,
             artist: None,
@@ -77,15 +175,13 @@ pub(crate) async fn mai_score(
     let (resolved_title, resolved_genre, resolved_artist) =
         unique_songs.into_keys().next().expect("checked non-empty");
 
-    let detailed_scores = match ctx
-        .data()
-        .record_collector_client
+    let detailed_scores = match record_collector_client
         .get_song_detail_scores(&resolved_title, &resolved_genre, &resolved_artist)
         .await
     {
         Ok(v) => v,
         Err(e) => {
-            if let Some(api_error) = e.downcast_ref::<crate::client::ApiError>() {
+            if let Some(api_error) = e.downcast_ref::<ApiError>() {
                 match api_error.code() {
                     "MAINTENANCE" => {
                         ctx.send(
@@ -225,7 +321,7 @@ pub(crate) async fn mai_song_info(
     let response = ctx
         .data()
         .song_info_client
-        .search_song_metadata(&crate::client::SongMetadataSearchRequest {
+        .search_song_metadata(&SongMetadataSearchRequest {
             title: Some(title.trim().to_string()),
             genre: None,
             artist: None,
@@ -236,7 +332,7 @@ pub(crate) async fn mai_song_info(
         .await
         .wrap_err("search song metadata")?;
 
-    let mut songs = BTreeMap::<(String, String, String), Vec<crate::client::SongMetadata>>::new();
+    let mut songs = BTreeMap::<(String, String, String), Vec<SongMetadata>>::new();
     for item in response.items {
         songs
             .entry((item.title.clone(), item.genre.clone(), item.artist.clone()))
@@ -307,7 +403,7 @@ fn build_song_info_embed(
     song_title: &str,
     song_genre: &str,
     song_artist: &str,
-    sheets: &[crate::client::SongMetadata],
+    sheets: &[SongMetadata],
 ) -> (serenity::CreateEmbed, Option<String>) {
     let region_unreleased_line = build_region_unreleased_line(sheets);
 
@@ -405,9 +501,12 @@ fn build_song_info_embed(
 pub(crate) async fn mai_recent(ctx: Context<'_>) -> Result<(), Error> {
     ctx.defer().await?;
 
-    let play_records = ctx
-        .data()
-        .record_collector_client
+    let Some(record_collector_client) = registered_record_collector_client(ctx).await? else {
+        return Ok(());
+    };
+
+    let display_name = load_player_display_name(&record_collector_client).await;
+    let play_records = record_collector_client
         .get_recent(50)
         .await
         .wrap_err("fetch recent plays")?;
@@ -418,14 +517,12 @@ pub(crate) async fn mai_recent(ctx: Context<'_>) -> Result<(), Error> {
         return Ok(());
     }
 
-    // Extract tracks to find latest credit (first TRACK 01)
     let tracks: Vec<Option<i64>> = play_records
         .iter()
         .map(|r| r.track.map(|t| t as i64))
         .collect();
     let take = latest_credit_len(&tracks);
 
-    // Take the latest credit and reverse to display TRACK 01 first
     let mut recent = play_records.into_iter().take(take).collect::<Vec<_>>();
     recent.reverse();
 
@@ -478,7 +575,7 @@ pub(crate) async fn mai_recent(ctx: Context<'_>) -> Result<(), Error> {
         });
     }
 
-    let embeds = build_mai_recent_embeds("Player", &records, None);
+    let embeds = build_mai_recent_embeds(&display_name, &records, None);
     let mut attachments = Vec::new();
     for image_name in cover_image_names {
         match ctx.data().song_info_client.get_cover(&image_name).await {
@@ -499,7 +596,6 @@ pub(crate) async fn mai_recent(ctx: Context<'_>) -> Result<(), Error> {
     Ok(())
 }
 
-/// Find the length of the latest credit (up to and including first TRACK 01)
 fn latest_credit_len(tracks: &[Option<i64>]) -> usize {
     match tracks.iter().position(|t| *t == Some(1)) {
         Some(idx) => idx + 1,
@@ -511,6 +607,10 @@ fn latest_credit_len(tracks: &[Option<i64>]) -> usize {
 #[poise::command(slash_command, rename = "mai-today")]
 pub(crate) async fn mai_today(ctx: Context<'_>) -> Result<(), Error> {
     ctx.defer().await?;
+
+    let Some(record_collector_client) = registered_record_collector_client(ctx).await? else {
+        return Ok(());
+    };
 
     let offset = UtcOffset::from_hms(9, 0, 0).unwrap_or(UtcOffset::UTC);
     let now_jst = OffsetDateTime::now_utc().to_offset(offset);
@@ -529,11 +629,7 @@ pub(crate) async fn mai_today(ctx: Context<'_>) -> Result<(), Error> {
         day_date.day()
     );
 
-    let plays = ctx
-        .data()
-        .record_collector_client
-        .get_today(&today_str)
-        .await?;
+    let plays = record_collector_client.get_today(&today_str).await?;
 
     let tracks = plays.len() as i64;
     let credits = plays
@@ -554,22 +650,81 @@ pub(crate) async fn mai_today(ctx: Context<'_>) -> Result<(), Error> {
         end_date.day()
     );
 
-    let display_name = "Player";
-
-    let embed = build_mai_today_embed(display_name, &start, &end, credits, tracks, new_records);
+    let display_name = load_player_display_name(&record_collector_client).await;
+    let embed = build_mai_today_embed(&display_name, &start, &end, credits, tracks, new_records);
 
     ctx.send(CreateReply::default().embed(embed)).await?;
     Ok(())
 }
 
+async fn send_registration_validation_error(
+    ctx: Context<'_>,
+    title: &str,
+    description: &str,
+) -> Result<(), Error> {
+    ctx.send(
+        CreateReply::default()
+            .ephemeral(true)
+            .embed(embed_base(title).description(description)),
+    )
+    .await?;
+    Ok(())
+}
+
+async fn registered_record_collector_client(
+    ctx: Context<'_>,
+) -> Result<Option<RecordCollectorClient>, Error> {
+    let Some(registration) = db::get_registration(&ctx.data().db_pool, ctx.author().id)
+        .await
+        .wrap_err("load user registration")?
+    else {
+        ctx.send(CreateReply::default().ephemeral(true).embed(
+            embed_base("Registration required").description(
+                "Please run `/register <url>` with your record collector server first.",
+            ),
+        ))
+        .await?;
+        return Ok(None);
+    };
+
+    let client = match RecordCollectorClient::new(registration.record_collector_server_url.clone())
+    {
+        Ok(client) => client,
+        Err(err) => {
+            ctx.send(
+                CreateReply::default().ephemeral(true).embed(
+                    embed_base("Invalid registration").description(format!(
+                        "Your stored record collector URL is invalid. Please re-run `/register <url>`.\n\n{}",
+                        err
+                    )),
+                ),
+            )
+            .await?;
+            return Ok(None);
+        }
+    };
+
+    Ok(Some(client))
+}
+
+async fn load_player_display_name(record_collector_client: &RecordCollectorClient) -> String {
+    match record_collector_client.get_player_profile().await {
+        Ok(player_profile) => player_profile.user_name,
+        Err(err) => {
+            warn!("failed to load player display name: {err:#}");
+            "Player".to_string()
+        }
+    }
+}
+
 async fn fetch_song_metadata(
-    song_info_client: &crate::client::SongInfoClient,
+    song_info_client: &SongInfoClient,
     title: &str,
     genre: &str,
     artist: &str,
     chart_type: models::ChartType,
     diff_category: models::DifficultyCategory,
-) -> Option<crate::client::SongMetadata> {
+) -> Option<SongMetadata> {
     let response = song_info_client
         .find_song_metadata(title, genre, artist, chart_type, diff_category)
         .await;
@@ -600,7 +755,7 @@ fn duplicate_song_candidates_description(
     )
 }
 
-fn build_region_unreleased_line(sheets: &[crate::client::SongMetadata]) -> Option<String> {
+fn build_region_unreleased_line(sheets: &[SongMetadata]) -> Option<String> {
     let has_jp = sheets.iter().any(|sheet| sheet.region.jp);
     let has_intl = sheets.iter().any(|sheet| sheet.region.intl);
 
@@ -685,5 +840,22 @@ fn chart_rating_points(internal_level: f64, achievement_percent: f64, ap_bonus: 
         base.saturating_add(1)
     } else {
         base
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::latest_credit_len;
+
+    #[test]
+    fn latest_credit_len_uses_first_track_one_boundary() {
+        assert_eq!(latest_credit_len(&[Some(4), Some(3), Some(2), Some(1)]), 4);
+        assert_eq!(latest_credit_len(&[Some(2), Some(1), Some(4)]), 2);
+    }
+
+    #[test]
+    fn latest_credit_len_falls_back_to_four_when_track_one_is_missing() {
+        assert_eq!(latest_credit_len(&[Some(4), Some(3), Some(2), Some(5)]), 4);
+        assert_eq!(latest_credit_len(&[Some(4), Some(3)]), 2);
     }
 }

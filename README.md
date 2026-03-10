@@ -1,6 +1,6 @@
 # maimai-bot
 
-`maimai-bot`은 **maimai DX NET (maimaidx-eng.com)** 에 로그인(SEGA ID)해서 기록을 크롤링하고, 로컬 SQLite에 저장한 뒤 Discord에서 조회/알림을 받는 **단일 사용자** monorepo입니다.
+`maimai-bot`은 **maimai DX NET (maimaidx-eng.com)** 에 로그인(SEGA ID)해서 기록을 크롤링하고, 로컬 SQLite에 저장한 뒤 Discord에서 조회/알림을 받는 monorepo입니다.
 
 이 저장소는 Rust 런타임 3개와 Cloudflare Pages로 배포하는 `maistats` 프론트엔드를 함께 관리합니다.
 
@@ -25,10 +25,11 @@
   - 포트: `3000` (기본값)
   - 의존성: SEGA ID 인증 정보
 
-- **Discord Bot** (`maistats-discord-bot/`): 두 서버의 API를 호출하여 Discord 명령어 처리 및 DM 알림 전송
-  - Record Collector Server의 `/health/ready` 엔드포인트를 폴링하여 서버가 준비될 때까지 대기합니다.
-  - Record Collector Server에서 새 플레이가 감지되면 DM으로 알림을 보냅니다.
-  - 의존성: Song Info Server + Record Collector Server
+- **Discord Bot** (`maistats-discord-bot/`): Song Info Server는 전역으로, Record Collector Server는 Discord 사용자별로 연결하는 멀티유저 봇
+  - bot 자체 SQLite에 `discord user id -> record collector server URL` 매핑을 저장합니다.
+  - `/register <url>`로 사용자가 자기 record collector를 등록합니다.
+  - startup 시 개발자 user id에게만 상태 요약 DM을 보내고, register 성공 시 해당 사용자에게만 확인용 DM을 보냅니다.
+  - 의존성: Song Info Server + 사용자별 Record Collector Server
 
 - **maistats** (`apps/maistats/`): `song-info-server`와 `record-collector-server` 데이터를 탐색하는 Vite + React 웹 UI
   - Cloudflare Pages 배포 대상입니다.
@@ -48,7 +49,7 @@
 
 - Rust (stable)
 - Node.js 20+ / npm 10+ (`apps/maistats` 개발 시)
-- Discord Bot Token / 단일 수신자(User ID) (Discord 봇 사용 시)
+- Discord Bot Token / 개발자 Discord User ID (Discord 봇 사용 시)
 - SEGA ID 계정 (maimaidx-eng.com) (Record Collector Server 사용 시)
 - Song Info Server SongDB 갱신용 환경 변수 (`MAIMAI_*`, `GOOGLE_API_KEY`, `USER_AGENT`)
 
@@ -58,7 +59,7 @@
 
 ```bash
 cp .env.example .env
-# 편집: SEGA_ID, SEGA_PASSWORD, DISCORD_BOT_TOKEN, DISCORD_USER_ID 등 입력
+# 편집: SEGA_ID, SEGA_PASSWORD, DISCORD_BOT_TOKEN, DISCORD_DEV_USER_ID 등 입력
 ```
 
 **주의**:
@@ -111,7 +112,7 @@ npm ci
    ```bash
    cargo run --bin maistats-discord-bot
    ```
-   Discord 봇은 Record Collector Server의 `/health/ready`를 폴링하여 서버가 준비될 때까지 대기합니다.
+   Discord 봇은 startup 시 개발자에게 상태 요약 DM을 보내고, 각 사용자는 `/register <url>`로 자기 Record Collector Server를 등록할 수 있습니다.
 
 **참고**:
 - `dotenvy`가 현재 디렉토리와 상위 디렉토리를 탐색하므로 프로젝트 루트에서 실행해도 각 서비스의 `.env`를 자동으로 찾습니다.
@@ -152,13 +153,24 @@ HTML/raw fetch (로그인 필요):
 
 ## Discord 명령어
 
+- `/register <url>`
+  - 호출한 Discord 사용자 계정에 record collector server URL을 저장합니다.
+  - URL 형식과 `/health/ready`, `/api/player` 응답을 즉시 검증합니다.
+  - 성공하면 ephemeral 응답과 확인용 DM을 보냅니다.
 - `/mai-score <title|alias>`
+  - 먼저 `/register <url>`를 완료한 사용자만 사용할 수 있습니다.
   - 곡 제목 exact match만 조회합니다.
   - exact match가 없으면 조회 실패로 처리합니다.
   - 기록이 없는(미플레이) 항목은 출력하지 않습니다.
 - `/mai-recent`
+  - 먼저 `/register <url>`를 완료한 사용자만 사용할 수 있습니다.
   - recent 페이지 기준 “가장 최근 1 credit”만 보여줍니다.
   - 맨 앞의 `TRACK 01`을 기준으로 그 credit의 플레이들을 `TRACK 01 -> ...` 순서로 출력합니다.
+- `/mai-today`
+  - 먼저 `/register <url>`를 완료한 사용자만 사용할 수 있습니다.
+  - JST 04:00 경계 기준 오늘 플레이 요약을 보여줍니다.
+- `/mai-song-info <title|alias>`
+  - Song Info Server만 사용하므로 등록 없이 사용할 수 있습니다.
 
 ## 데이터 모델/저장 방식 (요약)
 

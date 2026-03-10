@@ -6,18 +6,18 @@ use tracing::{info, warn};
 mod client;
 mod commands;
 mod config;
+mod db;
 mod dm;
 mod embeds;
 
-use client::{RecordCollectorClient, SongInfoClient};
+use client::SongInfoClient;
 use config::DiscordConfig;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct BotData {
-    pub config: DiscordConfig,
-    pub discord_user_id: serenity::UserId,
+    pub db_pool: db::SqlitePool,
+    pub dev_user_id: serenity::UserId,
     pub discord_http: std::sync::Arc<serenity::Http>,
-    pub record_collector_client: RecordCollectorClient,
     pub song_info_client: SongInfoClient,
 }
 
@@ -34,29 +34,26 @@ async fn main() -> eyre::Result<()> {
 
     let config = DiscordConfig::from_env()?;
 
+    std::fs::create_dir_all(&config.data_dir).wrap_err("create bot data directory")?;
+
     let discord_bot_token = config.bot_token.clone();
-    let discord_user_id_str = config.user_id.clone();
-
     let discord_http = std::sync::Arc::new(serenity::Http::new(&discord_bot_token));
-
-    let discord_user_id = serenity::UserId::new(
-        discord_user_id_str
+    let dev_user_id = serenity::UserId::new(
+        config
+            .dev_user_id
             .parse::<u64>()
-            .wrap_err("parse DISCORD_USER_ID")?,
+            .wrap_err("parse DISCORD_DEV_USER_ID")?,
     );
 
-    let record_collector_client =
-        RecordCollectorClient::new(config.record_collector_server_url.clone())?;
+    let db_pool = db::connect(&config.database_url).await?;
+    db::migrate(&db_pool).await?;
+
     let song_info_client = SongInfoClient::new(config.song_info_server_url.clone())?;
 
-    info!("Waiting for record collector server to be ready...");
-    record_collector_client.health_check_with_retry().await?;
-
     let bot_data = BotData {
-        config,
-        discord_user_id,
+        db_pool,
+        dev_user_id,
         discord_http,
-        record_collector_client,
         song_info_client,
     };
 
@@ -64,6 +61,7 @@ async fn main() -> eyre::Result<()> {
         .options(FrameworkOptions {
             prefix_options: Default::default(),
             commands: vec![
+                commands::register(),
                 commands::mai_score(),
                 commands::mai_song_info(),
                 commands::mai_recent(),
@@ -109,6 +107,7 @@ async fn main() -> eyre::Result<()> {
             ..Default::default()
         })
         .setup(move |ctx, _ready, framework| {
+            let bot_data = bot_data.clone();
             Box::pin(async move {
                 info!("Bot started as {}", ctx.cache.current_user().name);
 
@@ -116,14 +115,15 @@ async fn main() -> eyre::Result<()> {
                     .await
                     .wrap_err("register commands globally")?;
 
-                if let Err(e) = dm::send_startup_dm(
+                let registration_count = db::count_registrations(&bot_data.db_pool).await?;
+                if let Err(e) = dm::send_developer_startup_dm(
                     &bot_data.discord_http,
-                    bot_data.discord_user_id,
-                    &bot_data.record_collector_client,
+                    bot_data.dev_user_id,
+                    registration_count,
                 )
                 .await
                 {
-                    warn!("Startup DM failed: {e}");
+                    warn!("Developer startup DM failed: {e}");
                 }
 
                 Ok(bot_data)

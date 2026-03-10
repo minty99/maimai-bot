@@ -4,7 +4,6 @@ use serenity::builder::CreateEmbed;
 
 const EMBED_COLOR: u32 = 0x51BCF3;
 const EMBED_COLOR_MAINTENANCE: u32 = 0xFFA500;
-const EMBED_COLOR_WARNING: u32 = 0xFFD700;
 
 pub(crate) fn embed_base(title: &str) -> CreateEmbed {
     let mut e = CreateEmbed::new();
@@ -22,14 +21,16 @@ pub(crate) fn embed_maintenance() -> CreateEmbed {
         .color(EMBED_COLOR_MAINTENANCE)
 }
 
-pub(crate) fn embed_record_collector_unavailable() -> CreateEmbed {
-    CreateEmbed::new()
-        .title("⚠️ Record Collector Starting Up")
-        .description(
-            "Bot started successfully! Couldn't fetch player data right now. \
-            I'll monitor for new plays once the record collector is ready.",
-        )
-        .color(EMBED_COLOR_WARNING)
+pub(crate) fn embed_registration_confirmation(player_name: &str, url: &str) -> CreateEmbed {
+    embed_base("Record collector registered").description(format!(
+        "**Player**: {player_name}\n**Record collector**: {url}"
+    ))
+}
+
+pub(crate) fn embed_startup_summary(registered_url_count: i64) -> CreateEmbed {
+    embed_base("maistats-discord-bot ready").description(format!(
+        "Startup complete.\n**Registered URLs**: {registered_url_count}"
+    ))
 }
 
 #[derive(Debug, Clone)]

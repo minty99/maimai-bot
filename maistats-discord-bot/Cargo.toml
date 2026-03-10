@@ -19,6 +19,7 @@ poise = { workspace = true }
 reqwest = { workspace = true }
 serde = { workspace = true }
 serde_json.workspace = true
+sqlx.workspace = true
 strsim = { workspace = true }
 time = { workspace = true, features = ["local-offset"] }
 tokio = { workspace = true }
