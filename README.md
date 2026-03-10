@@ -1,183 +1,228 @@
-# maimai-bot
+# maistats
 
-`maimai-bot`은 **maimai DX NET (maimaidx-eng.com)** 에 로그인(SEGA ID)해서 기록을 크롤링하고, 로컬 SQLite에 저장한 뒤 Discord에서 조회/알림을 받는 monorepo입니다.
+`maistats`는 **maimaidx-eng.com** 데이터를 수집하고, 곡 메타데이터와 개인 플레이 기록을 각각 분리해서 제공하는 monorepo입니다. 저장소에는 Rust 서버 3개와 Vite/React 프런트엔드 1개가 들어 있습니다.
 
-이 저장소는 Rust 런타임 3개와 Cloudflare Pages로 배포하는 `maistats` 프론트엔드를 함께 관리합니다.
+핵심 배포 모델은 다음과 같습니다.
 
-## 아키텍처
+- `maistats-song-info`: 개발자가 공용으로 호스팅
+- `maistats-discord-bot`: 개발자가 공용으로 호스팅
+- `apps/maistats`: 개발자가 공용으로 호스팅
+- `maistats-record-collector`: 각 사용자가 자기 SEGA ID로 직접 호스팅
 
-이 프로젝트는 **두 개의 독립적인 서버** + **Discord 봇** + **웹 프론트엔드** 구조로 분리되어 있습니다:
+즉, **곡 정보는 공유되고 플레이 기록은 사용자별 self-hosted collector에서만 관리**됩니다.
 
-- **Song Info Server** (`maistats-song-info/`): 공개 곡 정보 제공 (stateful updater + API)
-  - 시작 시 곡 데이터가 없으면 `maimai-songdb`로 곡/내부레벨/재킷 정보를 가져와 `data/song_data/`에 저장합니다.
-  - 매일 07:30 KST에 곡 데이터를 다시 갱신하고 메모리에 리로드합니다.
-  - 저장된 JSON(`data/song_data/data.json`)을 로드해 API로 제공합니다.
-  - 재킷 이미지를 정적 파일로 서빙합니다.
-  - 포트: `3001` (기본값)
-  - 의존성: SongDB fetch용 환경 변수 (`MAIMAI_*`, `GOOGLE_API_KEY`) 필요
+## 구성 요소
 
-- **Record Collector Server** (`maistats-record-collector/`): 개인 기록 수집 및 관리 (인증 필요, stateful)
-  - 쿠키를 `data/` 아래에 저장/재사용하고, 만료 시 재로그인해서 갱신합니다.
-  - DB는 `sqlx::migrate!()`로 런타임에 마이그레이션을 실행합니다.
-  - 곡 메타데이터(레벨/내부레벨/버전 등)는 저장하지 않으며, 플레이/스코어 기록만 수집합니다.
-  - 시작 시 `playerData`를 크롤링하고, 필요하면 scores(난이도 0..4) + recent를 DB에 초기 적재합니다.
-  - 이후 10분마다 `playerData`를 다시 크롤링해서 **total play count 변화가 있을 때만** recent를 크롤링합니다.
-  - 포트: `3000` (기본값)
-  - 의존성: SEGA ID 인증 정보
+### `maistats-song-info`
 
-- **Discord Bot** (`maistats-discord-bot/`): Song Info Server는 전역으로, Record Collector Server는 Discord 사용자별로 연결하는 멀티유저 봇
-  - bot 자체 SQLite에 `discord user id -> record collector server URL` 매핑을 저장합니다.
-  - `/register <url>`로 사용자가 자기 record collector를 등록합니다.
-  - startup 시 개발자 user id에게만 상태 요약 DM을 보냅니다.
-  - 의존성: Song Info Server + 사용자별 Record Collector Server
+공용 곡 정보 서버입니다.
 
-- **maistats** (`apps/maistats/`): `maistats-song-info`와 `maistats-record-collector` 데이터를 탐색하는 Vite + React 웹 UI
-  - Cloudflare Pages 배포 대상입니다.
-  - 기본 API origin은 `SONG_INFO_SERVER_URL`, `RECORD_COLLECTOR_SERVER_URL` 환경 변수로 주입합니다.
-  - 로컬에서는 브라우저 UI 설정으로 origin을 덮어쓸 수 있습니다.
+- `maimai-songdb`를 사용해 곡 목록, 버전, 내부 레벨, 재킷 이미지를 준비합니다.
+- `data/song_data/data.json`을 메모리로 로드해 API로 제공합니다.
+- SongDB 관련 env가 설정돼 있으면 시작 시 업데이트를 시도하고, 이후 매일 **07:30 KST**에 다시 갱신합니다.
+- 대표 엔드포인트:
+  - `GET /health`
+  - `GET /health/ready`
+  - `GET /api/songs`
+  - `GET /api/songs/versions`
+  - `POST /api/songs/metadata`
+  - `GET /api/cover/:image_name`
 
-**중요**: Song Info Server와 Record Collector Server를 먼저 실행한 후 Discord 봇을 실행해야 합니다.
+### `maistats-record-collector`
 
-## 특징
+개인 플레이 기록 수집 서버입니다.
 
-- 쿠키 기반 인증으로 SEGA ID 로그인 유지
-- SQLite 기반 로컬 데이터 저장
-- 자동 스코어 동기화 및 플레이 로그 추적
-- Discord 슬래시 커맨드 및 DM 알림
+- 사용자의 SEGA ID로 로그인합니다.
+- 프로세스별 임시 cookie store를 사용해 인증 세션을 유지합니다.
+- SQLite를 사용하며 런타임에 `sqlx::migrate!()`로 마이그레이션을 적용합니다.
+- 시작 시 점수 시드를 보장하고 `playerData`를 읽은 뒤, 플레이 횟수 변화가 있으면 recent를 동기화합니다.
+- 이후 **10분마다** 백그라운드 polling을 수행합니다.
+- 유지보수 시간대에는 초기 동기화를 건너뜁니다.
+- 대표 엔드포인트:
+  - `GET /health`
+  - `GET /health/ready`
+  - `GET /api/player`
+  - `GET /api/scores/rated`
+  - `GET /api/scores/search`
+  - `GET /api/scores/item`
+  - `GET /api/songs/scores`
+  - `GET /api/recent`
+  - `GET /api/today`
+  - `GET /api/rating/targets`
+
+### `maistats-discord-bot`
+
+공용 Discord 봇입니다.
+
+- 전역 Song Info 서버를 참조합니다.
+- 각 Discord 사용자는 `/register <url>`로 자기 Record Collector URL을 등록합니다.
+- 봇 자체 SQLite에 `Discord user -> record collector URL` 매핑을 저장합니다.
+- 시작 시 slash command를 전역 등록하고, 개발자 계정에만 startup 요약 DM을 보냅니다.
+- 주요 커맨드:
+  - `/register`
+  - `/mai-score`
+  - `/mai-song-info`
+  - `/mai-recent`
+  - `/mai-today`
+
+### `apps/maistats`
+
+공용 웹 프런트엔드입니다.
+
+- Vite + React 기반입니다.
+- 기본적으로 Song Info 서버와 Record Collector 서버를 각각 다른 origin으로 붙습니다.
+- Settings 화면에서 연결 URL을 직접 바꿀 수 있어, 공용 프런트엔드에서 각자 self-hosted collector에 붙는 방식으로 사용할 수 있습니다.
+- 주요 화면:
+  - Scores
+  - Rating
+  - Playlogs
+  - Random Picker
+  - Settings
+
+## 저장소 구조
+
+```text
+.
+|-- apps/maistats/                # Vite + React frontend
+|-- maistats-song-info/           # shared song metadata server
+|-- maistats-record-collector/    # per-user self-hosted record server
+|-- maistats-discord-bot/         # shared Discord bot
+`-- crates/
+    |-- maimai-auth/              # maimaidx-eng.com auth helpers
+    |-- maimai-parsers/           # HTML parsers
+    |-- maimai-songdb/            # song DB fetch/update logic
+    `-- models/                   # shared API/domain/storage models
+```
 
 ## 요구사항
 
-- Rust (stable)
-- Node.js 20+ / npm 10+ (`apps/maistats` 개발 시)
-- Discord Bot Token / 개발자 Discord User ID (Discord 봇 사용 시)
-- SEGA ID 계정 (maimaidx-eng.com) (Record Collector Server 사용 시)
-- Song Info Server SongDB 갱신용 환경 변수 (`MAIMAI_*`, `GOOGLE_API_KEY`, `USER_AGENT`)
+- Rust stable
+- Node.js 20+
+- npm
+- SEGA ID 계정
+- Discord Bot Token 및 개발자 Discord User ID
+- Song Info 갱신까지 사용할 경우 SongDB 관련 인증 정보와 `GOOGLE_API_KEY`
 
-## 설정
+## 환경 변수
 
-환경 변수는 프로젝트 루트의 `.env` 파일을 사용합니다:
+루트 `.env`는 Rust 서비스들이 공용으로 사용합니다.
 
 ```bash
 cp .env.example .env
-# 편집: SEGA_ID, SEGA_PASSWORD, DISCORD_BOT_TOKEN, DISCORD_DEV_USER_ID 등 입력
 ```
 
-**주의**:
-- `.env` 파일은 절대 커밋하지 마세요 (`.gitignore`에 포함됨)
-- `dotenvy`가 상위 디렉토리를 자동 탐색하므로 어디서 실행하든 작동합니다
-- **보안**: 각 서비스는 필요한 환경 변수만 로드합니다 (Least Privilege 원칙)
+기본 항목:
 
-### 기본 런타임 경로
+- Record Collector
+  - `SEGA_ID`
+  - `SEGA_PASSWORD`
+  - `RECORD_COLLECTOR_PORT`
+  - `DATA_DIR`
+  - `DATABASE_URL`
+- Song Info
+  - `SONG_INFO_PORT`
+  - `SONG_DATA_PATH`
+- Discord Bot
+  - `DISCORD_BOT_TOKEN`
+  - `DISCORD_DEV_USER_ID`
+  - `SONG_INFO_SERVER_URL`
+  - `DISCORD_BOT_DATABASE_URL`
+- SongDB updater
+  - `MAIMAI_INTL_SEGA_ID`
+  - `MAIMAI_INTL_SEGA_PASSWORD`
+  - `MAIMAI_JP_SEGA_ID`
+  - `MAIMAI_JP_SEGA_PASSWORD`
+  - `USER_AGENT`
+  - `GOOGLE_API_KEY`
 
-- Song Info Server:
-  - 곡 데이터: `data/song_data/data.json` (기본값)
-  - 재킷 이미지: `data/song_data/cover/`
-- Record Collector Server:
-  - DB: `data/maimai.sqlite3`
-  - 쿠키: `data/cookies.json`
+프런트엔드는 별도 `.env`를 사용합니다.
 
-## 실행
+```bash
+cp apps/maistats/.env.example apps/maistats/.env
+```
 
-### Monorepo 의존성 설치
+- `SONG_INFO_SERVER_URL`
+- `RECORD_COLLECTOR_SERVER_URL`
 
-프런트엔드를 빌드하거나 실행할 때는 저장소 루트에서 npm workspace 의존성을 설치합니다.
+프런트엔드의 `RECORD_COLLECTOR_SERVER_URL`은 기본값일 뿐입니다. 실제 배포에서는 사용자가 Settings에서 자기 collector URL로 덮어쓰는 흐름을 전제로 합니다.
+
+## 로컬 개발
+
+의존성 설치:
 
 ```bash
 npm ci
 ```
 
-### Standalone 실행 (로컬 개발)
-
-**반드시 두 서버를 먼저 실행한 후 Discord 봇을 실행하세요.**
-
-1. **환경 변수 설정** (처음 한 번만):
-   ```bash
-   cp .env.example .env
-   # .env 파일 편집하여 실제 credentials 입력
-   ```
-
-2. **Song Info Server 실행** (터미널 1):
-   ```bash
-   cargo run --bin maistats-song-info
-   ```
-   Song Info Server는 `http://localhost:3001`에서 실행되며, 곡 정보 및 재킷 이미지를 제공합니다.
-
-3. **Record Collector Server 실행** (터미널 2):
-   ```bash
-   cargo run --bin maistats-record-collector
-   ```
-   Record Collector Server는 `http://localhost:3000`에서 실행되며, `/health/ready` 엔드포인트를 제공합니다.
-
-4. **Discord 봇 실행** (터미널 3):
-   ```bash
-   cargo run --bin maistats-discord-bot
-   ```
-   Discord 봇은 startup 시 개발자에게 상태 요약 DM을 보내고, 각 사용자는 `/register <url>`로 자기 Record Collector Server를 등록할 수 있습니다.
-
-**참고**:
-- `dotenvy`가 현재 디렉토리와 상위 디렉토리를 탐색하므로 프로젝트 루트에서 실행해도 각 서비스의 `.env`를 자동으로 찾습니다.
-- Song Info Server는 독립적으로 실행 가능하며, Record Collector Server나 Discord 봇 없이도 사용할 수 있습니다.
-
-### maistats 실행
-
-서버 API가 올라와 있다면 루트에서 다음 명령으로 프런트엔드를 실행할 수 있습니다.
+### 1. Song Info 서버 실행
 
 ```bash
-cp apps/maistats/.env.example apps/maistats/.env
+cargo run -p maistats-song-info
+```
+
+기본 주소: `http://localhost:3001`
+
+### 2. Record Collector 서버 실행
+
+```bash
+cargo run -p maistats-record-collector
+```
+
+기본 주소: `http://localhost:3000`
+
+처음 실행 시 `data/`를 만들고 DB 마이그레이션을 적용합니다. 인증이나 초기 동기화가 실패해도 서버는 뜨므로, API 상태 확인과 디버깅을 분리해서 진행할 수 있습니다.
+
+### 3. Discord 봇 실행
+
+```bash
+cargo run -p maistats-discord-bot
+```
+
+Discord 사용자는 `/register <record-collector-url>`로 자신의 collector를 연결해야 합니다.
+
+### 4. 프런트엔드 실행
+
+```bash
 npm run dev:maistats
 ```
 
-프로덕션 빌드는 다음 명령으로 생성합니다.
+기본 주소: `http://localhost:5174`
+
+## 운영 모델
+
+권장 운영 형태는 다음과 같습니다.
+
+1. 개발자가 `maistats-song-info`, `maistats-discord-bot`, `apps/maistats`를 공용으로 운영합니다.
+2. 각 사용자는 자신의 환경에서 `maistats-record-collector`를 띄웁니다.
+3. Discord에서는 `/register`로 collector URL을 등록합니다.
+4. 웹에서는 Settings에서 collector URL을 입력해 같은 공용 프런트엔드에 연결합니다.
+
+이 구조 덕분에 곡 정보와 UI는 한 곳에서 관리하면서도, 플레이 기록 DB와 로그인 세션은 각 사용자 환경에 남길 수 있습니다.
+
+## 데이터 저장
+
+- Record Collector
+  - SQLite DB: 기본값 `data/maimai.sqlite3`
+  - 임시 cookie file: OS temp 디렉터리 아래 `maistats-cookies-<pid>.json`
+- Song Info
+  - 곡 JSON: 기본값 `data/song_data/data.json`
+  - 재킷 이미지: 기본값 `data/song_data/`
+- Discord Bot
+  - 봇 DB: 기본값 `data/maistats-discord-bot.sqlite3`
+
+`data/`와 `.env`는 커밋하지 않습니다.
+
+## 개발 점검 명령
 
 ```bash
+cargo fmt --all
+cargo clippy --all -- -D warnings
+cargo test
 npm run build:maistats
 ```
 
-빌드 결과물은 `apps/maistats/dist/`에 생성됩니다.
+## 배포 메모
 
-### 개발/디버깅 명령어
-
-Record Collector Server에서 제공하는 CLI 명령어들 (레거시, 참고용):
-
-쿠키 로그인/체크:
-- `cargo run --bin maistats-record-collector -- auth login`
-- `cargo run --bin maistats-record-collector -- auth check`
-
-HTML/raw fetch (로그인 필요):
-- `cargo run --bin maistats-record-collector -- fetch url --url https://maimaidx-eng.com/maimai-mobile/playerData/ --out data/out/player_data.html`
-
-크롤링/파싱(JSON)만 수행 (DB 미사용):
-- `cargo run --bin maistats-record-collector -- crawl player-data --out data/out/player_data.json`
-- `cargo run --bin maistats-record-collector -- crawl recent --out data/out/recent.json`
-- `cargo run --bin maistats-record-collector -- crawl scores --out data/out/scores.json`
-
-## Discord 명령어
-
-- `/register <url>`
-  - 호출한 Discord 사용자 계정에 record collector server URL을 저장합니다.
-  - URL 형식과 `/health/ready`, `/api/player` 응답을 즉시 검증합니다.
-  - 성공하면 ephemeral 응답만 보냅니다.
-- `/mai-score <title|alias>`
-  - 먼저 `/register <url>`를 완료한 사용자만 사용할 수 있습니다.
-  - 곡 제목 exact match만 조회합니다.
-  - exact match가 없으면 조회 실패로 처리합니다.
-  - 기록이 없는(미플레이) 항목은 출력하지 않습니다.
-- `/mai-recent`
-  - 먼저 `/register <url>`를 완료한 사용자만 사용할 수 있습니다.
-  - recent 페이지 기준 “가장 최근 1 credit”만 보여줍니다.
-  - 맨 앞의 `TRACK 01`을 기준으로 그 credit의 플레이들을 `TRACK 01 -> ...` 순서로 출력합니다.
-- `/mai-today`
-  - 먼저 `/register <url>`를 완료한 사용자만 사용할 수 있습니다.
-  - JST 04:00 경계 기준 오늘 플레이 요약을 보여줍니다.
-- `/mai-song-info <title|alias>`
-  - Song Info Server만 사용하므로 등록 없이 사용할 수 있습니다.
-
-## 데이터 모델/저장 방식 (요약)
-
-- `scores` / `playlogs`에 `achievement_x10000`으로 저장합니다 (`percent * 10000`, 반올림).
-- 난이도/차트/랭크/FC/SYNC는 문자열 아이콘을 enum으로 파싱하지만, DB에는 표시용 문자열(TEXT)로 저장합니다.
-
-## 배포
-
-- Docker 이미지: GitHub Actions가 `maistats-song-info`, `maistats-record-collector`, `maistats-discord-bot` 3개 이미지만 빌드/배포합니다.
-- `maistats`: Cloudflare Pages가 monorepo 루트에서 `npm ci && npm run build --workspace apps/maistats`를 실행하고, 출력 디렉터리는 `apps/maistats/dist`를 사용합니다.
+- Rust 서비스는 각각 독립 바이너리로 배포합니다.
+- 프런트엔드 `apps/maistats`는 Cloudflare용 Vite 설정을 사용합니다.
+- CI/배포 워크플로는 `.github/workflows/` 아래에 있습니다.
