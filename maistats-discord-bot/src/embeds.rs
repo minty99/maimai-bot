@@ -21,12 +21,6 @@ pub(crate) fn embed_maintenance() -> CreateEmbed {
         .color(EMBED_COLOR_MAINTENANCE)
 }
 
-pub(crate) fn embed_registration_confirmation(player_name: &str, url: &str) -> CreateEmbed {
-    embed_base("Record collector registered").description(format!(
-        "**Player**: {player_name}\n**Record collector**: {url}"
-    ))
-}
-
 pub(crate) fn embed_startup_summary(registered_url_count: i64) -> CreateEmbed {
     embed_base("maistats-discord-bot ready").description(format!(
         "Startup complete.\n**Registered URLs**: {registered_url_count}"

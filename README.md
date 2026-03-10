@@ -28,7 +28,7 @@
 - **Discord Bot** (`maistats-discord-bot/`): Song Info Server는 전역으로, Record Collector Server는 Discord 사용자별로 연결하는 멀티유저 봇
   - bot 자체 SQLite에 `discord user id -> record collector server URL` 매핑을 저장합니다.
   - `/register <url>`로 사용자가 자기 record collector를 등록합니다.
-  - startup 시 개발자 user id에게만 상태 요약 DM을 보내고, register 성공 시 해당 사용자에게만 확인용 DM을 보냅니다.
+  - startup 시 개발자 user id에게만 상태 요약 DM을 보냅니다.
   - 의존성: Song Info Server + 사용자별 Record Collector Server
 
 - **maistats** (`apps/maistats/`): `song-info-server`와 `record-collector-server` 데이터를 탐색하는 Vite + React 웹 UI
@@ -156,7 +156,7 @@ HTML/raw fetch (로그인 필요):
 - `/register <url>`
   - 호출한 Discord 사용자 계정에 record collector server URL을 저장합니다.
   - URL 형식과 `/health/ready`, `/api/player` 응답을 즉시 검증합니다.
-  - 성공하면 ephemeral 응답과 확인용 DM을 보냅니다.
+  - 성공하면 ephemeral 응답만 보냅니다.
 - `/mai-score <title|alias>`
   - 먼저 `/register <url>`를 완료한 사용자만 사용할 수 있습니다.
   - 곡 제목 exact match만 조회합니다.

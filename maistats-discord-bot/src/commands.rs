@@ -11,7 +11,6 @@ use crate::client::{
     normalize_record_collector_url,
 };
 use crate::db;
-use crate::dm;
 use crate::embeds::{
     RecentRecordView, build_mai_recent_embeds, build_mai_today_embed, embed_base,
     embed_maintenance, format_level_with_internal,
@@ -89,20 +88,6 @@ pub(crate) async fn register(
         )),
     ))
     .await?;
-
-    if let Err(err) = dm::send_registration_confirmation_dm(
-        &ctx.data().discord_http,
-        ctx.author().id,
-        &player_profile.user_name,
-        &normalized_url,
-    )
-    .await
-    {
-        warn!(
-            "Failed to send registration confirmation DM to {}: {err}",
-            ctx.author().id
-        );
-    }
 
     Ok(())
 }

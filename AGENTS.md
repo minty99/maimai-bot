@@ -35,7 +35,7 @@ The goal of this file is to keep future changes consistent with the current impl
     - each Discord user registers exactly one `record-collector-server` base URL with `/register <url>`
     - the mapping is persisted in the bot's own SQLite DB and survives restarts
   - Slash commands:
-    - `/register <url>`: validate readiness + player API, upsert caller's collector URL, send confirmation DM to the caller
+    - `/register <url>`: validate readiness + player API, upsert caller's collector URL, and reply ephemerally
     - `/mai-score <title|alias>`: exact title or registered alias match
       - exact title/alias match: resolve to the canonical song, then show that title
       - ambiguous alias: show duplicate candidates
