@@ -1,14 +1,14 @@
-@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+KR:wght@400;500;700&family=Space+Grotesk:wght@500;700&display=swap');
+@import url('https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css');
 
 :root {
-  --bg: #eef2f7;
+  --bg: #edf1f7;
   --panel: #ffffff;
   --ink: #0f172a;
-  --muted: #5b667a;
+  --muted: #64748b;
   --accent: #2563eb;
   --accent-2: #1d4ed8;
-  --line: #d7dfeb;
-  --line-strong: #c2cddd;
+  --line: #dde4ee;
+  --line-strong: #c8d4e0;
   --chip: #f3f6fb;
   --chip-active: #2563eb;
   --diff-basic: #3d9b58;
@@ -29,10 +29,10 @@ body {
   min-height: 100vh;
   scrollbar-gutter: stable;
   color: var(--ink);
-  font-family: 'IBM Plex Sans KR', 'Noto Sans KR', sans-serif;
+  font-family: 'Pretendard Variable', Pretendard, -apple-system, BlinkMacSystemFont, 'Apple SD Gothic Neo', 'Malgun Gothic', sans-serif;
   background:
-    radial-gradient(90vw 60vh at 10% -20%, rgba(147, 197, 253, 0.28) 0%, rgba(147, 197, 253, 0) 70%),
-    radial-gradient(80vw 55vh at 100% -10%, rgba(191, 219, 254, 0.36) 0%, rgba(191, 219, 254, 0) 72%),
+    radial-gradient(90vw 70vh at 8% -15%, rgba(99, 102, 241, 0.10) 0%, rgba(99, 102, 241, 0) 65%),
+    radial-gradient(75vw 60vh at 100% -5%, rgba(59, 130, 246, 0.14) 0%, rgba(59, 130, 246, 0) 68%),
     var(--bg);
 }
 
@@ -40,8 +40,9 @@ h1,
 h2,
 h3 {
   margin: 0;
-  font-family: 'Space Grotesk', sans-serif;
-  letter-spacing: -0.02em;
+  font-family: 'Pretendard Variable', Pretendard, sans-serif;
+  font-weight: 700;
+  letter-spacing: -0.025em;
 }
 
 p {
@@ -117,9 +118,10 @@ select {
   align-items: center;
   justify-items: start;
   gap: 10px;
-  border-radius: 2px;
+  border-radius: 8px;
   background: var(--chip);
   color: #334155;
+  transition: background 140ms ease, color 140ms ease, border-color 140ms ease;
 }
 
 .app-nav-trigger {
@@ -156,9 +158,10 @@ select {
 }
 
 .app-nav-list button.active {
-  border-color: rgba(37, 99, 235, 0.32);
-  background: rgba(37, 99, 235, 0.1);
+  border-color: rgba(37, 99, 235, 0.28);
+  background: rgba(37, 99, 235, 0.10);
   color: var(--accent);
+  font-weight: 700;
 }
 
 .app-nav-trigger svg,
@@ -175,19 +178,20 @@ select {
 .toolbar-pill {
   display: inline-flex;
   align-items: center;
-  min-height: 30px;
+  min-height: 28px;
   padding: 0 10px;
   border: 1px solid var(--line);
-  border-radius: 2px;
+  border-radius: 999px;
   background: rgba(243, 246, 251, 0.92);
   color: #475569;
   font-size: 12px;
-  font-weight: 700;
+  font-weight: 600;
+  letter-spacing: 0.01em;
 }
 
 .toolbar-pill.accent {
-  border-color: rgba(37, 99, 235, 0.22);
-  background: rgba(37, 99, 235, 0.1);
+  border-color: rgba(37, 99, 235, 0.24);
+  background: rgba(37, 99, 235, 0.09);
   color: var(--accent);
 }
 
@@ -221,45 +225,51 @@ select {
 .panel-count {
   display: inline-flex;
   align-items: center;
-  min-height: 32px;
+  min-height: 28px;
   padding: 0 10px;
   border-radius: 999px;
   border: 1px solid var(--line);
-  background: #f8fbff;
+  background: linear-gradient(135deg, #f4f8fe, #eef3fb);
   color: #334155;
-  font-family: 'Space Grotesk', sans-serif;
-  font-size: 0.9rem;
+  font-family: 'Pretendard Variable', Pretendard, sans-serif;
+  font-size: 0.85rem;
   font-weight: 700;
+  letter-spacing: -0.01em;
 }
 
 .view-mode-switch {
   display: inline-flex;
-  padding: 2px;
+  padding: 3px;
   border: 1px solid var(--line);
-  border-radius: 10px;
-  background: #f8fbff;
+  border-radius: 11px;
+  background: linear-gradient(135deg, #f4f8fe, #eef3fb);
   gap: 2px;
+  box-shadow: inset 0 1px 3px rgba(15, 23, 42, 0.05);
 }
 
 .view-mode-switch button {
-  height: 30px;
+  height: 26px;
   padding: 0 10px;
   border: 0;
   border-radius: 8px;
   background: transparent;
-  color: #475569;
+  color: #64748b;
   font-size: 12px;
-  font-weight: 700;
+  font-weight: 600;
+  transition: background 130ms ease, color 130ms ease, box-shadow 130ms ease;
 }
 
 .view-mode-switch button:hover {
   border-color: transparent;
-  background: rgba(37, 99, 235, 0.06);
+  background: rgba(37, 99, 235, 0.08);
+  color: var(--accent);
+  box-shadow: none;
 }
 
 .view-mode-switch button.active {
-  background: rgba(37, 99, 235, 0.12);
+  background: rgba(37, 99, 235, 0.13);
   color: var(--accent);
+  font-weight: 700;
 }
 
 .explorer-layout {
@@ -310,11 +320,12 @@ select {
 .panel {
   background: var(--panel);
   border: 1px solid var(--line);
-  border-radius: 12px;
-  padding: 12px;
+  border-top-color: rgba(255, 255, 255, 0.85);
+  border-radius: 14px;
+  padding: 14px;
   display: grid;
   gap: 14px;
-  box-shadow: 0 6px 18px rgba(15, 23, 42, 0.04);
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.05), 0 6px 24px rgba(37, 99, 235, 0.06);
 }
 
 .panel h2 {
@@ -348,27 +359,38 @@ select {
 
 .tabs {
   display: inline-flex;
-  gap: 6px;
-  background: rgba(255, 255, 255, 0.72);
+  gap: 4px;
+  background: rgba(255, 255, 255, 0.80);
   border: 1px solid var(--line);
-  border-radius: 10px;
+  border-radius: 11px;
   padding: 4px;
   width: fit-content;
+  box-shadow: inset 0 1px 3px rgba(15, 23, 42, 0.04);
 }
 
 .tabs button {
   border: 1px solid transparent;
   border-radius: 8px;
-  padding: 8px 14px;
+  padding: 7px 16px;
   background: transparent;
   color: #475569;
   cursor: pointer;
+  font-size: 13px;
+  font-weight: 600;
+  transition: background 140ms ease, color 140ms ease, box-shadow 140ms ease;
+}
+
+.tabs button:hover {
+  border-color: transparent;
+  background: rgba(37, 99, 235, 0.07);
+  color: var(--accent);
 }
 
 .tabs button.active {
   background: var(--accent);
-  border-color: var(--accent);
+  border-color: var(--accent-2);
   color: white;
+  box-shadow: 0 2px 8px rgba(37, 99, 235, 0.28);
 }
 
 .filter-grid {
@@ -383,7 +405,9 @@ select {
 
 .filter-label {
   font-weight: 700;
-  font-size: 13px;
+  font-size: 12px;
+  letter-spacing: 0.01em;
+  color: #344256;
 }
 
 .chip-row {
@@ -400,14 +424,22 @@ select {
   min-height: 30px;
   padding: 5px 10px;
   font-size: 12px;
+  font-weight: 500;
   color: #334155;
   cursor: pointer;
+  transition: background 130ms ease, border-color 130ms ease, color 130ms ease;
+}
+
+.chip:hover:not(.active) {
+  border-color: #b0bdd0;
+  background: #eaf0f8;
 }
 
 .chip.active {
   border-color: var(--chip-active);
   background: var(--chip-active);
   color: #eff6ff;
+  box-shadow: 0 2px 6px rgba(37, 99, 235, 0.22);
 }
 
 .difficulty-label {
@@ -635,31 +667,34 @@ input,
 select,
 button {
   height: 38px;
-  border-radius: 8px;
+  border-radius: 9px;
   border: 1px solid var(--line);
   padding: 0 12px;
   background: #fbfcfe;
   color: var(--ink);
+  transition: border-color 130ms ease, background 130ms ease, box-shadow 130ms ease;
 }
 
 button {
-  background: #f7f9fc;
+  background: #f5f8fc;
   border-color: var(--line);
-  font-weight: 700;
+  font-weight: 600;
   cursor: pointer;
 }
 
 button:hover {
-  border-color: #94a3b8;
-  background: #f1f5f9;
+  border-color: #a8b8cc;
+  background: #eef3fa;
+  box-shadow: 0 1px 4px rgba(15, 23, 42, 0.06);
 }
 
 button:focus-visible,
 input:focus-visible,
 select:focus-visible {
-  outline: 2px solid rgba(37, 99, 235, 0.2);
+  outline: 2px solid rgba(37, 99, 235, 0.22);
   outline-offset: 1px;
   border-color: var(--accent);
+  box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.08);
 }
 
 .range-grid {
@@ -794,25 +829,29 @@ select:focus-visible {
 
 .rating-stat-card {
   display: grid;
-  gap: 3px;
-  padding: 8px 10px;
+  gap: 4px;
+  padding: 10px 12px;
   border: 1px solid var(--line);
-  border-radius: 8px;
-  background: #f8fbff;
+  border-top-color: rgba(255, 255, 255, 0.9);
+  border-radius: 10px;
+  background: linear-gradient(160deg, #f8fbff 0%, #f2f6fd 100%);
+  box-shadow: 0 1px 4px rgba(15, 23, 42, 0.04);
 }
 
 .rating-stat-card span {
-  font-size: 11px;
+  font-size: 10px;
   color: var(--muted);
   font-weight: 700;
   text-transform: uppercase;
-  letter-spacing: 0.04em;
+  letter-spacing: 0.06em;
 }
 
 .rating-stat-card strong {
-  font-family: 'Space Grotesk', sans-serif;
-  font-size: 1.4rem;
+  font-family: 'Pretendard Variable', Pretendard, sans-serif;
+  font-size: 1.45rem;
+  font-weight: 700;
   line-height: 1.1;
+  letter-spacing: -0.02em;
 }
 
 .rating-table-column {
@@ -822,12 +861,13 @@ select:focus-visible {
 
 .table-wrap {
   border: 1px solid var(--line);
-  border-radius: 10px;
+  border-radius: 12px;
   overflow-x: auto;
   overflow-y: auto;
   max-height: 70vh;
   -webkit-overflow-scrolling: touch;
   background: #fcfdff;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.04);
 }
 
 .table-loading-state {
@@ -859,13 +899,16 @@ thead {
 }
 
 th {
-  background: #f3f6fb;
-  color: #334155;
+  background: linear-gradient(180deg, #f5f8fd 0%, #f0f4fa 100%);
+  color: #2d3d52;
   border-bottom: 1px solid var(--line);
   text-align: left;
-  padding: 8px;
+  padding: 9px 8px;
   white-space: normal;
   overflow-wrap: anywhere;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.01em;
 }
 
 th.sortable {
@@ -913,8 +956,12 @@ td {
   padding: 6px;
 }
 
+tbody tr {
+  transition: background 100ms ease;
+}
+
 tbody tr:hover {
-  background: #f8fbff;
+  background: #f3f7fd;
 }
 
 .jacket {
@@ -929,7 +976,7 @@ tbody tr:hover {
 .jacket.fallback {
   display: grid;
   place-items: center;
-  background: linear-gradient(160deg, #dbeafe, #eff6ff);
+  background: linear-gradient(160deg, #c7d9f7, #e0eaff);
   font-weight: 700;
   color: #334155;
 }
@@ -1057,10 +1104,11 @@ tbody tr:hover {
 .history-chart-panel {
   position: relative;
   border: 1px solid var(--line);
-  border-radius: 10px;
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(248, 251, 255, 0.96));
+  border-top-color: rgba(255, 255, 255, 0.8);
+  border-radius: 12px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.98) 0%, rgba(245, 249, 255, 0.96) 100%);
   padding: 12px;
+  box-shadow: 0 1px 4px rgba(15, 23, 42, 0.04);
 }
 
 .history-chart-scroll {
@@ -1332,12 +1380,13 @@ tbody tr:hover {
 }
 
 .error-banner {
-  padding: 12px;
+  padding: 12px 14px;
   border-radius: 10px;
   border: 1px solid #fbd38d;
-  background: #fff7ed;
+  background: linear-gradient(135deg, #fff7ed, #fffbf5);
   color: #b45309;
-  font-weight: 700;
+  font-weight: 600;
+  font-size: 13px;
 }
 
 .footer-note {
@@ -1419,7 +1468,7 @@ tbody tr:hover {
   height: 34px;
   padding: 0 8px;
   text-align: center;
-  font-family: 'Space Grotesk', sans-serif;
+  font-family: 'Pretendard Variable', Pretendard, sans-serif;
   font-size: 1.1rem;
   border: 1px solid var(--line);
   background: rgba(255, 255, 255, 0.9);
@@ -1432,23 +1481,34 @@ tbody tr:hover {
 }
 
 .picker-random-button {
-  height: 50px;
-  border-radius: 10px;
+  height: 52px;
+  border-radius: 11px;
   border: 1px solid #1d4ed8;
-  font-family: 'Space Grotesk', sans-serif;
+  font-family: 'Pretendard Variable', Pretendard, sans-serif;
   font-size: 1rem;
-  letter-spacing: 0.06em;
+  font-weight: 700;
+  letter-spacing: 0.05em;
   color: #eff6ff;
   background: linear-gradient(135deg, #2563eb 0%, #1e40af 100%);
-  box-shadow: 0 12px 24px rgba(37, 99, 235, 0.18);
+  box-shadow: 0 4px 14px rgba(37, 99, 235, 0.30), inset 0 1px 0 rgba(255, 255, 255, 0.15);
+  transition: background 140ms ease, box-shadow 140ms ease, transform 100ms ease;
 }
 
 .picker-random-button:hover,
-.picker-random-button:focus-visible,
-.picker-random-button:active {
+.picker-random-button:focus-visible {
   color: #eff6ff;
   background: linear-gradient(135deg, #1d4ed8 0%, #1e3a8a 100%);
   border-color: #1e40af;
+  box-shadow: 0 6px 20px rgba(37, 99, 235, 0.38), inset 0 1px 0 rgba(255, 255, 255, 0.15);
+  transform: translateY(-1px);
+}
+
+.picker-random-button:active {
+  color: #eff6ff;
+  background: linear-gradient(135deg, #1e40af 0%, #1e3a8a 100%);
+  border-color: #1e40af;
+  box-shadow: 0 2px 8px rgba(37, 99, 235, 0.24);
+  transform: translateY(0);
 }
 
 .picker-result-panel {
@@ -1477,9 +1537,9 @@ tbody tr:hover {
   padding: 18px;
   border-radius: 12px;
   background:
-    radial-gradient(circle at top left, rgba(191, 219, 254, 0.5), transparent 55%),
-    radial-gradient(circle at bottom right, rgba(226, 232, 240, 0.75), transparent 42%),
-    #f8fbff;
+    radial-gradient(circle at top left, rgba(165, 180, 252, 0.28), transparent 50%),
+    radial-gradient(circle at bottom right, rgba(199, 210, 254, 0.45), transparent 42%),
+    #f6f9ff;
 }
 
 .picker-state-card h3 {
@@ -1607,7 +1667,7 @@ tbody tr:hover {
 }
 
 .picker-achievement-row strong {
-  font-family: 'Space Grotesk', sans-serif;
+  font-family: 'Pretendard Variable', Pretendard, sans-serif;
   font-size: 1.35rem;
 }
 
@@ -1630,16 +1690,17 @@ tbody tr:hover {
 
 .picker-tag-row em {
   font-style: normal;
-  min-height: 22px;
+  min-height: 20px;
   display: inline-flex;
   align-items: center;
-  padding: 0 6px;
-  border-radius: 8px;
-  background: rgba(37, 99, 235, 0.1);
-  border: 1px solid rgba(37, 99, 235, 0.22);
+  padding: 0 7px;
+  border-radius: 999px;
+  background: rgba(37, 99, 235, 0.09);
+  border: 1px solid rgba(37, 99, 235, 0.20);
   color: var(--accent);
   font-size: 10px;
   font-weight: 700;
+  letter-spacing: 0.02em;
 }
 
 .picker-filter-modal {
@@ -1681,7 +1742,7 @@ tbody tr:hover {
 
 .picker-skeleton {
   border-radius: 999px;
-  background: linear-gradient(90deg, #e7edf6 0%, #f8fbff 50%, #e7edf6 100%);
+  background: linear-gradient(90deg, #dde5f2 0%, #edf3fb 50%, #dde5f2 100%);
   background-size: 200% 100%;
   animation: picker-skeleton-shimmer 1.6s linear infinite;
 }
@@ -1746,18 +1807,20 @@ tbody tr:hover {
   padding: 10px 12px;
   display: grid;
   justify-items: start;
-  gap: 4px;
+  gap: 3px;
   text-align: left;
+  border-radius: 10px;
 }
 
 .picker-version-launcher strong {
   font-size: 14px;
+  font-weight: 600;
 }
 
 .picker-version-launcher span {
   font-size: 10px;
   font-weight: 700;
-  letter-spacing: 0.08em;
+  letter-spacing: 0.07em;
   text-transform: uppercase;
   color: #64748b;
 }
