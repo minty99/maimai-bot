@@ -14,7 +14,7 @@ on:
       - crates/**
       - song-info-server/**
       - record-collector-server/**
-      - personal-discord-bot/**
+      - maistats-discord-bot/**
   workflow_dispatch:  # 수동 트리거 허용
 
 env:
@@ -76,17 +76,17 @@ jobs:
           cache-from: type=gha,scope=maimai-record-collector
           cache-to: type=gha,mode=max,scope=maimai-record-collector
 
-      # --- maimai-personal-discord-bot ---
-      - name: Build and push maimai-personal-discord-bot
+      # --- maimai-maistats-discord-bot ---
+      - name: Build and push maimai-maistats-discord-bot
         uses: docker/build-push-action@v6
         with:
           context: .
           file: ./Dockerfile
-          target: maimai-personal-discord-bot
+          target: maimai-maistats-discord-bot
           platforms: linux/arm64
           push: true
           tags: |
-            ${{ env.IMAGE_PREFIX }}/maimai-personal-discord-bot:sha-${{ steps.sha.outputs.short }}
-            ${{ env.IMAGE_PREFIX }}/maimai-personal-discord-bot:latest
+            ${{ env.IMAGE_PREFIX }}/maimai-maistats-discord-bot:sha-${{ steps.sha.outputs.short }}
+            ${{ env.IMAGE_PREFIX }}/maimai-maistats-discord-bot:latest
           cache-from: type=gha,scope=maimai-discord-bot
           cache-to: type=gha,mode=max,scope=maimai-discord-bot

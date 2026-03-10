@@ -1,10 +1,10 @@
 [package]
-name = "personal-discord-bot"
+name = "maistats-discord-bot"
 version.workspace = true
 edition.workspace = true
 
 [[bin]]
-name = "personal-discord-bot"
+name = "maistats-discord-bot"
 path = "src/main.rs"
 
 [dependencies]

@@ -25,7 +25,7 @@
   - 포트: `3000` (기본값)
   - 의존성: SEGA ID 인증 정보
 
-- **Discord Bot** (`personal-discord-bot/`): 두 서버의 API를 호출하여 Discord 명령어 처리 및 DM 알림 전송
+- **Discord Bot** (`maistats-discord-bot/`): 두 서버의 API를 호출하여 Discord 명령어 처리 및 DM 알림 전송
   - Record Collector Server의 `/health/ready` 엔드포인트를 폴링하여 서버가 준비될 때까지 대기합니다.
   - Record Collector Server에서 새 플레이가 감지되면 DM으로 알림을 보냅니다.
   - 의존성: Song Info Server + Record Collector Server
@@ -109,7 +109,7 @@ npm ci
 
 4. **Discord 봇 실행** (터미널 3):
    ```bash
-   cargo run --bin personal-discord-bot
+   cargo run --bin maistats-discord-bot
    ```
    Discord 봇은 Record Collector Server의 `/health/ready`를 폴링하여 서버가 준비될 때까지 대기합니다.
 
@@ -167,5 +167,5 @@ HTML/raw fetch (로그인 필요):
 
 ## 배포
 
-- Docker 이미지: GitHub Actions가 `song-info-server`, `record-collector-server`, `personal-discord-bot` 3개 이미지만 빌드/배포합니다.
+- Docker 이미지: GitHub Actions가 `song-info-server`, `record-collector-server`, `maistats-discord-bot` 3개 이미지만 빌드/배포합니다.
 - `maistats`: Cloudflare Pages가 monorepo 루트에서 `npm ci && npm run build --workspace apps/maistats`를 실행하고, 출력 디렉터리는 `apps/maistats/dist`를 사용합니다.
