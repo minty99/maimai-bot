@@ -1958,6 +1958,20 @@ tbody tr:hover {
   background: #4752c4;
 }
 
+@media (max-width: 480px) {
+  .home-hero {
+    flex-direction: column;
+  }
+
+  .home-hero-aside {
+    width: 100%;
+  }
+
+  .home-discord-btn {
+    width: 100%;
+    justify-content: center;
+  }
+}
 
 .home-footer {
   padding: 14px 0 8px;

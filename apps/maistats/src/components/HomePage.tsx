@@ -74,27 +74,6 @@ export function HomePage({
       <aside className="sidebar-column">{sidebarTopContent}</aside>
 
       <div className="table-column home-content">
-        <section className="panel home-hero">
-          <div className="home-hero-main">
-            <h2>maimai DX 스코어 트래커</h2>
-            <p className="home-hero-desc">
-              maistats는 maimaidx-eng.com 계정과 연동하여 스코어, 플레이로그, 레이팅을 추적하는
-              개인용 통계 도구입니다. 직접 운영하는 Record Collector 서버에 연결하여 데이터를
-              불러옵니다.
-            </p>
-          </div>
-          <div className="home-hero-aside">
-            <a
-              href="https://discord.com/oauth2/authorize?client_id=1463175635974361183"
-              target="_blank"
-              rel="noreferrer"
-              className="home-discord-btn"
-            >
-              Discord Bot 추가하기
-            </a>
-          </div>
-        </section>
-
         <section className="panel">
           <div className="panel-heading">
             <div>
@@ -202,6 +181,27 @@ export function HomePage({
               </div>
             </div>
           </div>
+        </section>
+
+        <section className="panel">
+          <div className="panel-heading">
+            <div>
+              <h2>Discord Bot</h2>
+              <p>
+                Discord 서버에 maistats 봇을 추가하면 <code>/mai-score</code>,{' '}
+                <code>/mai-recent</code> 명령어로 스코어와 최근 플레이 기록을 바로 조회할 수
+                있습니다.
+              </p>
+            </div>
+          </div>
+          <a
+            href="https://discord.com/oauth2/authorize?client_id=1463175635974361183"
+            target="_blank"
+            rel="noreferrer"
+            className="home-discord-btn"
+          >
+            Discord Bot 추가하기
+          </a>
         </section>
 
         <footer className="home-footer">
