@@ -8,7 +8,7 @@
 
 이 프로젝트는 **두 개의 독립적인 서버** + **Discord 봇** + **웹 프론트엔드** 구조로 분리되어 있습니다:
 
-- **Song Info Server** (`song-info-server/`): 공개 곡 정보 제공 (stateful updater + API)
+- **Song Info Server** (`maistats-song-info/`): 공개 곡 정보 제공 (stateful updater + API)
   - 시작 시 곡 데이터가 없으면 `maimai-songdb`로 곡/내부레벨/재킷 정보를 가져와 `data/song_data/`에 저장합니다.
   - 매일 07:30 KST에 곡 데이터를 다시 갱신하고 메모리에 리로드합니다.
   - 저장된 JSON(`data/song_data/data.json`)을 로드해 API로 제공합니다.
@@ -16,7 +16,7 @@
   - 포트: `3001` (기본값)
   - 의존성: SongDB fetch용 환경 변수 (`MAIMAI_*`, `GOOGLE_API_KEY`) 필요
 
-- **Record Collector Server** (`record-collector-server/`): 개인 기록 수집 및 관리 (인증 필요, stateful)
+- **Record Collector Server** (`maistats-record-collector/`): 개인 기록 수집 및 관리 (인증 필요, stateful)
   - 쿠키를 `data/` 아래에 저장/재사용하고, 만료 시 재로그인해서 갱신합니다.
   - DB는 `sqlx::migrate!()`로 런타임에 마이그레이션을 실행합니다.
   - 곡 메타데이터(레벨/내부레벨/버전 등)는 저장하지 않으며, 플레이/스코어 기록만 수집합니다.
@@ -31,7 +31,7 @@
   - startup 시 개발자 user id에게만 상태 요약 DM을 보냅니다.
   - 의존성: Song Info Server + 사용자별 Record Collector Server
 
-- **maistats** (`apps/maistats/`): `song-info-server`와 `record-collector-server` 데이터를 탐색하는 Vite + React 웹 UI
+- **maistats** (`apps/maistats/`): `maistats-song-info`와 `maistats-record-collector` 데이터를 탐색하는 Vite + React 웹 UI
   - Cloudflare Pages 배포 대상입니다.
   - 기본 API origin은 `SONG_INFO_SERVER_URL`, `RECORD_COLLECTOR_SERVER_URL` 환경 변수로 주입합니다.
   - 로컬에서는 브라우저 UI 설정으로 origin을 덮어쓸 수 있습니다.
@@ -98,13 +98,13 @@ npm ci
 
 2. **Song Info Server 실행** (터미널 1):
    ```bash
-   cargo run --bin song-info-server
+   cargo run --bin maistats-song-info
    ```
    Song Info Server는 `http://localhost:3001`에서 실행되며, 곡 정보 및 재킷 이미지를 제공합니다.
 
 3. **Record Collector Server 실행** (터미널 2):
    ```bash
-   cargo run --bin record-collector-server
+   cargo run --bin maistats-record-collector
    ```
    Record Collector Server는 `http://localhost:3000`에서 실행되며, `/health/ready` 엔드포인트를 제공합니다.
 
@@ -140,16 +140,16 @@ npm run build:maistats
 Record Collector Server에서 제공하는 CLI 명령어들 (레거시, 참고용):
 
 쿠키 로그인/체크:
-- `cargo run --bin record-collector-server -- auth login`
-- `cargo run --bin record-collector-server -- auth check`
+- `cargo run --bin maistats-record-collector -- auth login`
+- `cargo run --bin maistats-record-collector -- auth check`
 
 HTML/raw fetch (로그인 필요):
-- `cargo run --bin record-collector-server -- fetch url --url https://maimaidx-eng.com/maimai-mobile/playerData/ --out data/out/player_data.html`
+- `cargo run --bin maistats-record-collector -- fetch url --url https://maimaidx-eng.com/maimai-mobile/playerData/ --out data/out/player_data.html`
 
 크롤링/파싱(JSON)만 수행 (DB 미사용):
-- `cargo run --bin record-collector-server -- crawl player-data --out data/out/player_data.json`
-- `cargo run --bin record-collector-server -- crawl recent --out data/out/recent.json`
-- `cargo run --bin record-collector-server -- crawl scores --out data/out/scores.json`
+- `cargo run --bin maistats-record-collector -- crawl player-data --out data/out/player_data.json`
+- `cargo run --bin maistats-record-collector -- crawl recent --out data/out/recent.json`
+- `cargo run --bin maistats-record-collector -- crawl scores --out data/out/scores.json`
 
 ## Discord 명령어
 
@@ -179,5 +179,5 @@ HTML/raw fetch (로그인 필요):
 
 ## 배포
 
-- Docker 이미지: GitHub Actions가 `song-info-server`, `record-collector-server`, `maistats-discord-bot` 3개 이미지만 빌드/배포합니다.
+- Docker 이미지: GitHub Actions가 `maistats-song-info`, `maistats-record-collector`, `maistats-discord-bot` 3개 이미지만 빌드/배포합니다.
 - `maistats`: Cloudflare Pages가 monorepo 루트에서 `npm ci && npm run build --workspace apps/maistats`를 실행하고, 출력 디렉터리는 `apps/maistats/dist`를 사용합니다.

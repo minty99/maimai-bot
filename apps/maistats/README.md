@@ -1,6 +1,6 @@
 # maistats
 
-`song-info-server`와 `record-collector-server` 데이터를 탐색하는 Vite + React 기반 웹 프론트엔드입니다.
+`maistats-song-info`와 `maistats-record-collector` 데이터를 탐색하는 Vite + React 기반 웹 프론트엔드입니다.
 
 ## Requirements
 
@@ -51,9 +51,9 @@ npm run dev --workspace apps/maistats
 ## Environment Variables
 
 - `SONG_INFO_SERVER_URL`
-  - `song-info-server` origin
+  - `maistats-song-info` origin
 - `RECORD_COLLECTOR_SERVER_URL`
-  - `record-collector-server` origin
+  - `maistats-record-collector` origin
 
 이 값들은 앱의 기본 API 연결 주소로 사용됩니다. 실행 중에는 UI의 `Server Connection`에서 브라우저별로 덮어쓸 수 있습니다.
 
@@ -110,7 +110,7 @@ npm run preview --workspace apps/maistats
 
 ## Data Notes
 
-- Score 화면의 Last Played/Days는 `record-collector-server`의 `/api/scores/rated` (`scores` 테이블 `last_played_at`) 기준입니다.
-- Playlog 화면은 `record-collector-server`의 `/api/recent?limit=10000` (`playlogs` 테이블) 기준입니다.
-- chart별 `play_count`는 playlog에서 추정하지 않고, `record-collector-server` score API가 내려주는 값을 직접 사용합니다.
+- Score 화면의 Last Played/Days는 `maistats-record-collector`의 `/api/scores/rated` (`scores` 테이블 `last_played_at`) 기준입니다.
+- Playlog 화면은 `maistats-record-collector`의 `/api/recent?limit=10000` (`playlogs` 테이블) 기준입니다.
+- chart별 `play_count`는 playlog에서 추정하지 않고, `maistats-record-collector` score API가 내려주는 값을 직접 사용합니다.
 - 더 긴 기간 분석이 필요하면 record collector에 추가 API(예: 전체 playlog 조회)가 필요합니다.

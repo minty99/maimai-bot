@@ -17,7 +17,7 @@ The goal of this file is to keep future changes consistent with the current impl
 - Frontend app: `apps/maistats`
   - Vite + React app deployed to Cloudflare Pages
   - Uses root npm workspaces; prefer running npm commands from the repo root
-  - Consumes `song-info-server` and `record-collector-server` APIs via `SONG_INFO_SERVER_URL` and `RECORD_COLLECTOR_SERVER_URL`
+  - Consumes `maistats-song-info` and `maistats-record-collector` APIs via `SONG_INFO_SERVER_URL` and `RECORD_COLLECTOR_SERVER_URL`
 
 - CLI entrypoint: `src/main.rs` (clap). Key subcommands:
   - `auth check|login`
@@ -32,7 +32,7 @@ The goal of this file is to keep future changes consistent with the current impl
     - sends a startup summary DM only to `DISCORD_DEV_USER_ID`
   - Per-user collector selection:
     - `SONG_INFO_SERVER_URL` is shared globally
-    - each Discord user registers exactly one `record-collector-server` base URL with `/register <url>`
+    - each Discord user registers exactly one `maistats-record-collector` base URL with `/register <url>`
     - the mapping is persisted in the bot's own SQLite DB and survives restarts
   - Slash commands:
     - `/register <url>`: validate readiness + player API, upsert caller's collector URL, and reply ephemerally
@@ -81,9 +81,9 @@ The goal of this file is to keep future changes consistent with the current impl
 
 - **Use Conventional Commits subject line**: `<type>(<scope>): <summary>` (imperative, lowercase type).
   - Preferred types: `feat`, `fix`, `refactor`, `docs`, `test`, `ci`, `chore`.
-  - Scope should map to component names in this repo (e.g. `discord`, `record-collector-server`, `song-info-server`, `models`, `agents`).
+  - Scope should map to component names in this repo (e.g. `discord`, `maistats-record-collector`, `maistats-song-info`, `models`, `agents`).
   - Examples:
-    - `fix(record-collector-server): handle all matching musicDetail indexes`
+    - `fix(maistats-record-collector): handle all matching musicDetail indexes`
     - `docs(agents): define commit message convention`
 - **Atomic commits**: split commits by meaning (one logical change per commit), and avoid bundling unrelated modifications.
 - **Co-author trailer required**: every commit message must include an agent co-author trailer in the commit body.
