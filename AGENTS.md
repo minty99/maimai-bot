@@ -1,12 +1,12 @@
 # Agent Guidelines (maimai-bot)
 
-This repo is a **single-user** monorepo centered on Rust services that log in to **maimaidx-eng.com** (SEGA ID), crawl your data, store it locally (SQLite), expose it via APIs/Discord, and ship a separate `apps/maistats` frontend.
+This repo is centered on Rust services that log in to **maimaidx-eng.com** (SEGA ID), crawl data, store it locally (SQLite), expose it via APIs/Discord, and ship a separate `apps/maistats` frontend.
 
 The goal of this file is to keep future changes consistent with the current implementation and constraints.
 
 ## Non-negotiables
 
-- **Single user only**: no multi-user concepts (accounts table, user scoping, per-user DB rows, etc.).
+- **Record collector remains single-user**: do not add multi-user concepts to the crawler / record-collector data model. The Discord bot may store a Discord-user-to-record-collector mapping, but record data itself stays unscoped and per collector instance.
 - **Secrets never committed**: `.env` and `data/` are always gitignored; never print credentials or cookie contents.
 - **Dependency management**: use `cargo add` / `cargo remove` (avoid hand-editing `Cargo.toml`).
 - **Error handling**: use `eyre` (`eyre::Result`, `WrapErr`) consistently.
@@ -25,16 +25,17 @@ The goal of this file is to keep future changes consistent with the current impl
   - `crawl scores|recent|song-detail|player-data` (parse to JSON; no DB)
   - `db init|sync-scores|sync-recent`
   - `bot run` (Discord bot)
-- Discord bot: `personal-discord-bot/src/main.rs`
+- Discord bot: `maistats-discord-bot/src/main.rs`
   - On startup:
-    - fetches `playerData` and stores `player.user_name` in memory (`BotData.maimai_user_name`)
-    - checks if scores sync is needed using `app_state`'s `player.total_play_count`
-    - if needed: sync scores (diff 0..4) + seed recent playlogs once
-    - sends a startup DM embed with player data
-  - Background loop (every 10 minutes):
-    - fetches `playerData` again
-    - only if **total play count changed**: fetches recent page, upserts playlogs, then sends a DM embed for "New plays detected"
-- Slash commands:
+    - runs bot-local SQLite migrations
+    - registers slash commands globally
+    - sends a startup summary DM only to `DISCORD_DEV_USER_ID`
+  - Per-user collector selection:
+    - `SONG_INFO_SERVER_URL` is shared globally
+    - each Discord user registers exactly one `record-collector-server` base URL with `/register <url>`
+    - the mapping is persisted in the bot's own SQLite DB and survives restarts
+  - Slash commands:
+    - `/register <url>`: validate readiness + player API, upsert caller's collector URL, and reply ephemerally
     - `/mai-score <title|alias>`: exact title or registered alias match
       - exact title/alias match: resolve to the canonical song, then show that title
       - ambiguous alias: show duplicate candidates

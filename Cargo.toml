@@ -6,7 +6,7 @@ members = [
     "crates/maimai-parsers",
     "crates/maimai-songdb",
     "crates/models",
-    "personal-discord-bot",
+    "maistats-discord-bot",
 ]
 resolver = "2"
 

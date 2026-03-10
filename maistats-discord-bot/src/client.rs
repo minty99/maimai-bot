@@ -1,9 +1,9 @@
 use eyre::{Result, WrapErr};
 use models::{
-    ChartType, DifficultyCategory, ParsedPlayerProfile, PlayRecordApiResponse, ScoreApiResponse,
-    SongChartRegion, SongDetailScoreApiResponse,
+    ChartType, DifficultyCategory, ParsedPlayerProfile, PlayRecordApiResponse, SongChartRegion,
+    SongDetailScoreApiResponse,
 };
-use reqwest::Client;
+use reqwest::{Client, Url};
 use serde::{Deserialize, Serialize};
 use std::fmt;
 use tokio::time::{Duration, sleep};
@@ -46,6 +46,10 @@ impl ApiError {
     pub(crate) fn code(&self) -> &str {
         &self.code
     }
+
+    pub(crate) fn message(&self) -> &str {
+        &self.message
+    }
 }
 
 impl fmt::Display for ApiError {
@@ -59,12 +63,6 @@ impl fmt::Display for ApiError {
 }
 
 impl std::error::Error for ApiError {}
-
-pub(crate) enum PlayerDataResult {
-    Ok(ParsedPlayerProfile),
-    Maintenance,
-    Unavailable(String),
-}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub(crate) struct SongMetadata {
@@ -102,13 +100,13 @@ pub(crate) struct SongMetadataSearchResponse {
     pub(crate) items: Vec<SongMetadata>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct SongInfoClient {
     client: Client,
     base_url: String,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct RecordCollectorClient {
     client: Client,
     base_url: String,
@@ -119,6 +117,30 @@ fn build_client() -> Result<Client> {
         .timeout(Duration::from_secs(30))
         .build()
         .wrap_err("build http client")
+}
+
+pub(crate) fn normalize_record_collector_url(input: &str) -> Result<String> {
+    let trimmed = input.trim();
+    eyre::ensure!(
+        !trimmed.is_empty(),
+        "Please provide a record collector server URL."
+    );
+
+    let mut url = Url::parse(trimmed).wrap_err("parse record collector url")?;
+    eyre::ensure!(
+        matches!(url.scheme(), "http" | "https"),
+        "Record collector URL must use http or https."
+    );
+    eyre::ensure!(
+        url.host_str().is_some(),
+        "Record collector URL must include a host."
+    );
+
+    url.set_path("");
+    url.set_query(None);
+    url.set_fragment(None);
+
+    Ok(url.as_str().trim_end_matches('/').to_string())
 }
 
 impl SongInfoClient {
@@ -206,83 +228,30 @@ impl RecordCollectorClient {
         Ok(Self { client, base_url })
     }
 
-    pub(crate) async fn get_player(&self) -> PlayerDataResult {
-        let url = format!("{}/api/player", self.base_url);
-        for attempt in 0..3 {
-            match self.client.get(&url).send().await {
-                Ok(resp) if resp.status().is_success() => {
-                    match resp.json::<ParsedPlayerProfile>().await {
-                        Ok(data) => return PlayerDataResult::Ok(data),
-                        Err(e) => {
-                            if attempt < 2 {
-                                sleep(Duration::from_millis(100 * 2_u64.pow(attempt))).await;
-                                continue;
-                            }
-                            return PlayerDataResult::Unavailable(format!(
-                                "Failed to parse response: {}",
-                                e
-                            ));
-                        }
-                    }
-                }
-                Ok(resp) => {
-                    let status = resp.status();
-                    if let Ok(error_body) = resp.json::<RecordCollectorErrorResponse>().await {
-                        if error_body.maintenance == Some(true) {
-                            return PlayerDataResult::Maintenance;
-                        }
-                        if attempt < 2 {
-                            sleep(Duration::from_millis(100 * 2_u64.pow(attempt))).await;
-                            continue;
-                        }
-                        return PlayerDataResult::Unavailable(format!(
-                            "HTTP {}: {}",
-                            status, error_body.message
-                        ));
-                    }
-                    if attempt < 2 {
-                        sleep(Duration::from_millis(100 * 2_u64.pow(attempt))).await;
-                        continue;
-                    }
-                    return PlayerDataResult::Unavailable(format!("HTTP {}", status));
-                }
-                Err(e) => {
-                    if attempt < 2 {
-                        sleep(Duration::from_millis(100 * 2_u64.pow(attempt))).await;
-                        continue;
-                    }
-                    return PlayerDataResult::Unavailable(format!("Connection error: {}", e));
-                }
-            }
+    pub(crate) async fn health_check(&self) -> Result<()> {
+        let url = format!("{}/health/ready", self.base_url);
+        let resp = self
+            .client
+            .get(&url)
+            .send()
+            .await
+            .wrap_err("check record collector readiness")?;
+
+        if resp.status().is_success() {
+            return Ok(());
         }
-        PlayerDataResult::Unavailable("Max retries exceeded".to_string())
+
+        let status = resp.status();
+        let body = resp.text().await.unwrap_or_default();
+        if let Ok(parsed) = serde_json::from_str::<RecordCollectorErrorResponse>(&body) {
+            return Err(ApiError::from_record_collector(status, parsed).into());
+        }
+
+        Err(ApiError::from_http_text(status, &body).into())
     }
 
-    pub async fn search_scores(&self, query: &str) -> Result<Vec<ScoreApiResponse>> {
-        self.get_with_retry(&format!(
-            "/api/scores/search?q={}",
-            urlencoding::encode(query)
-        ))
-        .await
-    }
-
-    pub async fn get_score(
-        &self,
-        title: &str,
-        genre: &str,
-        artist: &str,
-        chart: &str,
-        diff: &str,
-    ) -> Result<ScoreApiResponse> {
-        self.get_with_retry(&format!(
-            "/api/scores/item?title={}&genre={}&artist={}&chart_type={}&diff_category={}",
-            urlencoding::encode(title),
-            urlencoding::encode(genre),
-            urlencoding::encode(artist),
-            urlencoding::encode(chart),
-            urlencoding::encode(diff)
-        ))
-        .await
+    pub(crate) async fn get_player_profile(&self) -> Result<ParsedPlayerProfile> {
+        self.get_with_retry("/api/player").await
     }
 
     pub async fn get_recent(&self, limit: usize) -> Result<Vec<PlayRecordApiResponse>> {
@@ -293,10 +262,6 @@ impl RecordCollectorClient {
     pub async fn get_today(&self, day: &str) -> Result<Vec<PlayRecordApiResponse>> {
         self.get_with_retry(&format!("/api/today?day={}", day))
             .await
-    }
-
-    pub async fn get_rated_scores(&self) -> Result<Vec<ScoreApiResponse>> {
-        self.get_with_retry("/api/scores/rated").await
     }
 
     pub async fn get_song_detail_scores(
@@ -312,62 +277,6 @@ impl RecordCollectorClient {
             urlencoding::encode(artist)
         ))
         .await
-    }
-
-    pub async fn health_check_with_retry(&self) -> Result<()> {
-        let url = format!("{}/health/ready", self.base_url);
-        let mut attempt = 0;
-        const MAX_RETRIES: u32 = 5;
-
-        loop {
-            match self.client.get(&url).send().await {
-                Ok(resp) if resp.status().is_success() => {
-                    tracing::info!("Record collector is ready");
-                    return Ok(());
-                }
-                Ok(resp) => {
-                    let status = resp.status();
-                    if attempt < MAX_RETRIES {
-                        let wait_ms = 1000 * 2_u64.pow(attempt);
-                        tracing::warn!(
-                            "Record collector not ready (HTTP {}), retrying in {}ms (attempt {}/{})",
-                            status,
-                            wait_ms,
-                            attempt + 1,
-                            MAX_RETRIES
-                        );
-                        sleep(Duration::from_millis(wait_ms)).await;
-                        attempt += 1;
-                        continue;
-                    }
-                    return Err(eyre::eyre!(
-                        "Record collector failed to become ready after {} retries (HTTP {})",
-                        MAX_RETRIES,
-                        status
-                    ));
-                }
-                Err(e) => {
-                    if attempt < MAX_RETRIES {
-                        let wait_ms = 1000 * 2_u64.pow(attempt);
-                        tracing::warn!(
-                            "Record collector connection failed: {}, retrying in {}ms (attempt {}/{})",
-                            e,
-                            wait_ms,
-                            attempt + 1,
-                            MAX_RETRIES
-                        );
-                        sleep(Duration::from_millis(wait_ms)).await;
-                        attempt += 1;
-                        continue;
-                    }
-                    return Err(eyre::eyre!(
-                        "Record collector failed to become ready after {} retries: {}",
-                        MAX_RETRIES,
-                        e
-                    ));
-                }
-            }
-        }
     }
 
     async fn get_with_retry<T: for<'de> Deserialize<'de>>(&self, path: &str) -> Result<T> {
@@ -398,5 +307,27 @@ impl RecordCollectorClient {
             }
         }
         unreachable!()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::normalize_record_collector_url;
+
+    #[test]
+    fn normalize_record_collector_url_rejects_invalid_input() {
+        assert!(normalize_record_collector_url("").is_err());
+        assert!(normalize_record_collector_url("ftp://example.com").is_err());
+        assert!(normalize_record_collector_url("not a url").is_err());
+    }
+
+    #[test]
+    fn normalize_record_collector_url_keeps_origin_only() {
+        let normalized = normalize_record_collector_url(
+            " https://collector.example:3000/api/player?foo=bar#frag ",
+        )
+        .expect("url should normalize");
+
+        assert_eq!(normalized, "https://collector.example:3000");
     }
 }

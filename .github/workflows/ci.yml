@@ -8,7 +8,7 @@ on:
       - Cargo.lock
       - rust-toolchain.toml
       - crates/**
-      - personal-discord-bot/**
+      - maistats-discord-bot/**
       - record-collector-server/**
       - song-info-server/**
       - tests/**
@@ -20,7 +20,7 @@ on:
       - Cargo.lock
       - rust-toolchain.toml
       - crates/**
-      - personal-discord-bot/**
+      - maistats-discord-bot/**
       - record-collector-server/**
       - song-info-server/**
       - tests/**
