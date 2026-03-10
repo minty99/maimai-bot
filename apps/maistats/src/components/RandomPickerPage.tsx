@@ -174,7 +174,7 @@ function SelectionModal({
       >
         <div className="detail-header">
           <h2>{title}</h2>
-          <button type="button" onClick={onClose}>
+          <button type="button" className="modal-close-button" onClick={onClose}>
             닫기
           </button>
         </div>
@@ -238,7 +238,7 @@ function FiltersMenu({
       >
         <div className="detail-header">
           <h2>Filter Settings</h2>
-          <button type="button" onClick={onClose}>
+          <button type="button" className="modal-close-button" onClick={onClose}>
             닫기
           </button>
         </div>

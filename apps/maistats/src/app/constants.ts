@@ -114,7 +114,10 @@ export type ScoreSortKey =
   | 'internal'
   | 'dxRatio'
   | 'playCount'
-  | 'lastPlayed';
+  | 'lastPlayed'
+  | 'fc'
+  | 'sync'
+  | 'version';
 
 export type PlaylogSortKey =
   | 'playedAt'

@@ -3,6 +3,7 @@ import {
   SCORE_RANK_ORDER_MAP,
   ScoreSortKey,
   SYNC_ORDER_MAP,
+  VERSION_ORDER_MAP,
   PlaylogSortKey,
 } from "./constants";
 import {
@@ -17,11 +18,9 @@ import {
   NA_FILTER_OPTION_ID,
 } from "./scoreFilterPresets";
 import type {
-  FcStatus,
   PlaylogRow,
   ScoreRank,
   ScoreRow,
-  SyncStatus,
 } from "../types";
 
 export function computeScoreRankOptions(scoreData: ScoreRow[]): ScoreRank[] {
@@ -33,28 +32,6 @@ export function computeScoreRankOptions(scoreData: ScoreRow[]): ScoreRank[] {
     ),
   );
   return sortByOrder(values, SCORE_RANK_ORDER_MAP);
-}
-
-export function computeFcOptions(scoreData: ScoreRow[]): FcStatus[] {
-  const values = Array.from(
-    new Set(
-      scoreData
-        .map((row) => row.fc)
-        .filter((status): status is FcStatus => status !== null),
-    ),
-  );
-  return sortByOrder(values, FC_ORDER_MAP);
-}
-
-export function computeSyncOptions(scoreData: ScoreRow[]): SyncStatus[] {
-  const values = Array.from(
-    new Set(
-      scoreData
-        .map((row) => row.sync)
-        .filter((status): status is SyncStatus => status !== null),
-    ),
-  );
-  return sortByOrder(values, SYNC_ORDER_MAP);
 }
 
 interface BuildFilteredScoreRowsParams {
@@ -214,6 +191,24 @@ export function buildFilteredScoreRows({
           right.latestPlayedAtUnix,
         );
         break;
+      case "fc": {
+        const leftFc = left.fc !== null ? (FC_ORDER_MAP.get(left.fc) ?? Number.MAX_SAFE_INTEGER) : Number.MAX_SAFE_INTEGER;
+        const rightFc = right.fc !== null ? (FC_ORDER_MAP.get(right.fc) ?? Number.MAX_SAFE_INTEGER) : Number.MAX_SAFE_INTEGER;
+        result = rightFc - leftFc;
+        break;
+      }
+      case "sync": {
+        const leftSync = left.sync !== null ? (SYNC_ORDER_MAP.get(left.sync) ?? Number.MAX_SAFE_INTEGER) : Number.MAX_SAFE_INTEGER;
+        const rightSync = right.sync !== null ? (SYNC_ORDER_MAP.get(right.sync) ?? Number.MAX_SAFE_INTEGER) : Number.MAX_SAFE_INTEGER;
+        result = rightSync - leftSync;
+        break;
+      }
+      case "version": {
+        const leftVer = left.version !== null ? (VERSION_ORDER_MAP.get(left.version) ?? Number.MAX_SAFE_INTEGER) : Number.MAX_SAFE_INTEGER;
+        const rightVer = right.version !== null ? (VERSION_ORDER_MAP.get(right.version) ?? Number.MAX_SAFE_INTEGER) : Number.MAX_SAFE_INTEGER;
+        result = leftVer - rightVer;
+        break;
+      }
     }
 
     return scoreSortDesc ? -result : result;

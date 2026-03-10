@@ -135,7 +135,7 @@ export function ScoreHistoryModal({
                 </p>
               </div>
             </div>
-            <button type="button" onClick={onClose}>
+            <button type="button" className="modal-close-button" onClick={onClose}>
               닫기
             </button>
           </div>

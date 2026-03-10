@@ -194,7 +194,7 @@ export function ScoreExplorerSection({
                     type="number"
                     value={internalMin}
                     min={1}
-                    max={15}
+                    max={15.5}
                     step={0.1}
                     aria-label="레벨 최소"
                     onChange={(event) => onChangeInternalMin(Number(event.target.value))}
@@ -206,7 +206,7 @@ export function ScoreExplorerSection({
                     type="number"
                     value={internalMax}
                     min={1}
-                    max={15}
+                    max={15.5}
                     step={0.1}
                     aria-label="레벨 최대"
                     onChange={(event) => onChangeInternalMax(Number(event.target.value))}
@@ -389,8 +389,18 @@ export function ScoreExplorerSection({
                     </button>
                   </th>
                   <th className="rank-col">Rank</th>
-                  <th className="fc-col">FC</th>
-                  <th className="sync-col">Sync</th>
+                  <th className="sortable fc-col">
+                    <button type="button" className="th-sort-button" onClick={() => onSortBy('fc')}>
+                      <span>FC</span>
+                      <span className="sort-indicator">{sortIndicator(scoreSortKey === 'fc', scoreSortDesc)}</span>
+                    </button>
+                  </th>
+                  <th className="sortable sync-col">
+                    <button type="button" className="th-sort-button" onClick={() => onSortBy('sync')}>
+                      <span>Sync</span>
+                      <span className="sort-indicator">{sortIndicator(scoreSortKey === 'sync', scoreSortDesc)}</span>
+                    </button>
+                  </th>
                   <th className="sortable dx-col">
                     <button type="button" className="th-sort-button" onClick={() => onSortBy('dxRatio')}>
                       <span>DX</span>
@@ -415,7 +425,12 @@ export function ScoreExplorerSection({
                       </span>
                     </button>
                   </th>
-                  <th className="version-col">버전</th>
+                  <th className="sortable version-col">
+                    <button type="button" className="th-sort-button" onClick={() => onSortBy('version')}>
+                      <span>버전</span>
+                      <span className="sort-indicator">{sortIndicator(scoreSortKey === 'version', scoreSortDesc)}</span>
+                    </button>
+                  </th>
                 </tr>
               </thead>
               <tbody>

@@ -27,7 +27,6 @@ import {
   INTERNAL_LEVEL_CONTIGUOUS_PRESET_ORDER,
   InternalLevelPresetId,
   INTERNAL_LEVEL_PRESETS,
-  NA_FILTER_OPTION_ID,
   resolvePresetSelectionFromRange,
   SCORE_ACHIEVEMENT_PRESET_ORDER,
   SCORE_ACHIEVEMENT_PRESETS,
@@ -55,8 +54,6 @@ import {
 import {
   buildFilteredPlaylogRows,
   buildFilteredScoreRows,
-  computeFcOptions,
-  computeSyncOptions,
 } from './app/filtering';
 import { PlaylogExplorerSection } from './components/PlaylogExplorerSection';
 import { RandomPickerPage } from './components/RandomPickerPage';
@@ -664,8 +661,6 @@ function App() {
     [playlogSortKey],
   );
 
-  const fcOptions = useMemo(() => computeFcOptions(scoreData), [scoreData]);
-  const syncOptions = useMemo(() => computeSyncOptions(scoreData), [scoreData]);
   const selectedInternalLevelPresets = useMemo(
     () => resolvePresetSelectionFromRange(INTERNAL_LEVEL_PRESETS, internalMin, internalMax),
     [internalMax, internalMin],
@@ -674,14 +669,8 @@ function App() {
     () => resolvePresetSelectionFromRange(SCORE_ACHIEVEMENT_PRESETS, achievementMin, achievementMax),
     [achievementMax, achievementMin],
   );
-  const filteredFcOptions = useMemo(() => {
-    const available = new Set(fcOptions);
-    return FC_FILTER_OPTIONS.filter((value) => value === ALL_FILTER_PRESET_ID || value === NA_FILTER_OPTION_ID || available.has(value));
-  }, [fcOptions]);
-  const filteredSyncOptions = useMemo(() => {
-    const available = new Set(syncOptions);
-    return SYNC_FILTER_OPTIONS.filter((value) => value === ALL_FILTER_PRESET_ID || value === NA_FILTER_OPTION_ID || available.has(value));
-  }, [syncOptions]);
+  const filteredFcOptions = FC_FILTER_OPTIONS;
+  const filteredSyncOptions = SYNC_FILTER_OPTIONS;
 
   const handleInternalMinChange = useCallback((value: number) => {
     setInternalLevelSelectionState(null);
