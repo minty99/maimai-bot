@@ -117,3 +117,39 @@ export async function fetchSongVersions(
 export function buildCoverUrl(songInfoBaseUrl: string, imageName: string): string {
   return `${normalizeBaseUrl(songInfoBaseUrl)}/api/cover/${encodeURIComponent(imageName)}`;
 }
+
+export interface PlayerProfile {
+  user_name: string;
+  rating: number;
+  current_version_play_count: number;
+}
+
+export async function fetchPlayerProfile(
+  baseUrl: string,
+  signal?: AbortSignal,
+): Promise<PlayerProfile | null> {
+  const base = normalizeBaseUrl(baseUrl);
+  if (!base) return null;
+  try {
+    return await getJson<PlayerProfile>(`${base}/api/player`, signal);
+  } catch {
+    return null;
+  }
+}
+
+export async function checkRecordCollectorHealth(
+  baseUrl: string,
+  signal?: AbortSignal,
+): Promise<PlayerProfile> {
+  const base = normalizeBaseUrl(baseUrl);
+  if (!base) {
+    throw new Error('URL을 입력해주세요.');
+  }
+
+  const healthResp = await fetch(`${base}/health/ready`, { signal });
+  if (!healthResp.ok) {
+    throw new Error(`서버에 연결할 수 없습니다. (HTTP ${healthResp.status})`);
+  }
+
+  return getJson<PlayerProfile>(`${base}/api/player`, signal);
+}
