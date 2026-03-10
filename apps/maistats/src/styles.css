@@ -1362,6 +1362,11 @@ tbody tr:hover {
   box-shadow: 0 24px 60px rgba(15, 23, 42, 0.18);
 }
 
+.modal-close-button {
+  font-size: 0.875rem;
+  flex-shrink: 0;
+}
+
 .server-modal {
   width: min(860px, 100%);
 }
