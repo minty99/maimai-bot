@@ -194,7 +194,7 @@ export function ScoreExplorerSection({
                     type="number"
                     value={internalMin}
                     min={1}
-                    max={15}
+                    max={15.5}
                     step={0.1}
                     aria-label="레벨 최소"
                     onChange={(event) => onChangeInternalMin(Number(event.target.value))}
@@ -206,7 +206,7 @@ export function ScoreExplorerSection({
                     type="number"
                     value={internalMax}
                     min={1}
-                    max={15}
+                    max={15.5}
                     step={0.1}
                     aria-label="레벨 최대"
                     onChange={(event) => onChangeInternalMax(Number(event.target.value))}

@@ -21,7 +21,7 @@ export const DEFAULT_SCORE_FILTERS = {
   achievementMin: 0,
   achievementMax: 101,
   internalMin: 1,
-  internalMax: 15,
+  internalMax: 15.5,
   daysMin: 0,
   daysMax: 2000,
 } as const;
@@ -68,7 +68,7 @@ export const INTERNAL_LEVEL_PRESETS: NumericRangePreset<InternalLevelPresetId>[]
   { id: '13+', label: '13+', min: 13.6, max: 13.9 },
   { id: '14', label: '14', min: 14, max: 14.5 },
   { id: '14+', label: '14+', min: 14.6, max: 14.9 },
-  { id: '15', label: '15', min: 15, max: 15 },
+  { id: '15', label: '15', min: 15, max: 15.5 },
 ];
 
 export type ScoreAchievementPresetId =
