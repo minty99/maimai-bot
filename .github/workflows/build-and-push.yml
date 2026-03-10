@@ -12,8 +12,8 @@ on:
       - rust-toolchain.toml
       - .env.example
       - crates/**
-      - song-info-server/**
-      - record-collector-server/**
+      - maistats-song-info/**
+      - maistats-record-collector/**
       - maistats-discord-bot/**
   workflow_dispatch:  # 수동 트리거 허용
 
@@ -46,47 +46,47 @@ jobs:
         id: sha
         run: echo "short=$(git rev-parse --short=7 HEAD)" >> "$GITHUB_OUTPUT"
 
-      # --- maimai-song-info-server ---
-      - name: Build and push maimai-song-info-server
+      # --- maistats-song-info ---
+      - name: Build and push maistats-song-info
         uses: docker/build-push-action@v6
         with:
           context: .
           file: ./Dockerfile
-          target: maimai-song-info
+          target: maistats-song-info
           platforms: linux/arm64
           push: true
           tags: |
-            ${{ env.IMAGE_PREFIX }}/maimai-song-info-server:sha-${{ steps.sha.outputs.short }}
-            ${{ env.IMAGE_PREFIX }}/maimai-song-info-server:latest
-          cache-from: type=gha,scope=maimai-song-info
-          cache-to: type=gha,mode=max,scope=maimai-song-info
+            ${{ env.IMAGE_PREFIX }}/maistats-song-info:sha-${{ steps.sha.outputs.short }}
+            ${{ env.IMAGE_PREFIX }}/maistats-song-info:latest
+          cache-from: type=gha,scope=maistats-song-info
+          cache-to: type=gha,mode=max,scope=maistats-song-info
 
-      # --- maimai-record-collector-server ---
-      - name: Build and push maimai-record-collector-server
+      # --- maistats-record-collector ---
+      - name: Build and push maistats-record-collector
         uses: docker/build-push-action@v6
         with:
           context: .
           file: ./Dockerfile
-          target: maimai-record-collector-server
+          target: maistats-record-collector
           platforms: linux/arm64
           push: true
           tags: |
-            ${{ env.IMAGE_PREFIX }}/maimai-record-collector-server:sha-${{ steps.sha.outputs.short }}
-            ${{ env.IMAGE_PREFIX }}/maimai-record-collector-server:latest
-          cache-from: type=gha,scope=maimai-record-collector
-          cache-to: type=gha,mode=max,scope=maimai-record-collector
+            ${{ env.IMAGE_PREFIX }}/maistats-record-collector:sha-${{ steps.sha.outputs.short }}
+            ${{ env.IMAGE_PREFIX }}/maistats-record-collector:latest
+          cache-from: type=gha,scope=maistats-record-collector
+          cache-to: type=gha,mode=max,scope=maistats-record-collector
 
-      # --- maimai-maistats-discord-bot ---
-      - name: Build and push maimai-maistats-discord-bot
+      # --- maistats-discord-bot ---
+      - name: Build and push maistats-discord-bot
         uses: docker/build-push-action@v6
         with:
           context: .
           file: ./Dockerfile
-          target: maimai-maistats-discord-bot
+          target: maistats-discord-bot
           platforms: linux/arm64
           push: true
           tags: |
-            ${{ env.IMAGE_PREFIX }}/maimai-maistats-discord-bot:sha-${{ steps.sha.outputs.short }}
-            ${{ env.IMAGE_PREFIX }}/maimai-maistats-discord-bot:latest
-          cache-from: type=gha,scope=maimai-discord-bot
-          cache-to: type=gha,mode=max,scope=maimai-discord-bot
+            ${{ env.IMAGE_PREFIX }}/maistats-discord-bot:sha-${{ steps.sha.outputs.short }}
+            ${{ env.IMAGE_PREFIX }}/maistats-discord-bot:latest
+          cache-from: type=gha,scope=maistats-discord-bot
+          cache-to: type=gha,mode=max,scope=maistats-discord-bot
