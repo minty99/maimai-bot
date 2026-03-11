@@ -1,29 +1,4 @@
-# Multi-stage build for maimai-bot workspace
-# Builds both backend and discord bot from a single builder stage
-
-# ============================================
-# Builder Stage - Compiles entire workspace
-# ============================================
-FROM rust:1.93-slim as builder
-
-WORKDIR /app
-
-# Install build dependencies
-RUN apt-get update && apt-get install -y \
-    libssl-dev \
-    pkg-config \
-    && rm -rf /var/lib/apt/lists/*
-
-# Copy workspace files
-COPY Cargo.toml ./
-COPY Cargo.lock ./
-COPY crates/ ./crates/
-COPY maistats-record-collector/ ./maistats-record-collector/
-COPY maistats-song-info/ ./maistats-song-info/
-COPY maistats-discord-bot/ ./maistats-discord-bot/
-
-# Build entire workspace (both binaries)
-RUN cargo build --release
+# Runtime-only image packaging for prebuilt workspace binaries.
 
 # ============================================
 # Target: maistats-song-info
@@ -39,7 +14,7 @@ RUN apt-get update && apt-get install -y \
 WORKDIR /app
 
 # Copy song info binary
-COPY --from=builder /app/target/release/maistats-song-info /usr/local/bin/maistats-song-info
+COPY docker-dist/maistats-song-info/maistats-song-info /usr/local/bin/maistats-song-info
 
 # Create data directory
 RUN mkdir -p /app/data
@@ -62,10 +37,10 @@ RUN apt-get update && apt-get install -y \
 WORKDIR /app
 
 # Copy record collector binary
-COPY --from=builder /app/target/release/maistats-record-collector /usr/local/bin/maistats-record-collector
+COPY docker-dist/maistats-record-collector/maistats-record-collector /usr/local/bin/maistats-record-collector
 
 # Copy migrations
-COPY maistats-record-collector/migrations /app/migrations
+COPY docker-dist/maistats-record-collector/migrations /app/migrations
 
 # Create data directory
 RUN mkdir -p /app/data
@@ -87,6 +62,6 @@ RUN apt-get update && apt-get install -y \
 WORKDIR /app
 
 # Copy discord binary
-COPY --from=builder /app/target/release/maistats-discord-bot /usr/local/bin/maistats-discord-bot
+COPY docker-dist/maistats-discord-bot/maistats-discord-bot /usr/local/bin/maistats-discord-bot
 
 CMD ["maistats-discord-bot"]

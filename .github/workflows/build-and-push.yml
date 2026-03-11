@@ -15,32 +15,81 @@ on:
       - maistats-song-info/**
       - maistats-record-collector/**
       - maistats-discord-bot/**
-  workflow_dispatch:  # 수동 트리거 허용
+  workflow_dispatch:
 
 env:
   REGISTRY: ghcr.io
   IMAGE_PREFIX: ghcr.io/${{ github.repository_owner }}
 
 jobs:
-  build-native:
-    name: Build ${{ matrix.image_name }} (${{ matrix.arch }})
+  build-workspace:
+    name: Build workspace (${{ matrix.arch }})
     runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: amd64
+            runner: ubuntu-latest
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libssl-dev pkg-config
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Rust build artifacts
+        uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: build-and-push-${{ matrix.arch }}
+
+      - name: Build release workspace
+        run: cargo build --release --workspace
+
+      - name: Stage Docker artifacts
+        run: |
+          rm -rf docker-dist
+          mkdir -p docker-dist/maistats-song-info
+          mkdir -p docker-dist/maistats-record-collector
+          mkdir -p docker-dist/maistats-discord-bot
+          cp target/release/maistats-song-info docker-dist/maistats-song-info/maistats-song-info
+          cp target/release/maistats-record-collector docker-dist/maistats-record-collector/maistats-record-collector
+          cp -R maistats-record-collector/migrations docker-dist/maistats-record-collector/migrations
+          cp target/release/maistats-discord-bot docker-dist/maistats-discord-bot/maistats-discord-bot
+
+      - name: Upload Docker artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: docker-dist-${{ matrix.arch }}
+          path: docker-dist/
+          if-no-files-found: error
+
+  package-image:
+    name: Package ${{ matrix.image_name }} (${{ matrix.arch }})
+    runs-on: ${{ matrix.runner }}
+    needs:
+      - build-workspace
     strategy:
       fail-fast: false
       matrix:
         include:
           - image_name: maistats-song-info
             target: maistats-song-info
-            arch: arm64
-            platform: linux/arm64
-            runner: ubuntu-24.04-arm
+            arch: amd64
+            platform: linux/amd64
+            runner: ubuntu-latest
           - image_name: maistats-song-info
             target: maistats-song-info
-            arch: amd64
-            platform: linux/amd64
-            runner: ubuntu-latest
-          - image_name: maistats-record-collector
-            target: maistats-record-collector
             arch: arm64
             platform: linux/arm64
             runner: ubuntu-24.04-arm
@@ -49,8 +98,8 @@ jobs:
             arch: amd64
             platform: linux/amd64
             runner: ubuntu-latest
-          - image_name: maistats-discord-bot
-            target: maistats-discord-bot
+          - image_name: maistats-record-collector
+            target: maistats-record-collector
             arch: arm64
             platform: linux/arm64
             runner: ubuntu-24.04-arm
@@ -59,6 +108,11 @@ jobs:
             arch: amd64
             platform: linux/amd64
             runner: ubuntu-latest
+          - image_name: maistats-discord-bot
+            target: maistats-discord-bot
+            arch: arm64
+            platform: linux/arm64
+            runner: ubuntu-24.04-arm
     permissions:
       contents: read
       packages: write
@@ -66,6 +120,18 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      - name: Download Docker artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: docker-dist-${{ matrix.arch }}
+          path: docker-dist
+
+      - name: Restore binary permissions
+        run: |
+          chmod +x docker-dist/maistats-song-info/maistats-song-info
+          chmod +x docker-dist/maistats-record-collector/maistats-record-collector
+          chmod +x docker-dist/maistats-discord-bot/maistats-discord-bot
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -92,14 +158,12 @@ jobs:
           tags: |
             ${{ env.IMAGE_PREFIX }}/${{ matrix.image_name }}:sha-${{ steps.sha.outputs.short }}-${{ matrix.arch }}
             ${{ env.IMAGE_PREFIX }}/${{ matrix.image_name }}:latest-${{ matrix.arch }}
-          cache-from: type=gha,scope=${{ matrix.image_name }}-${{ matrix.arch }}
-          cache-to: type=gha,mode=max,scope=${{ matrix.image_name }}-${{ matrix.arch }}
 
   publish-manifest:
     name: Publish ${{ matrix.image_name }} manifest
     runs-on: ubuntu-latest
     needs:
-      - build-native
+      - package-image
     strategy:
       fail-fast: false
       matrix:
