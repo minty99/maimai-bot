@@ -22,13 +22,15 @@
           "type": "DX",
           "difficulty": "EXPERT",
           "level": "12+",
-          "version": "CiRCLE"
+          "version": "CiRCLE",
+          "internal_level": 12.9
         },
         {
           "type": "DX",
           "difficulty": "MASTER",
           "level": "14+",
-          "version": "CiRCLE"
+          "version": "CiRCLE",
+          "internal_level": 14.7
         }
       ]
     },
