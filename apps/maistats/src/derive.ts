@@ -118,7 +118,7 @@ function estimateInternalLevel(level: string | null | undefined): number | null 
     return null;
   }
 
-  return base + (plus ? 0.5 : 0);
+  return base + (plus ? 0.6 : 0);
 }
 
 function coefficientForAchievement(achievementPercent: number): number {
