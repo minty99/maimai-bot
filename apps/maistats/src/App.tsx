@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import {
   fetchExplorerPayload,
+  refreshSongScores,
 } from './api';
 import { HomePage } from './components/HomePage';
 import {
@@ -410,7 +411,7 @@ function App() {
     );
   }, [scoreData, versionsResponse]);
 
-  const loadData = useCallback(async () => {
+  const loadData = useCallback(async (options?: { force?: boolean; throwOnError?: boolean }) => {
     if (!songInfoUrl.trim() || !recordCollectorUrl.trim()) {
       loadedExplorerKeyRef.current = null;
       setIsLoading(false);
@@ -424,7 +425,9 @@ function App() {
     }
 
     const requestKey = `${songInfoUrl.trim()}::${recordCollectorUrl.trim()}`;
-    if (loadedExplorerKeyRef.current === requestKey) {
+    if (options?.force) {
+      loadedExplorerKeyRef.current = null;
+    } else if (loadedExplorerKeyRef.current === requestKey) {
       setIsLoading(false);
       setLoadingError(null);
       return;
@@ -471,6 +474,9 @@ function App() {
       setSongMetadata(new Map<string, SongInfoResponse>());
       setVersionsResponse([]);
       setPickerVersionOptions([]);
+      if (options?.throwOnError) {
+        throw error instanceof Error ? error : new Error(String(error));
+      }
     } finally {
       if (!controller.signal.aborted) {
         setIsLoading(false);
@@ -609,6 +615,11 @@ function App() {
   const closeSongDetail = useCallback(() => {
     setSelectedDetailSongKey(null);
   }, []);
+
+  const handleRefreshSongScores = useCallback(async (target: SongDetailTarget) => {
+    await refreshSongScores(recordCollectorUrl, target);
+    await loadData({ force: true, throwOnError: true });
+  }, [loadData, recordCollectorUrl]);
 
   const handleOpenHistory = useCallback((row: ScoreRow) => {
     setSelectedHistoryKey(row.key);
@@ -1241,6 +1252,8 @@ function App() {
         selectedDetailAliases={selectedDetailSong?.aliases ?? null}
         selectedDetailRows={selectedDetailRows}
         songInfoUrl={songInfoUrl}
+        recordCollectorUrl={recordCollectorUrl}
+        onRefreshSongScores={handleRefreshSongScores}
         onClose={closeSongDetail}
       />
       <ScoreHistoryModal
