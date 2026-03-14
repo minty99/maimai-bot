@@ -47,7 +47,6 @@ export interface ScoreApiResponse {
   dx_score_max: number | null;
   last_played_at?: string | null;
   play_count?: number | null;
-  rating_points?: number | null;
 }
 
 export interface SongDetailScoreApiResponse {
@@ -107,7 +106,6 @@ export interface PlayRecordApiResponse {
   dx_score_max: number | null;
   credit_id: number | null;
   achievement_new_record: number | null;
-  rating_points?: number | null;
 }
 
 export interface SongChartRegion {
@@ -191,7 +189,7 @@ export interface ScoreRow {
   dxScore: number | null;
   dxScoreMax: number | null;
   dxRatio: number | null;
-  ratingPoints: number | null;
+  rating: number | null;
   level: string | null;
   internalLevel: number | null;
   isInternalLevelEstimated: boolean;
@@ -233,7 +231,7 @@ export interface PlaylogRow {
   dxScore: number | null;
   dxScoreMax: number | null;
   dxRatio: number | null;
-  ratingPoints: number | null;
+  rating: number | null;
   creditId: number | null;
   isNewRecord: boolean;
   imageName: string | null;

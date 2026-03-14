@@ -8,7 +8,7 @@ import {
   toggleArrayValue,
 } from '../app/utils';
 import type { ChartType, DifficultyCategory, PlaylogRow } from '../types';
-import { toDateLabel } from '../derive';
+import { toDateLabel, toIntegerRating } from '../derive';
 import { ChartTypeLabel, getChartTypeToneClass } from './ChartTypeLabel';
 import { DifficultyLabel, getDifficultyToneClass } from './DifficultyLabel';
 import { Jacket } from './Jacket';
@@ -349,7 +349,7 @@ export function PlaylogExplorerSection({
                         onOpenHistory={canOpenHistory(row) ? () => onOpenHistory(row) : null}
                       />
                     </td>
-                    <td className="rating-col">{formatNumber(row.ratingPoints)}</td>
+                    <td className="rating-col">{formatNumber(toIntegerRating(row.rating))}</td>
                     <td className="rank-col">{row.rank ?? '-'}</td>
                     <td className="fc-col">{row.fc ?? '-'}</td>
                     <td className="sync-col">{row.sync ?? '-'}</td>
