@@ -39,6 +39,23 @@ TIER_SORT_INDEX = {tier: index for index, tier in enumerate(TIER_ORDER)}
 FORMULA_RE = re.compile(r'^IMAGE\("([^"]+)"\)$')
 CELL_REF_RE = re.compile(r"([A-Z]+)(\d+)")
 INTERNAL_LEVEL_EPSILON = 1e-6
+NORMALIZED_CHARACTER_REPLACEMENTS = {
+    "∀": "a",
+}
+SLUG_IDENTITY_OVERRIDES = {
+    "linkmaimai": {
+        "title": "Link",
+        "genre": "maimai",
+    },
+    "plusdanshi": {
+        "title": "+♂",
+        "genre": "niconico＆VOCALOID™",
+    },
+    "trustgv": {
+        "title": "Trust",
+        "genre": "GAME＆VARIETY",
+    },
+}
 
 CHART_TYPE_OUTPUT = {
     "std": "STD",
@@ -51,73 +68,6 @@ DIFFICULTY_OUTPUT = {
     "expert": "EXPERT",
     "master": "MASTER",
     "remaster": "Re:MASTER",
-}
-
-NORMALIZATION_REPLACEMENTS = {
-    "’": "",
-    "‘": "",
-    "'": "",
-    '"': "",
-    "“": "",
-    "”": "",
-    "＇": "",
-    "＆": "",
-    "&": "",
-    "・": "",
-    "･": "",
-    "！": "",
-    "!": "",
-    "？": "",
-    "?": "",
-    "〜": "",
-    "～": "",
-    "~": "",
-    "＋": "",
-    "+": "",
-    "，": "",
-    ",": "",
-    "．": "",
-    ".": "",
-    "：": "",
-    ":": "",
-    "；": "",
-    ";": "",
-    "（": "",
-    "）": "",
-    "(": "",
-    ")": "",
-    "［": "",
-    "］": "",
-    "[": "",
-    "]": "",
-    "｛": "",
-    "｝": "",
-    "{": "",
-    "}": "",
-    "「": "",
-    "」": "",
-    "『": "",
-    "』": "",
-    "【": "",
-    "】": "",
-    "〈": "",
-    "〉": "",
-    "<": "",
-    ">": "",
-    "／": "",
-    "/": "",
-    "\\": "",
-    "＿": "",
-    "_": "",
-    "　": "",
-    " ": "",
-    "-": "",
-    "‐": "",
-    "‑": "",
-    "‒": "",
-    "–": "",
-    "—": "",
-    "―": "",
 }
 
 
@@ -140,13 +90,36 @@ def catalog_path() -> Path:
     return repo_root() / "data" / "song_data" / "data.json"
 
 
+def is_allowed_lookup_character(character: str) -> bool:
+    codepoint = ord(character)
+
+    if character.isascii() and character.isalnum():
+        return True
+
+    if character == "・":
+        return False
+
+    return any(
+        (
+            0x3040 <= codepoint <= 0x309F,
+            0x30A0 <= codepoint <= 0x30FF,
+            0x31F0 <= codepoint <= 0x31FF,
+            0x3400 <= codepoint <= 0x4DBF,
+            0x4E00 <= codepoint <= 0x9FFF,
+            0x3005 <= codepoint <= 0x3007,
+        )
+    )
+
+
 def normalize_lookup_value(value: str) -> str:
     normalized = (
         unicodedata.normalize("NFKC", urllib.parse.unquote(value)).strip().lower()
     )
-    for source, target in NORMALIZATION_REPLACEMENTS.items():
+    for source, target in NORMALIZED_CHARACTER_REPLACEMENTS.items():
         normalized = normalized.replace(source, target)
-    return normalized
+    return "".join(
+        character for character in normalized if is_allowed_lookup_character(character)
+    )
 
 
 def parse_shared_strings(archive: zipfile.ZipFile) -> list[str]:
@@ -311,7 +284,25 @@ def build_title_index(
         if not isinstance(title, str):
             continue
         index[normalize_lookup_value(title)].append(song)
+
+    for normalized_slug, override in SLUG_IDENTITY_OVERRIDES.items():
+        override_matches = [
+            song
+            for song in songs
+            if song.get("title") == override.get("title")
+            and song.get("genre") == override.get("genre")
+            and (
+                override.get("artist") is None
+                or song.get("artist") == override.get("artist")
+            )
+        ]
+        if override_matches:
+            index[normalized_slug].extend(override_matches)
     return index
+
+
+def song_title_lookup_key(song: dict[str, object]) -> str:
+    return normalize_lookup_value(str(song.get("title", "")))
 
 
 def parse_internal_level(value: object) -> float | None:
@@ -372,6 +363,27 @@ def filter_chart_candidates(
     return []
 
 
+def narrow_song_candidates_by_chart(
+    songs: list[dict[str, object]], prefix: str, internal_level: float
+) -> list[dict[str, object]]:
+    return [
+        song
+        for song in songs
+        if len(filter_chart_candidates(song, prefix, internal_level)) == 1
+    ]
+
+
+def fallback_song_candidates(
+    songs: list[dict[str, object]], normalized_slug: str
+) -> list[dict[str, object]]:
+    return [
+        song
+        for song in songs
+        if (title_key := song_title_lookup_key(song))
+        and (normalized_slug in title_key or title_key in normalized_slug)
+    ]
+
+
 def song_label(song: dict[str, object]) -> str:
     return " / ".join(
         [
@@ -396,13 +408,62 @@ def chart_label(chart: dict[str, object]) -> str:
     )
 
 
+def resolve_song_candidates(
+    entry: dict[str, object],
+    exact_songs: list[dict[str, object]],
+    all_songs: list[dict[str, object]],
+) -> tuple[list[dict[str, object]], bool]:
+    prefix = str(entry["prefix"])
+    internal_level = float(entry["internal_level"])
+
+    if len(exact_songs) == 1:
+        return exact_songs, True
+
+    if len(exact_songs) > 1:
+        narrowed = narrow_song_candidates_by_chart(exact_songs, prefix, internal_level)
+        if len(narrowed) == 1:
+            return narrowed, True
+        return exact_songs, False
+
+    normalized_slug = normalize_lookup_value(str(entry["slug"]))
+    fallback_matches = fallback_song_candidates(all_songs, normalized_slug)
+    narrowed = narrow_song_candidates_by_chart(
+        fallback_matches, prefix, internal_level
+    )
+    if len(narrowed) == 1:
+        return narrowed, True
+    return fallback_matches, False
+
+
 def resolve_entry(
-    entry: dict[str, object], title_index: dict[str, list[dict[str, object]]]
+    entry: dict[str, object],
+    title_index: dict[str, list[dict[str, object]]],
+    all_songs: list[dict[str, object]],
 ) -> tuple[
     dict[str, object] | None, dict[str, object] | None, dict[str, object] | None
 ]:
     normalized_slug = normalize_lookup_value(str(entry["slug"]))
-    songs = title_index.get(normalized_slug, [])
+    exact_songs = title_index.get(normalized_slug, [])
+    songs, resolved = resolve_song_candidates(entry, exact_songs, all_songs)
+
+    if resolved and songs:
+        song = songs[0]
+        charts = filter_chart_candidates(
+            song, str(entry["prefix"]), float(entry["internal_level"])
+        )
+        if not charts:
+            return song, None, {"reason": "chart_not_found"}
+        if len(charts) != 1:
+            return (
+                song,
+                None,
+                {
+                    "reason": "chart_ambiguous",
+                    "candidates": [chart_label(chart) for chart in charts],
+                },
+            )
+
+        return song, charts[0], None
 
     if not songs:
         return None, None, {"reason": "song_not_found"}
@@ -416,23 +477,7 @@ def resolve_entry(
             },
         )
 
-    song = songs[0]
-    charts = filter_chart_candidates(
-        song, str(entry["prefix"]), float(entry["internal_level"])
-    )
-    if not charts:
-        return song, None, {"reason": "chart_not_found"}
-    if len(charts) != 1:
-        return (
-            song,
-            None,
-            {
-                "reason": "chart_ambiguous",
-                "candidates": [chart_label(chart) for chart in charts],
-            },
-        )
-
-    return song, charts[0], None
+    return None, None, {"reason": "song_not_found"}
 
 
 def build_output_record(
@@ -469,6 +514,10 @@ def print_report(
     exclusions: list[dict[str, object]],
 ) -> None:
     counts = Counter(exclusion["reason"] for exclusion in exclusions)
+    exclusions_by_reason: dict[str, list[dict[str, object]]] = defaultdict(list)
+    for exclusion in exclusions:
+        exclusions_by_reason[str(exclusion["reason"])].append(exclusion)
+
     print(f"total_source_entries: {total_entries}")
     print(f"emitted_rows: {emitted_rows}")
     print(f"excluded_rows: {len(exclusions)}")
@@ -479,12 +528,14 @@ def print_report(
 
     if exclusions:
         print("excluded_details:")
-        for exclusion in exclusions:
-            detail = exclusion_context(exclusion["entry"])
-            print(f"  - {detail} reason={exclusion['reason']}")
-            candidates = exclusion.get("candidates")
-            if candidates:
-                print(f"    candidates={'; '.join(candidates)}")
+        for reason in sorted(exclusions_by_reason):
+            print(f"  {reason}:")
+            for exclusion in exclusions_by_reason[reason]:
+                detail = exclusion_context(exclusion["entry"])
+                print(f"    - {detail}")
+                candidates = exclusion.get("candidates")
+                if candidates:
+                    print(f"      candidates={'; '.join(candidates)}")
 
 
 def main() -> int:
@@ -497,7 +548,7 @@ def main() -> int:
     tentative_rows: list[tuple[dict[str, object], dict[str, object]]] = []
 
     for entry in source_rows:
-        song, chart, error = resolve_entry(entry, title_index)
+        song, chart, error = resolve_entry(entry, title_index, songs)
         if error is not None:
             exclusions.append({"entry": entry, **error})
             continue
