@@ -51,7 +51,7 @@ export function SongDetailModal({
     setRefreshError(null);
   }, [selectedDetailArtist, selectedDetailGenre, selectedDetailTitle]);
 
-  if (!selectedDetailTitle) {
+  if (selectedDetailTitle === null) {
     return null;
   }
 
@@ -94,7 +94,7 @@ export function SongDetailModal({
   };
 
   const handleRefreshClick = async () => {
-    if (!selectedDetailGenre || !selectedDetailArtist) {
+    if (selectedDetailGenre === null || selectedDetailArtist === null) {
       setRefreshError('곡 식별 정보가 부족해서 새로고침할 수 없습니다.');
       return;
     }

@@ -186,11 +186,6 @@ pub(crate) async fn refresh_song_scores(
         genre: payload.genre.trim().to_string(),
         artist: payload.artist.trim().to_string(),
     };
-    if target.title.is_empty() || target.artist.is_empty() {
-        return Err(AppError::BadRequest(
-            "title and artist are required to refresh song scores".to_string(),
-        ));
-    }
 
     let mut client = state
         .maimai_client()
