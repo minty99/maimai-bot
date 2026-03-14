@@ -34,31 +34,35 @@ jobs:
             arch: arm64
             platform: linux/arm64
             runner: ubuntu-24.04-arm
-          - image_name: maistats-song-info
-            target: maistats-song-info
-            arch: amd64
-            platform: linux/amd64
-            runner: ubuntu-latest
+            tag_suffix: ""
+          # - image_name: maistats-song-info
+          #   target: maistats-song-info
+          #   arch: amd64
+          #   platform: linux/amd64
+          #   runner: ubuntu-latest
           - image_name: maistats-record-collector
             target: maistats-record-collector
             arch: arm64
             platform: linux/arm64
             runner: ubuntu-24.04-arm
+            tag_suffix: -arm64
           - image_name: maistats-record-collector
             target: maistats-record-collector
             arch: amd64
             platform: linux/amd64
             runner: ubuntu-latest
+            tag_suffix: -amd64
           - image_name: maistats-discord-bot
             target: maistats-discord-bot
             arch: arm64
             platform: linux/arm64
             runner: ubuntu-24.04-arm
-          - image_name: maistats-discord-bot
-            target: maistats-discord-bot
-            arch: amd64
-            platform: linux/amd64
-            runner: ubuntu-latest
+            tag_suffix: ""
+          # - image_name: maistats-discord-bot
+          #   target: maistats-discord-bot
+          #   arch: amd64
+          #   platform: linux/amd64
+          #   runner: ubuntu-latest
     permissions:
       contents: read
       packages: write
@@ -90,8 +94,8 @@ jobs:
           platforms: ${{ matrix.platform }}
           push: true
           tags: |
-            ${{ env.IMAGE_PREFIX }}/${{ matrix.image_name }}:sha-${{ steps.sha.outputs.short }}-${{ matrix.arch }}
-            ${{ env.IMAGE_PREFIX }}/${{ matrix.image_name }}:latest-${{ matrix.arch }}
+            ${{ env.IMAGE_PREFIX }}/${{ matrix.image_name }}:sha-${{ steps.sha.outputs.short }}${{ matrix.tag_suffix }}
+            ${{ env.IMAGE_PREFIX }}/${{ matrix.image_name }}:latest${{ matrix.tag_suffix }}
           cache-from: type=gha,scope=${{ matrix.image_name }}-${{ matrix.arch }}
           cache-to: type=gha,mode=max,scope=${{ matrix.image_name }}-${{ matrix.arch }}
 
@@ -104,9 +108,9 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - image_name: maistats-song-info
           - image_name: maistats-record-collector
-          - image_name: maistats-discord-bot
+          # - image_name: maistats-song-info
+          # - image_name: maistats-discord-bot
     permissions:
       contents: read
       packages: write
