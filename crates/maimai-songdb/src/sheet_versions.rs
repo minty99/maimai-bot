@@ -75,7 +75,8 @@ pub async fn fetch_intl_sheet_versions(
 
     let mut version_index = 0u8;
     while let Some(version) = MaimaiVersion::from_index(version_index) {
-        let rows = fetch_rows_for_version(&client, version, &resolver).await?;
+        let rows =
+            fetch_rows_for_version(&client, sega_id, sega_password, version, &resolver).await?;
         for (song_identity, chart_type) in rows {
             let dedup_key = (song_identity.clone(), chart_type);
             if !seen.insert(dedup_key) {
@@ -245,9 +246,23 @@ impl SongVersionResolver {
 
 async fn fetch_rows_for_version(
     client: &reqwest::Client,
+    sega_id: &str,
+    sega_password: &str,
     version: MaimaiVersion,
     resolver: &SongVersionResolver,
 ) -> eyre::Result<Vec<(SongIdentity, ChartType)>> {
+    let html =
+        fetch_version_html_with_auth_recovery(client, sega_id, sega_password, version).await?;
+
+    parse_rows(&html, version.as_str(), resolver)
+}
+
+async fn fetch_version_html_with_auth_recovery(
+    client: &reqwest::Client,
+    sega_id: &str,
+    sega_password: &str,
+    version: MaimaiVersion,
+) -> eyre::Result<String> {
     let response = client
         .get(INTL_VERSION_SEARCH_URL)
         .query(&[
@@ -266,14 +281,41 @@ async fn fetch_rows_for_version(
         .await
         .wrap_err_with(|| format!("read INTL version html for {}", version.as_str()))?;
 
-    if intl::looks_like_login_or_expired(&final_url, &html) {
+    if !intl::looks_like_login_or_expired(&final_url, &html) {
+        return Ok(html);
+    }
+
+    intl::login(client, sega_id, sega_password)
+        .await
+        .wrap_err_with(|| format!("re-login after auth expiry for {}", version.as_str()))?;
+
+    let retry_response = client
+        .get(INTL_VERSION_SEARCH_URL)
+        .query(&[
+            ("version", version.as_index().to_string()),
+            ("diff", "0".to_string()),
+        ])
+        .send()
+        .await
+        .wrap_err_with(|| format!("retry fetch INTL version page for {}", version.as_str()))?
+        .error_for_status()
+        .wrap_err_with(|| format!("retry INTL version page status for {}", version.as_str()))?;
+
+    let retry_final_url = retry_response.url().clone();
+    let retry_html = retry_response
+        .text()
+        .await
+        .wrap_err_with(|| format!("read retry INTL version html for {}", version.as_str()))?;
+
+    if intl::looks_like_login_or_expired(&retry_final_url, &retry_html) {
         return Err(eyre::eyre!(
-            "INTL version page returned login/error for {}",
-            version.as_str()
+            "INTL version page still looks unauthenticated after re-login for {}: {}",
+            version.as_str(),
+            retry_final_url
         ));
     }
 
-    parse_rows(&html, version.as_str(), resolver)
+    Ok(retry_html)
 }
 
 fn parse_rows(
