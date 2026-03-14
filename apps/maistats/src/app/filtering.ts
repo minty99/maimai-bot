@@ -174,7 +174,7 @@ export function buildFilteredScoreRows({
         );
         break;
       case "rating":
-        result = compareNullableNumber(left.ratingPoints, right.ratingPoints);
+        result = compareNullableNumber(left.rating, right.rating);
         break;
       case "internal":
         result = compareNullableNumber(left.internalLevel, right.internalLevel);
@@ -344,7 +344,7 @@ export function buildFilteredPlaylogRows({
         );
         break;
       case "rating":
-        result = compareNullableNumber(left.ratingPoints, right.ratingPoints);
+        result = compareNullableNumber(left.rating, right.rating);
         break;
       case "dxRatio":
         result = compareNullableNumber(left.dxRatio, right.dxRatio);

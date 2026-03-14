@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react';
 
-import { toDateLabel } from '../derive';
+import { toDateLabel, toIntegerRating } from '../derive';
 import { formatNumber, formatVersionLabel } from '../app/utils';
 import type { ScoreRow } from '../types';
 import { ChartTypeLabel } from './ChartTypeLabel';
@@ -106,7 +106,7 @@ function RatingTable({
                     onOpenHistory={() => onOpenHistory(row)}
                   />
                 </td>
-                <td className="rating-col">{formatNumber(row.ratingPoints)}</td>
+                <td className="rating-col">{formatNumber(toIntegerRating(row.rating))}</td>
                 <td className="rank-col">{row.rank ?? '-'}</td>
                 <td className="fc-col">{row.fc ?? '-'}</td>
                 <td className="sync-col">{row.sync ?? '-'}</td>

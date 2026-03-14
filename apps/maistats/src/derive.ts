@@ -153,21 +153,16 @@ function isApLike(fc: string | null): boolean {
   return fc === 'AP' || fc === 'AP+';
 }
 
-export function toRatingPoints(
-  internalLevel: number | null,
-  achievementX10000: number | null,
-  fc: string | null,
-): number | null {
-  const rawRatingPoints = toRawRatingPoints(internalLevel, achievementX10000, fc);
-  if (rawRatingPoints === null) {
+export function toIntegerRating(rawRating: number | null): number | null {
+  if (rawRating === null) {
     return null;
   }
 
-  const points = Math.floor(rawRatingPoints);
+  const points = Math.floor(rawRating);
   return Number.isFinite(points) && points > 0 ? points : 0;
 }
 
-export function toRawRatingPoints(
+export function toRawRating(
   internalLevel: number | null,
   achievementX10000: number | null,
   fc: string | null,
@@ -278,11 +273,7 @@ export function buildScoreRows(
       dxScore: score?.dx_score ?? null,
       dxScoreMax: score?.dx_score_max ?? null,
       dxRatio: toDxRatio(score?.dx_score ?? null, score?.dx_score_max ?? null),
-      ratingPoints: score?.rating_points ?? toRatingPoints(
-        internalLevel,
-        score?.achievement_x10000 ?? null,
-        score?.fc ?? null,
-      ),
+      rating: toRawRating(internalLevel, score?.achievement_x10000 ?? null, score?.fc ?? null),
       level: matchedSheet?.level ?? null,
       internalLevel,
       isInternalLevelEstimated,
@@ -387,11 +378,7 @@ export function buildPlaylogRows(
       dxScore: log.dx_score,
       dxScoreMax: log.dx_score_max,
       dxRatio: toDxRatio(log.dx_score, log.dx_score_max),
-      ratingPoints: log.rating_points ?? toRatingPoints(
-        internalLevel,
-        log.achievement_x10000,
-        log.fc,
-      ),
+      rating: toRawRating(internalLevel, log.achievement_x10000, log.fc),
       creditId: log.credit_id,
       isNewRecord: (log.achievement_new_record ?? 0) > 0,
       imageName: songInfo?.image_name ?? null,
