@@ -34,11 +34,11 @@ jobs:
             arch: arm64
             platform: linux/arm64
             runner: ubuntu-24.04-arm
-          - image_name: maistats-song-info
-            target: maistats-song-info
-            arch: amd64
-            platform: linux/amd64
-            runner: ubuntu-latest
+          # - image_name: maistats-song-info
+          #   target: maistats-song-info
+          #   arch: amd64
+          #   platform: linux/amd64
+          #   runner: ubuntu-latest
           - image_name: maistats-record-collector
             target: maistats-record-collector
             arch: arm64
@@ -54,11 +54,11 @@ jobs:
             arch: arm64
             platform: linux/arm64
             runner: ubuntu-24.04-arm
-          - image_name: maistats-discord-bot
-            target: maistats-discord-bot
-            arch: amd64
-            platform: linux/amd64
-            runner: ubuntu-latest
+          # - image_name: maistats-discord-bot
+          #   target: maistats-discord-bot
+          #   arch: amd64
+          #   platform: linux/amd64
+          #   runner: ubuntu-latest
     permissions:
       contents: read
       packages: write
@@ -128,8 +128,18 @@ jobs:
 
       - name: Publish ${{ matrix.image_name }} manifest
         run: |
+          if [ "${{ matrix.image_name }}" = "maistats-record-collector" ]; then
+            source_tags="
+              ${{ env.IMAGE_PREFIX }}/${{ matrix.image_name }}:sha-${{ steps.sha.outputs.short }}-amd64
+              ${{ env.IMAGE_PREFIX }}/${{ matrix.image_name }}:sha-${{ steps.sha.outputs.short }}-arm64
+            "
+          else
+            source_tags="
+              ${{ env.IMAGE_PREFIX }}/${{ matrix.image_name }}:sha-${{ steps.sha.outputs.short }}-arm64
+            "
+          fi
+
           docker buildx imagetools create \
             --tag ${{ env.IMAGE_PREFIX }}/${{ matrix.image_name }}:sha-${{ steps.sha.outputs.short }} \
             --tag ${{ env.IMAGE_PREFIX }}/${{ matrix.image_name }}:latest \
-            ${{ env.IMAGE_PREFIX }}/${{ matrix.image_name }}:sha-${{ steps.sha.outputs.short }}-amd64 \
-            ${{ env.IMAGE_PREFIX }}/${{ matrix.image_name }}:sha-${{ steps.sha.outputs.short }}-arm64
+            ${source_tags}
