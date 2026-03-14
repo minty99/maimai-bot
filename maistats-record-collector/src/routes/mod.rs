@@ -6,7 +6,10 @@ mod responses;
 mod scores;
 mod today;
 
-use axum::{Router, routing::get};
+use axum::{
+    Router,
+    routing::{get, post},
+};
 use tower_http::LatencyUnit;
 use tower_http::cors::CorsLayer;
 use tower_http::trace::{DefaultMakeSpan, DefaultOnResponse, TraceLayer};
@@ -19,6 +22,7 @@ pub(crate) fn create_routes(state: AppState) -> Router {
         .route("/health/ready", get(health::ready))
         .route("/api/scores/search", get(scores::search_scores))
         .route("/api/scores/rated", get(scores::get_all_rated_scores))
+        .route("/api/scores/refresh", post(scores::refresh_song_scores))
         .route("/api/songs/scores", get(scores::get_song_detail_scores))
         .route("/api/scores/item", get(scores::get_score))
         .route("/api/player", get(player::get_player))

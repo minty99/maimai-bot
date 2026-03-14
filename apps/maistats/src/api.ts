@@ -50,6 +50,33 @@ async function getJson<T>(url: string, signal?: AbortSignal): Promise<T> {
   return data;
 }
 
+async function postJson<TRequest extends object, TResponse>(
+  url: string,
+  payload: TRequest,
+  signal?: AbortSignal,
+): Promise<TResponse> {
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify(payload),
+    signal,
+  });
+  if (!response.ok) {
+    const errJson = await safeParseJson<ApiErrorResponse>(response);
+    const code = errJson?.code ? `[${errJson.code}] ` : '';
+    const message = errJson?.message ?? response.statusText;
+    throw new Error(`${code}${message} (HTTP ${response.status})`);
+  }
+
+  const data = await safeParseJson<TResponse>(response);
+  if (data === null) {
+    throw new Error(`Non-JSON response from ${url}`);
+  }
+  return data;
+}
+
 function indexSongMetadata(songs: SongInfoResponse[]): Map<string, SongInfoResponse> {
   const metadata = new Map<string, SongInfoResponse>();
 
@@ -152,4 +179,32 @@ export async function checkRecordCollectorHealth(
   }
 
   return getJson<PlayerProfile>(`${base}/api/player`, signal);
+}
+
+export interface RefreshSongScoresPayload {
+  title: string;
+  genre: string;
+  artist: string;
+}
+
+export interface RefreshSongScoresResponse {
+  detail_pages_refreshed: number;
+  rows_written: number;
+}
+
+export async function refreshSongScores(
+  baseUrl: string,
+  payload: RefreshSongScoresPayload,
+  signal?: AbortSignal,
+): Promise<RefreshSongScoresResponse> {
+  const base = normalizeBaseUrl(baseUrl);
+  if (!base) {
+    throw new Error('Record Collector URL이 비어 있습니다.');
+  }
+
+  return postJson<RefreshSongScoresPayload, RefreshSongScoresResponse>(
+    `${base}/api/scores/refresh`,
+    payload,
+    signal,
+  );
 }

@@ -1,14 +1,16 @@
+use std::collections::HashSet;
+
 use eyre::{Result, WrapErr};
 use reqwest::Url;
 use sqlx::SqlitePool;
 use tracing::{info, warn};
 
-use crate::db::{count_scores_rows, replace_scores};
+use crate::db::{count_scores_rows, replace_scores, upsert_scores};
 use crate::http_client::MaimaiClient;
 use crate::tasks::utils::auth::{ExpectedPage, fetch_html_with_auth_recovery};
 use crate::tasks::utils::song_detail::{SongDetailCache, fetch_song_detail_by_idx};
 use maimai_parsers::parse_scores_html;
-use models::{ChartType, ParsedScoreEntry};
+use models::{ChartType, ParsedScoreEntry, ParsedSongDetail};
 
 const MAX_SEED_DETAIL_RELOAD_RETRIES: usize = 5;
 
@@ -20,6 +22,19 @@ enum ReloadSeedTargetError {
 #[derive(Debug, Clone, Default)]
 pub(crate) struct SeedScoresOutcome {
     pub(crate) seeded: bool,
+    pub(crate) rows_written: usize,
+}
+
+#[derive(Debug, Clone)]
+pub(crate) struct RefreshSongScoresTarget {
+    pub(crate) title: String,
+    pub(crate) genre: String,
+    pub(crate) artist: String,
+}
+
+#[derive(Debug, Clone, Default)]
+pub(crate) struct RefreshSongScoresOutcome {
+    pub(crate) detail_pages_refreshed: usize,
     pub(crate) rows_written: usize,
 }
 
@@ -295,6 +310,96 @@ pub(crate) fn canonical_title_for_detail(detail: &models::ParsedSongDetail) -> S
     detail.title.trim().to_string()
 }
 
+pub(crate) async fn refresh_song_scores(
+    pool: &SqlitePool,
+    client: &mut MaimaiClient,
+    target: &RefreshSongScoresTarget,
+) -> Result<RefreshSongScoresOutcome> {
+    let details = fetch_matching_song_details(client, target)
+        .await
+        .wrap_err_with(|| format!("refresh song scores for '{}'", target.title))?;
+    if details.is_empty() {
+        return Err(eyre::eyre!(
+            "No matching musicDetail pages found for title='{}', genre='{}', artist='{}'",
+            target.title,
+            target.genre,
+            target.artist
+        ));
+    }
+
+    let detail_pages_refreshed = details.len();
+    let rows = details
+        .into_iter()
+        .flat_map(score_entries_from_song_detail)
+        .collect::<Vec<_>>();
+
+    upsert_scores(pool, &rows)
+        .await
+        .wrap_err("upsert manually refreshed song scores")?;
+
+    Ok(RefreshSongScoresOutcome {
+        detail_pages_refreshed,
+        rows_written: rows.len(),
+    })
+}
+
+async fn fetch_matching_song_details(
+    client: &mut MaimaiClient,
+    target: &RefreshSongScoresTarget,
+) -> Result<Vec<ParsedSongDetail>> {
+    let candidate_indices = collect_song_detail_indices_for_title(client, &target.title)
+        .await
+        .wrap_err("collect candidate musicDetail indices")?;
+
+    let mut details = Vec::new();
+    for idx in candidate_indices {
+        let detail = fetch_song_detail_by_idx(client, &idx)
+            .await
+            .wrap_err_with(|| format!("fetch musicDetail '{idx}' for manual song refresh"))?;
+        if song_detail_matches_target(&detail, target) {
+            details.push(detail);
+        }
+    }
+
+    Ok(details)
+}
+
+async fn collect_song_detail_indices_for_title(
+    client: &mut MaimaiClient,
+    title: &str,
+) -> Result<Vec<String>> {
+    let normalized_title = title.trim();
+    let mut indices = HashSet::new();
+
+    for diff in 0..=4 {
+        let snapshot = fetch_score_list_snapshot(client, diff)
+            .await
+            .wrap_err_with(|| format!("fetch scores snapshot for diff={diff}"))?;
+        for entry in snapshot.entries {
+            let Some(idx) = entry
+                .source_idx
+                .as_deref()
+                .map(str::trim)
+                .filter(|value| !value.is_empty())
+            else {
+                continue;
+            };
+
+            if entry.title.trim() == normalized_title {
+                indices.insert(idx.to_string());
+            }
+        }
+    }
+
+    Ok(indices.into_iter().collect())
+}
+
+fn song_detail_matches_target(detail: &ParsedSongDetail, target: &RefreshSongScoresTarget) -> bool {
+    canonical_title_for_detail(detail) == target.title.trim()
+        && detail.genre.as_deref().unwrap_or("").trim() == target.genre.trim()
+        && detail.artist.trim() == target.artist.trim()
+}
+
 fn scores_url(diff: u8) -> Result<Url> {
     if diff > 4 {
         return Err(eyre::eyre!("diff must be 0..4"));
@@ -367,5 +472,29 @@ mod tests {
 
         assert!(seed_target_matches(&expected, &reloaded_same));
         assert!(!seed_target_matches(&expected, &reloaded_other));
+    }
+
+    #[test]
+    fn song_detail_match_requires_exact_song_identity() {
+        let detail = ParsedSongDetail {
+            title: "Song A ".to_string(),
+            genre: Some("Genre A".to_string()),
+            artist: "Artist A".to_string(),
+            chart_type: ChartType::Dx,
+            difficulties: Vec::new(),
+        };
+        let matching = RefreshSongScoresTarget {
+            title: "Song A".to_string(),
+            genre: "Genre A".to_string(),
+            artist: "Artist A".to_string(),
+        };
+        let other_artist = RefreshSongScoresTarget {
+            title: "Song A".to_string(),
+            genre: "Genre A".to_string(),
+            artist: "Artist B".to_string(),
+        };
+
+        assert!(song_detail_matches_target(&detail, &matching));
+        assert!(!song_detail_matches_target(&detail, &other_artist));
     }
 }

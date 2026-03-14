@@ -1,7 +1,10 @@
+import { useEffect, useState } from 'react';
+
 import { ChartTypeLabel } from './ChartTypeLabel';
 import { Jacket } from './Jacket';
 import { getDifficultyToneClass } from './DifficultyLabel';
 import type { SongAliases, SongDetailRow } from '../types';
+import type { SongDetailTarget } from './TableActionCells';
 import {
   aliasValues,
   formatVersionLabel,
@@ -16,6 +19,8 @@ interface SongDetailModalProps {
   selectedDetailAliases: SongAliases | null;
   selectedDetailRows: SongDetailRow[];
   songInfoUrl: string;
+  recordCollectorUrl: string;
+  onRefreshSongScores: (target: SongDetailTarget) => Promise<void>;
   onClose: () => void;
 }
 
@@ -26,15 +31,29 @@ export function SongDetailModal({
   selectedDetailAliases,
   selectedDetailRows,
   songInfoUrl,
+  recordCollectorUrl,
+  onRefreshSongScores,
   onClose,
 }: SongDetailModalProps) {
-  if (!selectedDetailTitle) {
-    return null;
-  }
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [refreshError, setRefreshError] = useState<string | null>(null);
 
   const imageName = selectedDetailRows[0]?.imageName ?? null;
   const englishAliases = aliasValues(selectedDetailAliases, 'en');
   const koreanAliases = aliasValues(selectedDetailAliases, 'ko');
+  const canRefresh =
+    recordCollectorUrl.trim().length > 0 &&
+    selectedDetailGenre !== null &&
+    selectedDetailArtist !== null;
+
+  useEffect(() => {
+    setIsRefreshing(false);
+    setRefreshError(null);
+  }, [selectedDetailArtist, selectedDetailGenre, selectedDetailTitle]);
+
+  if (selectedDetailTitle === null) {
+    return null;
+  }
 
   const renderInternalLevel = (row: SongDetailRow) => {
     if (row.internalLevel === null) {
@@ -74,6 +93,27 @@ export function SongDetailModal({
     );
   };
 
+  const handleRefreshClick = async () => {
+    if (selectedDetailGenre === null || selectedDetailArtist === null) {
+      setRefreshError('곡 식별 정보가 부족해서 새로고침할 수 없습니다.');
+      return;
+    }
+
+    setIsRefreshing(true);
+    setRefreshError(null);
+    try {
+      await onRefreshSongScores({
+        title: selectedDetailTitle,
+        genre: selectedDetailGenre,
+        artist: selectedDetailArtist,
+      });
+    } catch (error) {
+      setRefreshError(error instanceof Error ? error.message : String(error));
+    } finally {
+      setIsRefreshing(false);
+    }
+  };
+
   return (
     <div className="modal-backdrop" onClick={onClose}>
       <section className="modal-card panel" onClick={(event) => event.stopPropagation()}>
@@ -104,10 +144,21 @@ export function SongDetailModal({
                 ) : null}
               </div>
             </div>
-            <button type="button" className="modal-close-button" onClick={onClose}>
-              닫기
-            </button>
+            <div className="modal-header-actions">
+              <button
+                type="button"
+                className="modal-refresh-button"
+                onClick={handleRefreshClick}
+                disabled={!canRefresh || isRefreshing}
+              >
+                {isRefreshing ? '갱신 중...' : 'Score 갱신'}
+              </button>
+              <button type="button" className="modal-close-button" onClick={onClose}>
+                닫기
+              </button>
+            </div>
           </div>
+          {refreshError ? <p className="error-inline">{refreshError}</p> : null}
           {selectedDetailRows.length === 0 ? (
             <p className="muted">조회 가능한 상세 데이터가 없습니다.</p>
           ) : null}

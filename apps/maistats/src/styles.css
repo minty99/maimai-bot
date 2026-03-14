@@ -1367,6 +1367,17 @@ tbody tr:hover {
   flex-shrink: 0;
 }
 
+.modal-header-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+.modal-refresh-button {
+  font-size: 0.875rem;
+}
+
 .server-modal {
   width: min(860px, 100%);
 }
