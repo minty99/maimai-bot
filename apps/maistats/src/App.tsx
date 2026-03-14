@@ -51,6 +51,7 @@ import {
   buildScoreHistoryPoints,
   buildSongDetailRows,
   buildScoreRows,
+  toRawRatingPoints,
 } from './derive';
 import {
   buildFilteredPlaylogRows,
@@ -103,17 +104,13 @@ function readShowJacketsPreference(): boolean {
 }
 
 function compareRatingPageRows(left: RatedScoreRow, right: RatedScoreRow): number {
-  const ratingDiff = right.ratingPoints - left.ratingPoints;
+  const leftRawRating = toRawRatingPoints(left.internalLevel, left.achievementX10000, left.fc)
+    ?? Number.NEGATIVE_INFINITY;
+  const rightRawRating = toRawRatingPoints(right.internalLevel, right.achievementX10000, right.fc)
+    ?? Number.NEGATIVE_INFINITY;
+  const ratingDiff = rightRawRating - leftRawRating;
   if (ratingDiff !== 0) {
     return ratingDiff;
-  }
-
-  if (left.internalLevel === right.internalLevel) {
-    const leftAchievement = left.achievementX10000 ?? Number.NEGATIVE_INFINITY;
-    const rightAchievement = right.achievementX10000 ?? Number.NEGATIVE_INFINITY;
-    if (leftAchievement !== rightAchievement) {
-      return rightAchievement - leftAchievement;
-    }
   }
 
   return left.title.localeCompare(right.title, 'ko');
