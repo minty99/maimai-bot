@@ -43,8 +43,6 @@
   - `GET /health/ready`
   - `GET /api/player`
   - `GET /api/scores/rated`
-  - `GET /api/scores/search`
-  - `GET /api/scores/item`
   - `GET /api/songs/scores`
   - `GET /api/recent`
   - `GET /api/today`
