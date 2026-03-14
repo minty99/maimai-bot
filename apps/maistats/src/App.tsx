@@ -51,6 +51,7 @@ import {
   buildScoreHistoryPoints,
   buildSongDetailRows,
   buildScoreRows,
+  toRawRatingPoints,
 } from './derive';
 import {
   buildFilteredPlaylogRows,
@@ -77,6 +78,7 @@ import type {
 } from './types';
 
 type AppPage = 'home' | 'scores' | 'rating' | 'playlogs' | 'picker' | 'settings';
+type RatedScoreRow = ScoreRow & { ratingPoints: number; version: string };
 
 function readPageFromHash(hash: string): AppPage {
   if (hash === '#home') {
@@ -99,6 +101,19 @@ function readPageFromHash(hash: string): AppPage {
 
 function readShowJacketsPreference(): boolean {
   return localStorage.getItem(TABLE_LAYOUT_STORAGE_KEY) !== 'compact';
+}
+
+function compareRatingPageRows(left: RatedScoreRow, right: RatedScoreRow): number {
+  const leftRawRating = toRawRatingPoints(left.internalLevel, left.achievementX10000, left.fc)
+    ?? Number.NEGATIVE_INFINITY;
+  const rightRawRating = toRawRatingPoints(right.internalLevel, right.achievementX10000, right.fc)
+    ?? Number.NEGATIVE_INFINITY;
+  const ratingDiff = rightRawRating - leftRawRating;
+  if (ratingDiff !== 0) {
+    return ratingDiff;
+  }
+
+  return left.title.localeCompare(right.title, 'ko');
 }
 
 const MAIMAI_DAY_START_HOUR = 4;
@@ -977,16 +992,16 @@ function App() {
     const latestSet = new Set(latestVersions);
 
     const classifiedRows = scoreData.filter(
-      (row): row is ScoreRow & { ratingPoints: number; version: string } =>
+      (row): row is RatedScoreRow =>
         row.ratingPoints !== null && row.version !== null,
     );
     const newRows = classifiedRows
       .filter((row) => latestSet.has(row.version))
-      .sort((left, right) => right.ratingPoints - left.ratingPoints)
+      .sort(compareRatingPageRows)
       .slice(0, 15);
     const oldRows = classifiedRows
       .filter((row) => !latestSet.has(row.version))
-      .sort((left, right) => right.ratingPoints - left.ratingPoints)
+      .sort(compareRatingPageRows)
       .slice(0, 35);
 
     const newTotal = newRows.reduce((sum, row) => sum + (row.ratingPoints ?? 0), 0);

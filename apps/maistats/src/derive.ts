@@ -158,6 +158,20 @@ export function toRatingPoints(
   achievementX10000: number | null,
   fc: string | null,
 ): number | null {
+  const rawRatingPoints = toRawRatingPoints(internalLevel, achievementX10000, fc);
+  if (rawRatingPoints === null) {
+    return null;
+  }
+
+  const points = Math.floor(rawRatingPoints);
+  return Number.isFinite(points) && points > 0 ? points : 0;
+}
+
+export function toRawRatingPoints(
+  internalLevel: number | null,
+  achievementX10000: number | null,
+  fc: string | null,
+): number | null {
   if (internalLevel === null || achievementX10000 === null) {
     return null;
   }
@@ -165,9 +179,9 @@ export function toRatingPoints(
   const achievementPercent = achievementX10000 / 10000;
   const achievement = Math.min(achievementPercent, 100.5);
   const coefficient = coefficientForAchievement(achievementPercent);
-  const base = Math.floor((coefficient * internalLevel * achievement) / 100);
-  const points = Number.isFinite(base) && base > 0 ? base : 0;
-  return isApLike(fc) ? points + 1 : points;
+  const base = (coefficient * internalLevel * achievement) / 100;
+  const points = isApLike(fc) ? base + 1 : base;
+  return Number.isFinite(points) ? points : null;
 }
 
 export function daysSince(unixtime: number | null): number | null {
