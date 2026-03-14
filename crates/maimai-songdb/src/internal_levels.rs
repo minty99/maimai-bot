@@ -225,9 +225,12 @@ fn extract_records_from_values(
             let raw_type = row.get(type_idx).and_then(parse_string);
             let raw_diff = row.get(diff_idx).and_then(parse_string);
 
-            let Some((song_identity, sheet_type, difficulty)) =
-                map_row_keys(title, raw_type, raw_diff, resolver)
-            else {
+            let Some((song_identity, sheet_type, difficulty)) = map_row_keys(
+                title.as_deref(),
+                raw_type.as_deref(),
+                raw_diff.as_deref(),
+                resolver,
+            ) else {
                 continue;
             };
 
@@ -268,9 +271,10 @@ fn map_row_keys(
     Some((song_identity, sheet_type, difficulty))
 }
 
-fn parse_string(v: &Value) -> Option<&str> {
+fn parse_string(v: &Value) -> Option<String> {
     match v {
-        Value::String(s) => Some(s.as_str()),
+        Value::String(s) => Some(s.clone()),
+        Value::Number(n) => Some(n.to_string()),
         _ => None,
     }
 }
@@ -512,6 +516,18 @@ mod tests {
         assert_eq!(rows[0].difficulty, DifficultyCategory::Master);
         assert_eq!(rows[0].internal_level, "13.7");
         assert_eq!(rows[0].source_version, 13);
+    }
+
+    #[test]
+    fn parse_string_converts_numbers_to_strings() {
+        assert_eq!(
+            parse_string(&Value::Number(serde_json::Number::from(13))),
+            Some("13".to_string())
+        );
+        assert_eq!(
+            parse_string(&Value::String("STD".to_string())),
+            Some("STD".to_string())
+        );
     }
 
     #[tokio::test]
