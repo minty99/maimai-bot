@@ -224,10 +224,48 @@ interface BuildFilteredPlaylogRowsParams {
   playlogDifficultyFilter: Array<NonNullable<PlaylogRow["difficulty"]>>;
   playlogAchievementMin: number;
   playlogAchievementMax: number;
+  playlogBestOnly: boolean;
+  playlogNewRecordOnly: boolean;
   playlogSortKey: PlaylogSortKey;
   playlogSortDesc: boolean;
   playlogDayStartUnix: number | null;
   playlogDayEndUnix: number | null;
+}
+
+function playlogChartIdentity(row: PlaylogRow): string {
+  return `${row.songKey}::${row.chartType}::${row.difficulty ?? 'null'}`;
+}
+
+function isBetterPlaylogCandidate(left: PlaylogRow, right: PlaylogRow): boolean {
+  const leftAchievement = left.achievementX10000 ?? Number.NEGATIVE_INFINITY;
+  const rightAchievement = right.achievementX10000 ?? Number.NEGATIVE_INFINITY;
+  if (leftAchievement !== rightAchievement) {
+    return leftAchievement > rightAchievement;
+  }
+
+  if (left.isNewRecord !== right.isNewRecord) {
+    return left.isNewRecord;
+  }
+
+  if (left.playedAtUnix !== right.playedAtUnix) {
+    return left.playedAtUnix > right.playedAtUnix;
+  }
+
+  return left.key.localeCompare(right.key, "ko") > 0;
+}
+
+function pickBestPlaylogRows(rows: PlaylogRow[]): PlaylogRow[] {
+  const bestRows = new Map<string, PlaylogRow>();
+
+  for (const row of rows) {
+    const identity = playlogChartIdentity(row);
+    const current = bestRows.get(identity);
+    if (!current || isBetterPlaylogCandidate(row, current)) {
+      bestRows.set(identity, row);
+    }
+  }
+
+  return Array.from(bestRows.values());
 }
 
 export function buildFilteredPlaylogRows({
@@ -237,12 +275,14 @@ export function buildFilteredPlaylogRows({
   playlogDifficultyFilter,
   playlogAchievementMin,
   playlogAchievementMax,
+  playlogBestOnly,
+  playlogNewRecordOnly,
   playlogSortKey,
   playlogSortDesc,
   playlogDayStartUnix,
   playlogDayEndUnix,
 }: BuildFilteredPlaylogRowsParams): PlaylogRow[] {
-  const rows = playlogData.filter((row) => {
+  let rows = playlogData.filter((row) => {
     if (
       playlogDayStartUnix !== null &&
       playlogDayEndUnix !== null &&
@@ -282,6 +322,14 @@ export function buildFilteredPlaylogRows({
 
     return true;
   });
+
+  if (playlogBestOnly) {
+    rows = pickBestPlaylogRows(rows);
+  }
+
+  if (playlogNewRecordOnly) {
+    rows = rows.filter((row) => row.isNewRecord);
+  }
 
   rows.sort((left, right) => {
     let result = 0;

@@ -34,6 +34,10 @@ interface PlaylogExplorerSectionProps {
   setPlaylogAchievementMin: Dispatch<SetStateAction<number>>;
   playlogAchievementMax: number;
   setPlaylogAchievementMax: Dispatch<SetStateAction<number>>;
+  playlogBestOnly: boolean;
+  setPlaylogBestOnly: Dispatch<SetStateAction<boolean>>;
+  playlogNewRecordOnly: boolean;
+  setPlaylogNewRecordOnly: Dispatch<SetStateAction<boolean>>;
   isPlaylogDateFilterDisabled: boolean;
   setIsPlaylogDateFilterDisabled: Dispatch<SetStateAction<boolean>>;
   selectedPlaylogDayKey: string | null;
@@ -72,6 +76,10 @@ export function PlaylogExplorerSection({
   setPlaylogAchievementMin,
   playlogAchievementMax,
   setPlaylogAchievementMax,
+  playlogBestOnly,
+  setPlaylogBestOnly,
+  playlogNewRecordOnly,
+  setPlaylogNewRecordOnly,
   isPlaylogDateFilterDisabled,
   setIsPlaylogDateFilterDisabled,
   selectedPlaylogDayKey,
@@ -191,6 +199,25 @@ export function PlaylogExplorerSection({
                   step={0.0001}
                   onChange={(event) => setPlaylogAchievementMax(Number(event.target.value))}
                 />
+              </label>
+            </div>
+
+            <div className="playlog-special-filters">
+              <label className="playlog-special-toggle">
+                <input
+                  type="checkbox"
+                  checked={playlogBestOnly}
+                  onChange={(event) => setPlaylogBestOnly(event.target.checked)}
+                />
+                <span>곡/채보별 최고 기록만 보기</span>
+              </label>
+              <label className="playlog-special-toggle">
+                <input
+                  type="checkbox"
+                  checked={playlogNewRecordOnly}
+                  onChange={(event) => setPlaylogNewRecordOnly(event.target.checked)}
+                />
+                <span>new record만 보기</span>
               </label>
             </div>
 
