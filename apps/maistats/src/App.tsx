@@ -355,6 +355,12 @@ function App() {
   const [playlogAchievementMax, setPlaylogAchievementMax] = useState(() =>
     coerceNumber(savedPlaylogFilters?.achievementMax, 101),
   );
+  const [playlogBestOnly, setPlaylogBestOnly] = useState(
+    savedPlaylogFilters?.bestOnly === true,
+  );
+  const [playlogNewRecordOnly, setPlaylogNewRecordOnly] = useState(
+    savedPlaylogFilters?.newRecordOnly === true,
+  );
   const [playlogSortKey, setPlaylogSortKey] = useState<PlaylogSortKey>('playedAt');
   const [playlogSortDesc, setPlaylogSortDesc] = useState(true);
   const [isPlaylogDateFilterDisabled, setIsPlaylogDateFilterDisabled] = useState(false);
@@ -543,13 +549,17 @@ function App() {
       difficultyFilter: playlogDifficultyFilter,
       achievementMin: playlogAchievementMin,
       achievementMax: playlogAchievementMax,
+      bestOnly: playlogBestOnly,
+      newRecordOnly: playlogNewRecordOnly,
     };
     localStorage.setItem(PLAYLOG_FILTERS_STORAGE_KEY, JSON.stringify(payload));
   }, [
     playlogAchievementMax,
     playlogAchievementMin,
+    playlogBestOnly,
     playlogChartFilter,
     playlogDifficultyFilter,
+    playlogNewRecordOnly,
   ]);
 
   useEffect(() => {
@@ -928,6 +938,8 @@ function App() {
         playlogDifficultyFilter,
         playlogAchievementMin,
         playlogAchievementMax,
+        playlogBestOnly,
+        playlogNewRecordOnly,
         playlogSortKey,
         playlogSortDesc,
         playlogDayStartUnix: selectedPlaylogDayStartUnix,
@@ -936,9 +948,11 @@ function App() {
     [
       playlogAchievementMax,
       playlogAchievementMin,
+      playlogBestOnly,
       playlogChartFilter,
       playlogData,
       playlogDifficultyFilter,
+      playlogNewRecordOnly,
       playlogQuery,
       playlogSortDesc,
       playlogSortKey,
@@ -1180,6 +1194,10 @@ function App() {
               setPlaylogAchievementMin={setPlaylogAchievementMin}
               playlogAchievementMax={playlogAchievementMax}
               setPlaylogAchievementMax={setPlaylogAchievementMax}
+              playlogBestOnly={playlogBestOnly}
+              setPlaylogBestOnly={setPlaylogBestOnly}
+              playlogNewRecordOnly={playlogNewRecordOnly}
+              setPlaylogNewRecordOnly={setPlaylogNewRecordOnly}
               isPlaylogDateFilterDisabled={isPlaylogDateFilterDisabled}
               setIsPlaylogDateFilterDisabled={setIsPlaylogDateFilterDisabled}
               selectedPlaylogDayKey={selectedPlaylogDayKey}

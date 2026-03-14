@@ -22,6 +22,8 @@ export interface StoredPlaylogFilters {
   difficultyFilter?: DifficultyCategory[];
   achievementMin?: number;
   achievementMax?: number;
+  bestOnly?: boolean;
+  newRecordOnly?: boolean;
 }
 
 export interface StoredRandomPickerFilters {
