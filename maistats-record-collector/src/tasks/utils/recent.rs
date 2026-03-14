@@ -1,7 +1,10 @@
 use std::collections::HashMap;
+use std::time::Duration;
 
 use eyre::{Result, WrapErr};
 use sqlx::SqlitePool;
+use tokio::time::sleep;
+use tracing::warn;
 
 use crate::db::{upsert_playlogs, upsert_scores};
 use crate::http_client::MaimaiClient;
@@ -11,7 +14,10 @@ use crate::tasks::utils::playlog_detail::fetch_playlog_detail;
 use crate::tasks::utils::scores::score_entries_from_song_detail;
 use crate::tasks::utils::song_detail::{SongDetailCache, fetch_song_detail_by_idx};
 use maimai_parsers::parse_recent_html;
-use models::{ParsedPlayRecord, ParsedPlayerProfile};
+use models::{ParsedPlayRecord, ParsedPlayerProfile, ParsedPlaylogDetail, ParsedSongDetail};
+
+const MAX_STALE_SONG_DETAIL_RETRIES: usize = 3;
+const STALE_SONG_DETAIL_RETRY_DELAY: Duration = Duration::from_secs(5);
 
 #[derive(Debug, Clone)]
 pub(crate) enum RecentSyncOutcome {
@@ -119,22 +125,9 @@ async fn resolve_recent_entries_and_collect_score_updates(
             ));
         }
 
-        let detail = if let Some(cached) = detail_cache.get(&playlog_detail.music_detail_idx) {
-            cached
-        } else {
-            let detail = fetch_song_detail_by_idx(client, &playlog_detail.music_detail_idx)
-                .await
-                .wrap_err("fetch musicDetail from playlogDetail")?;
-            if titles_mismatch_when_present(&detail.title, &playlog_detail.title) {
-                return Err(eyre::eyre!(
-                    "playlogDetail/musicDetail title mismatch: playlogDetail='{}' musicDetail='{}'",
-                    playlog_detail.title,
-                    detail.title
-                ));
-            }
-            detail_cache.insert(playlog_detail.music_detail_idx.clone(), detail.clone());
-            detail
-        };
+        let detail =
+            fetch_song_detail_for_recent_entry(client, &mut detail_cache, &playlog_detail, entry)
+                .await?;
 
         let mut resolved = entry.clone();
         resolved.genre = detail.genre.clone();
@@ -211,6 +204,92 @@ fn titles_mismatch_when_present(left: &str, right: &str) -> bool {
     !left.is_empty() && !right.is_empty() && left != right
 }
 
+async fn fetch_song_detail_for_recent_entry(
+    client: &mut MaimaiClient,
+    cache: &mut SongDetailCache,
+    playlog_detail: &ParsedPlaylogDetail,
+    recent: &ParsedPlayRecord,
+) -> Result<ParsedSongDetail> {
+    if let Some(detail) = cache.get(&playlog_detail.music_detail_idx)
+        && !song_detail_is_stale_for_recent(&detail, recent)
+    {
+        return Ok(detail);
+    }
+
+    for attempt in 1..=MAX_STALE_SONG_DETAIL_RETRIES {
+        let detail = fetch_song_detail_by_idx(client, &playlog_detail.music_detail_idx)
+            .await
+            .wrap_err("fetch musicDetail from playlogDetail")?;
+        if titles_mismatch_when_present(&detail.title, &playlog_detail.title) {
+            return Err(eyre::eyre!(
+                "playlogDetail/musicDetail title mismatch: playlogDetail='{}' musicDetail='{}'",
+                playlog_detail.title,
+                detail.title
+            ));
+        }
+        if !song_detail_is_stale_for_recent(&detail, recent) {
+            cache.insert(playlog_detail.music_detail_idx.clone(), detail.clone());
+            return Ok(detail);
+        }
+
+        let observed_last_played_at = song_detail_last_played_at(&detail, recent)
+            .map(str::to_string)
+            .unwrap_or_else(|| "missing".to_string());
+        if attempt == MAX_STALE_SONG_DETAIL_RETRIES {
+            return Err(eyre::eyre!(
+                "musicDetail remained stale after {} attempts: title='{}' music_detail_idx='{}' expected_last_played_at='{}' observed_last_played_at='{}'",
+                MAX_STALE_SONG_DETAIL_RETRIES,
+                recent.title,
+                playlog_detail.music_detail_idx,
+                recent.played_at.as_deref().unwrap_or("missing"),
+                observed_last_played_at
+            ));
+        }
+
+        warn!(
+            "musicDetail stale for recent-triggered score refresh; retrying: title='{}' music_detail_idx='{}' expected_last_played_at='{}' observed_last_played_at='{}' attempt={}/{}",
+            recent.title,
+            playlog_detail.music_detail_idx,
+            recent.played_at.as_deref().unwrap_or("missing"),
+            observed_last_played_at,
+            attempt,
+            MAX_STALE_SONG_DETAIL_RETRIES
+        );
+        sleep(STALE_SONG_DETAIL_RETRY_DELAY).await;
+    }
+
+    Err(eyre::eyre!(
+        "unreachable stale musicDetail retry exit for title='{}'",
+        recent.title
+    ))
+}
+
+fn song_detail_is_stale_for_recent(detail: &ParsedSongDetail, recent: &ParsedPlayRecord) -> bool {
+    let Some(expected_played_at) = recent.played_at.as_deref() else {
+        return false;
+    };
+
+    match song_detail_last_played_at(detail, recent) {
+        Some(stored_last_played_at) => stored_last_played_at < expected_played_at,
+        None => true,
+    }
+}
+
+fn song_detail_last_played_at<'a>(
+    detail: &'a ParsedSongDetail,
+    recent: &ParsedPlayRecord,
+) -> Option<&'a str> {
+    let diff_category = recent.diff_category?;
+
+    detail
+        .difficulties
+        .iter()
+        .find(|difficulty| {
+            difficulty.chart_type == recent.chart_type && difficulty.diff_category == diff_category
+        })
+        .and_then(|difficulty| difficulty.last_played_at.as_deref())
+}
+
 pub(crate) fn annotate_recent_entries_with_credit_id(
     mut entries: Vec<ParsedPlayRecord>,
     total_play_count: u32,
@@ -237,7 +316,7 @@ pub(crate) fn annotate_recent_entries_with_credit_id(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use models::ChartType;
+    use models::{ChartType, DifficultyCategory, ParsedSongChartDetail, ParsedSongDetail};
 
     #[test]
     fn annotate_recent_requires_track_01() {
@@ -301,5 +380,58 @@ mod tests {
         assert!(!titles_mismatch_when_present("", "Song A"));
         assert!(!titles_mismatch_when_present("Song A", "Song A"));
         assert!(titles_mismatch_when_present("Song A", "Song B"));
+    }
+
+    #[test]
+    fn song_detail_staleness_detects_older_last_played() {
+        let recent = ParsedPlayRecord {
+            played_at_unixtime: Some(1),
+            playlog_detail_idx: Some("14,1".to_string()),
+            track: Some(1),
+            played_at: Some("2026/03/14 12:34".to_string()),
+            credit_id: Some(1),
+            title: "Song A".to_string(),
+            genre: Some("Genre A".to_string()),
+            artist: Some("Artist A".to_string()),
+            chart_type: ChartType::Dx,
+            diff_category: Some(DifficultyCategory::Master),
+            level: None,
+            achievement_percent: None,
+            achievement_new_record: false,
+            score_rank: None,
+            fc: None,
+            sync: None,
+            dx_score: None,
+            dx_score_max: None,
+        };
+        let stale_detail = ParsedSongDetail {
+            title: "Song A".to_string(),
+            genre: Some("Genre A".to_string()),
+            artist: "Artist A".to_string(),
+            chart_type: ChartType::Dx,
+            difficulties: vec![ParsedSongChartDetail {
+                diff_category: DifficultyCategory::Master,
+                level: "12+".to_string(),
+                chart_type: ChartType::Dx,
+                achievement_percent: Some(100.0),
+                rank: None,
+                fc: None,
+                sync: None,
+                dx_score: Some(1000),
+                dx_score_max: Some(1500),
+                last_played_at: Some("2026/03/14 12:20".to_string()),
+                play_count: Some(5),
+            }],
+        };
+        let fresh_detail = ParsedSongDetail {
+            difficulties: vec![ParsedSongChartDetail {
+                last_played_at: Some("2026/03/14 12:34".to_string()),
+                ..stale_detail.difficulties[0].clone()
+            }],
+            ..stale_detail.clone()
+        };
+
+        assert!(song_detail_is_stale_for_recent(&stale_detail, &recent));
+        assert!(!song_detail_is_stale_for_recent(&fresh_detail, &recent));
     }
 }

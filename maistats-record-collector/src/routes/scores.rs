@@ -2,12 +2,20 @@ use axum::{
     Json,
     extract::{Query, State},
 };
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
 use crate::{
     error::{AppError, Result},
+    http_client::is_maintenance_window_now,
     routes::responses::{ScoreApiResponse, score_response_from_entry},
     state::AppState,
+    tasks::utils::{
+        auth::ensure_session,
+        scores::{
+            RefreshSongScoresOutcome, RefreshSongScoresTarget,
+            refresh_song_scores as refresh_song_scores_task,
+        },
+    },
 };
 use models::{SongDetailScoreApiResponse, StoredScoreEntry};
 
@@ -30,6 +38,19 @@ pub(crate) struct SongScoresQuery {
     title: String,
     genre: String,
     artist: String,
+}
+
+#[derive(Deserialize)]
+pub(crate) struct RefreshSongScoresRequest {
+    title: String,
+    genre: String,
+    artist: String,
+}
+
+#[derive(Serialize)]
+pub(crate) struct RefreshSongScoresResponse {
+    detail_pages_refreshed: usize,
+    rows_written: usize,
 }
 
 pub(crate) async fn search_scores(
@@ -148,4 +169,43 @@ pub(crate) async fn get_song_detail_scores(
     }
 
     Ok(Json(responses))
+}
+
+pub(crate) async fn refresh_song_scores(
+    State(state): State<AppState>,
+    Json(payload): Json<RefreshSongScoresRequest>,
+) -> Result<Json<RefreshSongScoresResponse>> {
+    if is_maintenance_window_now() {
+        return Err(crate::error::AppError::Maintenance(
+            "maimai DX NET maintenance window (04:00-07:00 local time)".to_string(),
+        ));
+    }
+
+    let target = RefreshSongScoresTarget {
+        title: payload.title.trim().to_string(),
+        genre: payload.genre.trim().to_string(),
+        artist: payload.artist.trim().to_string(),
+    };
+    if target.title.is_empty() || target.artist.is_empty() {
+        return Err(AppError::BadRequest(
+            "title and artist are required to refresh song scores".to_string(),
+        ));
+    }
+
+    let mut client = state
+        .maimai_client()
+        .map_err(|e| AppError::InternalError(e.to_string()))?;
+    ensure_session(&mut client)
+        .await
+        .map_err(|e| AppError::InternalError(e.to_string()))?;
+
+    let outcome: RefreshSongScoresOutcome =
+        refresh_song_scores_task(&state.db_pool, &mut client, &target)
+            .await
+            .map_err(|e| AppError::InternalError(e.to_string()))?;
+
+    Ok(Json(RefreshSongScoresResponse {
+        detail_pages_refreshed: outcome.detail_pages_refreshed,
+        rows_written: outcome.rows_written,
+    }))
 }
