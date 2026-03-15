@@ -6,7 +6,7 @@ use maimai_auth::intl;
 use maimai_parsers::parse_scores_html;
 use models::{ChartType, MaimaiVersion};
 
-use crate::{SheetRow, SongIdentity, SongRow, normalize_song_title_value};
+use super::{SheetRow, SongIdentity, SongRow, normalize_song_title_value};
 
 const INTL_VERSION_SEARCH_URL: &str =
     "https://maimaidx-eng.com/maimai-mobile/record/musicVersion/search/";
@@ -247,18 +247,19 @@ fn parse_rows(
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use crate::{
+    use super::super::{
         SheetSource, SongIdentity, load_manual_override_rows, load_official_rows_from_json,
     };
+    use super::*;
     use models::SongGenre;
 
     const OFFICIAL_JP_SONGS_JSON: &str =
         include_str!("../examples/maimai/official/maimai_songs.json");
     const INTL_VERSION1_MAIMAI_PLUS_DIFF0_HTML: &str =
         include_str!("../examples/maimai/intl_version/version1_maimai_plus_diff0.html");
-    const INTL_VERSION0_MAIMAI_DIFF0_HTML: &str =
-        include_str!("../../maimai-parsers/examples/maimai/scores/version0_maimai_diff0.html");
+    const INTL_VERSION0_MAIMAI_DIFF0_HTML: &str = include_str!(
+        "../../../crates/maimai-parsers/examples/maimai/scores/version0_maimai_diff0.html"
+    );
     const INTL_VERSION4_ORANGE_DIFF0_HTML: &str =
         include_str!("../examples/maimai/intl_version/version4_orange_diff0.html");
 

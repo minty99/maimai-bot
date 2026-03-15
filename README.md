@@ -17,7 +17,7 @@
 
 공용 곡 정보 서버입니다.
 
-- `maimai-songdb`를 사용해 곡 목록, 버전, 내부 레벨, 재킷 이미지를 준비합니다.
+- 내부 `songdb` 서브시스템으로 곡 목록, 버전, 내부 레벨, 재킷 이미지를 준비합니다.
 - `data/song_data/data.json`을 메모리로 로드해 API로 제공합니다.
 - SongDB 관련 env가 설정돼 있으면 시작 시 업데이트를 시도하고, 이후 매일 **07:30 KST**에 다시 갱신합니다.
 - 대표 엔드포인트:
@@ -88,7 +88,6 @@
 `-- crates/
     |-- maimai-auth/              # maimaidx-eng.com auth helpers
     |-- maimai-parsers/           # HTML parsers
-    |-- maimai-songdb/            # song DB fetch/update logic
     `-- models/                   # shared API/domain/storage models
 ```
 

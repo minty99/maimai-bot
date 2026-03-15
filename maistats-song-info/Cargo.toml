@@ -16,6 +16,10 @@ serde_json.workspace = true
 strum.workspace = true
 eyre.workspace = true
 dotenvy.workspace = true
-maimai-songdb = { path = "../crates/maimai-songdb" }
+hex.workspace = true
+maimai-auth = { path = "../crates/maimai-auth" }
+maimai-parsers = { path = "../crates/maimai-parsers" }
 models = { path = "../crates/models" }
+reqwest.workspace = true
+sha2.workspace = true
 urlencoding.workspace = true

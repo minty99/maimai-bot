@@ -9,7 +9,7 @@ use std::path::Path;
 use std::sync::LazyLock;
 use tokio::time::{Duration, sleep};
 
-use crate::{SongIdentity, SongRow, normalize_song_title_value};
+use super::{SongIdentity, SongRow, normalize_song_title_value};
 
 #[derive(Debug, Clone, Deserialize)]
 struct ExtractSpec {
@@ -588,8 +588,8 @@ pub(crate) async fn fetch_internal_levels(
 
 #[cfg(test)]
 mod tests {
+    use super::super::{load_manual_override_rows, load_official_rows_from_json};
     use super::*;
-    use crate::{load_manual_override_rows, load_official_rows_from_json};
     use models::SongGenre;
     use std::sync::Once;
     use tracing_subscriber::EnvFilter;
@@ -602,8 +602,7 @@ mod tests {
         TEST_TRACING.call_once(|| {
             tracing_subscriber::fmt()
                 .with_env_filter(
-                    EnvFilter::try_from_default_env()
-                        .unwrap_or_else(|_| EnvFilter::new("maimai_songdb=warn,warn")),
+                    EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("warn")),
                 )
                 .with_test_writer()
                 .without_time()

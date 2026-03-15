@@ -459,9 +459,7 @@ fn apply_jp_song_patches(songs: &mut [RawSong]) {
     }
 }
 
-pub(crate) fn load_official_rows_from_json(
-    json: &str,
-) -> eyre::Result<(Vec<SongRow>, Vec<SheetRow>)> {
+fn load_official_rows_from_json(json: &str) -> eyre::Result<(Vec<SongRow>, Vec<SheetRow>)> {
     let raw_songs = parse_maimai_songs_json(json)?;
     build_official_rows(raw_songs)
 }
