@@ -1232,6 +1232,7 @@ mod tests {
             .collect::<HashSet<_>>();
 
         assert!(!titles.contains("Link"));
+        assert!(!titles.contains(""));
     }
 
     #[test]

@@ -39,6 +39,43 @@
       ]
     },
     {
+      "title": "",
+      "genre": "POPS＆ANIME",
+      "artist": "x0o0x_",
+      "image_url": "https://maimaidx.jp/maimai-mobile/img/Music/5bb69b619f266d0a.png",
+      "sheets": [
+        {
+          "type": "DX",
+          "difficulty": "BASIC",
+          "level": "3",
+          "version": "UNiVERSE PLUS",
+          "region": { "jp": true, "intl": true }
+        },
+        {
+          "type": "DX",
+          "difficulty": "ADVANCED",
+          "level": "6",
+          "version": "UNiVERSE PLUS",
+          "region": { "jp": true, "intl": true }
+        },
+        {
+          "type": "DX",
+          "difficulty": "EXPERT",
+          "level": "10",
+          "version": "UNiVERSE PLUS",
+          "region": { "jp": true, "intl": true }
+        },
+        {
+          "type": "DX",
+          "difficulty": "MASTER",
+          "level": "12+",
+          "version": "UNiVERSE PLUS",
+          "internal_level": 12.8,
+          "region": { "jp": true, "intl": true }
+        }
+      ]
+    },
+    {
       "title": "全世界共通リズム感テスト",
       "genre": "maimai",
       "artist": "☆リズムに合わせてボタンを叩き達成率を競うゲームです☆",
@@ -74,6 +111,7 @@
           "difficulty": "MASTER",
           "level": "12",
           "version": "Splash",
+          "internal_level": 12.0,
           "region": { "jp": false, "intl": true }
         }
       ]
@@ -107,6 +145,7 @@
           "difficulty": "EXPERT",
           "level": "12+",
           "version": "maimai PLUS",
+          "internal_level": 12.6,
           "region": { "jp": true, "intl": true }
         },
         {
@@ -114,6 +153,7 @@
           "difficulty": "MASTER",
           "level": "12",
           "version": "maimai PLUS",
+          "internal_level": 12.5,
           "region": { "jp": true, "intl": true }
         },
         {
@@ -121,6 +161,7 @@
           "difficulty": "Re:MASTER",
           "level": "13",
           "version": "maimai PLUS",
+          "internal_level": 13.5,
           "region": { "jp": true, "intl": true }
         }
       ]
@@ -161,6 +202,7 @@
           "difficulty": "MASTER",
           "level": "12",
           "version": "ORANGE",
+          "internal_level": 12.5,
           "region": { "jp": true, "intl": true }
         }
       ]
