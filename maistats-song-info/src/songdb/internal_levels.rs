@@ -56,6 +56,29 @@ static TITLE_MAPPINGS: LazyLock<TitleMappings> = LazyLock::new(|| {
         .expect("failed to parse embedded title_mappings.json")
 });
 
+// Frozen historical versions live in-repo so we don't depend on mutable sheet data
+// once a version is no longer current.
+static FROZEN_INTERNAL_LEVEL_ROWS: LazyLock<HashMap<i64, Vec<InternalLevelRow>>> =
+    LazyLock::new(|| {
+        [
+            (6, include_str!("data/internal_level/v6.json")),
+            (7, include_str!("data/internal_level/v7.json")),
+            (8, include_str!("data/internal_level/v8.json")),
+            (9, include_str!("data/internal_level/v9.json")),
+            (10, include_str!("data/internal_level/v10.json")),
+            (11, include_str!("data/internal_level/v11.json")),
+            (12, include_str!("data/internal_level/v12.json")),
+        ]
+        .into_iter()
+        .map(|(version, json)| {
+            let rows = serde_json::from_str(json).unwrap_or_else(|err| {
+                panic!("failed to parse frozen internal level v{version}: {err}")
+            });
+            (version, rows)
+        })
+        .collect()
+    });
+
 struct InternalLevelTitleResolver {
     song_identity_by_title: HashMap<String, SongIdentity>,
     skipped_titles: HashSet<String>,
@@ -477,6 +500,10 @@ fn load_cached_rows(path: &Path) -> eyre::Result<Vec<InternalLevelRow>> {
     Ok(rows)
 }
 
+fn load_frozen_rows(version: i64) -> Option<Vec<InternalLevelRow>> {
+    FROZEN_INTERNAL_LEVEL_ROWS.get(&version).cloned()
+}
+
 fn save_cached_rows(path: &Path, rows: &[InternalLevelRow]) -> eyre::Result<()> {
     let json = serde_json::to_vec_pretty(rows).wrap_err("serialize internal level rows")?;
     let file_name = path.file_name().and_then(|n| n.to_str()).unwrap_or("tmp");
@@ -514,20 +541,32 @@ pub(crate) async fn fetch_internal_levels(
         let cache_file = cache_path_for_version(cache_dir, version);
         let is_latest = version == latest_version;
 
-        if !is_latest && let Ok(cached) = load_cached_rows(&cache_file) {
-            tracing::info!(
-                "v{}: loaded {} rows from cache (frozen version)",
-                version,
-                cached.len()
-            );
-            all_rows.extend(cached);
-            continue;
+        if !is_latest {
+            if let Some(frozen_rows) = load_frozen_rows(version) {
+                tracing::info!(
+                    "v{}: loaded {} rows from embedded frozen data",
+                    version,
+                    frozen_rows.len()
+                );
+                all_rows.extend(frozen_rows);
+                continue;
+            }
+
+            if let Ok(cached) = load_cached_rows(&cache_file) {
+                tracing::warn!(
+                    "v{}: missing embedded frozen data; loaded {} rows from cache fallback",
+                    version,
+                    cached.len()
+                );
+                all_rows.extend(cached);
+                continue;
+            }
         }
 
         let reason = if is_latest {
             "latest version"
         } else {
-            "cache miss"
+            "embedded/cache miss"
         };
         tracing::info!("v{}: fetching from Google Sheets ({reason})", version);
 
@@ -667,6 +706,30 @@ mod tests {
         assert_eq!(rows[0].difficulty, DifficultyCategory::Master);
         assert_eq!(rows[0].internal_level, "13.7");
         assert_eq!(rows[0].source_version, 13);
+    }
+
+    #[test]
+    fn embedded_frozen_versions_cover_all_non_latest_spreadsheets() {
+        let latest_version = SPREADSHEETS
+            .iter()
+            .map(|spreadsheet| spreadsheet.source_version)
+            .max()
+            .expect("at least one spreadsheet");
+        let expected_versions = SPREADSHEETS
+            .iter()
+            .map(|spreadsheet| spreadsheet.source_version)
+            .filter(|version| *version != latest_version)
+            .collect::<HashSet<_>>();
+        let embedded_versions = FROZEN_INTERNAL_LEVEL_ROWS
+            .keys()
+            .copied()
+            .collect::<HashSet<_>>();
+
+        assert_eq!(embedded_versions, expected_versions);
+        assert!(
+            load_frozen_rows(latest_version).is_none(),
+            "latest version should stay runtime-fetched"
+        );
     }
 
     #[test]
