@@ -237,15 +237,10 @@ impl SongDatabase {
         .wrap_err("fetch INTL sheet versions")?;
 
         tracing::info!("Fetching internal levels...");
-        let internal_level_cache_dir = song_data_dir.join("internal_level");
-        let internal_levels = internal_levels::fetch_internal_levels(
-            &client,
-            &config.google_api_key,
-            &internal_level_cache_dir,
-            &songs,
-        )
-        .await
-        .wrap_err("fetch internal levels")?;
+        let internal_levels =
+            internal_levels::fetch_internal_levels(&client, &config.google_api_key, &songs)
+                .await
+                .wrap_err("fetch internal levels")?;
 
         tracing::info!("Fetching song aliases...");
         let alias_cache_dir = song_data_dir.join("aliases");

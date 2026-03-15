@@ -5,7 +5,6 @@ use models::{ChartType, DifficultyCategory};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::{HashMap, HashSet};
-use std::path::Path;
 use std::sync::LazyLock;
 use tokio::time::{Duration, sleep};
 
@@ -489,28 +488,8 @@ async fn fetch_rows_for_spreadsheet(
     Ok((rows, total_sheets, failed_sheets))
 }
 
-fn cache_path_for_version(cache_dir: &Path, version: i64) -> std::path::PathBuf {
-    cache_dir.join(format!("v{version}.identity-v3.json"))
-}
-
-fn load_cached_rows(path: &Path) -> eyre::Result<Vec<InternalLevelRow>> {
-    let data = std::fs::read_to_string(path).wrap_err("read cached internal level file")?;
-    let rows: Vec<InternalLevelRow> =
-        serde_json::from_str(&data).wrap_err("parse cached internal level json")?;
-    Ok(rows)
-}
-
 fn load_frozen_rows(version: i64) -> Option<Vec<InternalLevelRow>> {
     FROZEN_INTERNAL_LEVEL_ROWS.get(&version).cloned()
-}
-
-fn save_cached_rows(path: &Path, rows: &[InternalLevelRow]) -> eyre::Result<()> {
-    let json = serde_json::to_vec_pretty(rows).wrap_err("serialize internal level rows")?;
-    let file_name = path.file_name().and_then(|n| n.to_str()).unwrap_or("tmp");
-    let tmp_path = path.with_file_name(format!("{file_name}.tmp"));
-    std::fs::write(&tmp_path, json).wrap_err("write temp cache file")?;
-    std::fs::rename(&tmp_path, path).wrap_err("rename temp cache file")?;
-    Ok(())
 }
 
 pub(crate) type InternalLevelKey = (SongIdentity, ChartType, DifficultyCategory);
@@ -518,10 +497,8 @@ pub(crate) type InternalLevelKey = (SongIdentity, ChartType, DifficultyCategory)
 pub(crate) async fn fetch_internal_levels(
     client: &reqwest::Client,
     google_api_key: &str,
-    cache_dir: &Path,
     songs: &[SongRow],
 ) -> eyre::Result<HashMap<InternalLevelKey, InternalLevelRow>> {
-    std::fs::create_dir_all(cache_dir).wrap_err("create internal_level cache dir")?;
     let resolver = InternalLevelTitleResolver::new(songs);
 
     let spreadsheets = &*SPREADSHEETS;
@@ -538,54 +515,28 @@ pub(crate) async fn fetch_internal_levels(
 
     for spreadsheet in spreadsheets {
         let version = spreadsheet.source_version;
-        let cache_file = cache_path_for_version(cache_dir, version);
         let is_latest = version == latest_version;
 
         if !is_latest {
-            if let Some(frozen_rows) = load_frozen_rows(version) {
-                tracing::info!(
-                    "v{}: loaded {} rows from embedded frozen data",
-                    version,
-                    frozen_rows.len()
-                );
-                all_rows.extend(frozen_rows);
-                continue;
-            }
-
-            if let Ok(cached) = load_cached_rows(&cache_file) {
-                tracing::warn!(
-                    "v{}: missing embedded frozen data; loaded {} rows from cache fallback",
-                    version,
-                    cached.len()
-                );
-                all_rows.extend(cached);
-                continue;
-            }
+            let frozen_rows = load_frozen_rows(version).ok_or_else(|| {
+                eyre::eyre!("missing embedded frozen internal levels for v{version}")
+            })?;
+            tracing::info!(
+                "v{}: loaded {} rows from embedded frozen data",
+                version,
+                frozen_rows.len()
+            );
+            all_rows.extend(frozen_rows);
+            continue;
         }
 
-        let reason = if is_latest {
-            "latest version"
-        } else {
-            "embedded/cache miss"
-        };
-        tracing::info!("v{}: fetching from Google Sheets ({reason})", version);
+        tracing::info!("v{}: fetching from Google Sheets (latest version)", version);
 
         let (rows, sheet_count, failures) =
             fetch_rows_for_spreadsheet(client, spreadsheet, google_api_key, &resolver).await?;
 
         total_sheets += sheet_count;
         failed_sheets.extend(failures);
-
-        if let Err(e) = save_cached_rows(&cache_file, &rows) {
-            tracing::warn!("v{}: failed to save cache: {:#}", version, e);
-        } else {
-            tracing::info!(
-                "v{}: saved {} rows to cache at {}",
-                version,
-                rows.len(),
-                cache_file.display()
-            );
-        }
 
         all_rows.extend(rows);
     }
