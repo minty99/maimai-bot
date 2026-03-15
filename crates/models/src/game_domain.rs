@@ -544,8 +544,9 @@ mod song_genre_tests {
 
     #[test]
     fn song_genre_parses_all_official_fixture_catcodes() {
-        let fixture =
-            include_str!("../../maimai-songdb/examples/maimai/official/maimai_songs.json");
+        let fixture = include_str!(
+            "../../../maistats-song-info/src/examples/maimai/official/maimai_songs.json"
+        );
         let rows: serde_json::Value =
             serde_json::from_str(fixture).expect("parse official songs fixture");
         let catcodes = rows

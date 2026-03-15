@@ -237,19 +237,13 @@ impl SongDatabase {
         .wrap_err("fetch INTL sheet versions")?;
 
         tracing::info!("Fetching internal levels...");
-        let internal_level_cache_dir = song_data_dir.join("internal_level");
-        let internal_levels = internal_levels::fetch_internal_levels(
-            &client,
-            &config.google_api_key,
-            &internal_level_cache_dir,
-            &songs,
-        )
-        .await
-        .wrap_err("fetch internal levels")?;
+        let internal_levels =
+            internal_levels::fetch_internal_levels(&client, &config.google_api_key, &songs)
+                .await
+                .wrap_err("fetch internal levels")?;
 
         tracing::info!("Fetching song aliases...");
-        let alias_cache_dir = song_data_dir.join("aliases");
-        let aliases = aliases::fetch_song_aliases(&client, &alias_cache_dir)
+        let aliases = aliases::fetch_song_aliases(&client)
             .await
             .unwrap_or_else(|err| {
                 tracing::warn!("failed to fetch song aliases; continuing without aliases: {err:#}");
@@ -459,9 +453,7 @@ fn apply_jp_song_patches(songs: &mut [RawSong]) {
     }
 }
 
-pub(crate) fn load_official_rows_from_json(
-    json: &str,
-) -> eyre::Result<(Vec<SongRow>, Vec<SheetRow>)> {
+fn load_official_rows_from_json(json: &str) -> eyre::Result<(Vec<SongRow>, Vec<SheetRow>)> {
     let raw_songs = parse_maimai_songs_json(json)?;
     build_official_rows(raw_songs)
 }

@@ -6,10 +6,11 @@ use chrono_tz::Asia::Seoul;
 use eyre::{ContextCompat, WrapErr};
 use tokio::sync::Mutex;
 
+use crate::songdb::{SongDatabase, SongDbConfig};
 use crate::state::AppState;
 
 pub(crate) fn start_songdb_tasks(app_state: AppState) {
-    let songdb_config = match maimai_songdb::SongDbConfig::from_env() {
+    let songdb_config = match SongDbConfig::from_env() {
         Ok(v) => v,
         Err(e) => {
             tracing::warn!("songdb: env not configured; skipping song DB updater: {e}");
@@ -76,15 +77,12 @@ pub(crate) fn start_songdb_tasks(app_state: AppState) {
     });
 }
 
-async fn run_update(
-    song_data_base_path: &Path,
-    config: &maimai_songdb::SongDbConfig,
-) -> eyre::Result<()> {
+async fn run_update(song_data_base_path: &Path, config: &SongDbConfig) -> eyre::Result<()> {
     tracing::info!("songdb: starting update...");
 
     std::fs::create_dir_all(song_data_base_path).wrap_err("create song_data output dir")?;
 
-    let database = maimai_songdb::SongDatabase::fetch(config, song_data_base_path)
+    let database = SongDatabase::fetch(config, song_data_base_path)
         .await
         .wrap_err("failed to fetch song database")?;
 
@@ -102,7 +100,7 @@ async fn run_update(
 async fn run_daily_0730_kst_loop(
     song_data_base_path: &Path,
     app_state: &AppState,
-    config: &maimai_songdb::SongDbConfig,
+    config: &SongDbConfig,
     lock: Arc<Mutex<()>>,
 ) -> eyre::Result<()> {
     loop {

@@ -4,7 +4,6 @@ members = [
     "maistats-song-info",
     "crates/maimai-auth",
     "crates/maimai-parsers",
-    "crates/maimai-songdb",
     "crates/models",
     "maistats-discord-bot",
 ]
@@ -18,7 +17,6 @@ edition = "2024"
 axum = "0.8.8"
 chrono = "0.4.43"
 chrono-tz = "0.10.4"
-clap = { version = "4.5.54", features = ["derive"] }
 cookie_store = { version = "0.22.0", features = ["serde_json"] }
 dotenvy = "0.15.7"
 eyre = "0.6.12"

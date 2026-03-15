@@ -5,11 +5,10 @@ use models::{ChartType, DifficultyCategory};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::{HashMap, HashSet};
-use std::path::Path;
 use std::sync::LazyLock;
 use tokio::time::{Duration, sleep};
 
-use crate::{SongIdentity, SongRow, normalize_song_title_value};
+use super::{SongIdentity, SongRow, normalize_song_title_value};
 
 #[derive(Debug, Clone, Deserialize)]
 struct ExtractSpec {
@@ -55,6 +54,29 @@ static TITLE_MAPPINGS: LazyLock<TitleMappings> = LazyLock::new(|| {
     serde_json::from_str(include_str!("data/title_mappings.json"))
         .expect("failed to parse embedded title_mappings.json")
 });
+
+// Frozen historical versions live in-repo so we don't depend on mutable sheet data
+// once a version is no longer current.
+static FROZEN_INTERNAL_LEVEL_ROWS: LazyLock<HashMap<i64, Vec<InternalLevelRow>>> =
+    LazyLock::new(|| {
+        [
+            (6, include_str!("data/internal_level/v6.json")),
+            (7, include_str!("data/internal_level/v7.json")),
+            (8, include_str!("data/internal_level/v8.json")),
+            (9, include_str!("data/internal_level/v9.json")),
+            (10, include_str!("data/internal_level/v10.json")),
+            (11, include_str!("data/internal_level/v11.json")),
+            (12, include_str!("data/internal_level/v12.json")),
+        ]
+        .into_iter()
+        .map(|(version, json)| {
+            let rows = serde_json::from_str(json).unwrap_or_else(|err| {
+                panic!("failed to parse frozen internal level v{version}: {err}")
+            });
+            (version, rows)
+        })
+        .collect()
+    });
 
 struct InternalLevelTitleResolver {
     song_identity_by_title: HashMap<String, SongIdentity>,
@@ -466,24 +488,8 @@ async fn fetch_rows_for_spreadsheet(
     Ok((rows, total_sheets, failed_sheets))
 }
 
-fn cache_path_for_version(cache_dir: &Path, version: i64) -> std::path::PathBuf {
-    cache_dir.join(format!("v{version}.identity-v3.json"))
-}
-
-fn load_cached_rows(path: &Path) -> eyre::Result<Vec<InternalLevelRow>> {
-    let data = std::fs::read_to_string(path).wrap_err("read cached internal level file")?;
-    let rows: Vec<InternalLevelRow> =
-        serde_json::from_str(&data).wrap_err("parse cached internal level json")?;
-    Ok(rows)
-}
-
-fn save_cached_rows(path: &Path, rows: &[InternalLevelRow]) -> eyre::Result<()> {
-    let json = serde_json::to_vec_pretty(rows).wrap_err("serialize internal level rows")?;
-    let file_name = path.file_name().and_then(|n| n.to_str()).unwrap_or("tmp");
-    let tmp_path = path.with_file_name(format!("{file_name}.tmp"));
-    std::fs::write(&tmp_path, json).wrap_err("write temp cache file")?;
-    std::fs::rename(&tmp_path, path).wrap_err("rename temp cache file")?;
-    Ok(())
+fn load_frozen_rows(version: i64) -> Option<Vec<InternalLevelRow>> {
+    FROZEN_INTERNAL_LEVEL_ROWS.get(&version).cloned()
 }
 
 pub(crate) type InternalLevelKey = (SongIdentity, ChartType, DifficultyCategory);
@@ -491,10 +497,8 @@ pub(crate) type InternalLevelKey = (SongIdentity, ChartType, DifficultyCategory)
 pub(crate) async fn fetch_internal_levels(
     client: &reqwest::Client,
     google_api_key: &str,
-    cache_dir: &Path,
     songs: &[SongRow],
 ) -> eyre::Result<HashMap<InternalLevelKey, InternalLevelRow>> {
-    std::fs::create_dir_all(cache_dir).wrap_err("create internal_level cache dir")?;
     let resolver = InternalLevelTitleResolver::new(songs);
 
     let spreadsheets = &*SPREADSHEETS;
@@ -511,42 +515,28 @@ pub(crate) async fn fetch_internal_levels(
 
     for spreadsheet in spreadsheets {
         let version = spreadsheet.source_version;
-        let cache_file = cache_path_for_version(cache_dir, version);
         let is_latest = version == latest_version;
 
-        if !is_latest && let Ok(cached) = load_cached_rows(&cache_file) {
+        if !is_latest {
+            let frozen_rows = load_frozen_rows(version).ok_or_else(|| {
+                eyre::eyre!("missing embedded frozen internal levels for v{version}")
+            })?;
             tracing::info!(
-                "v{}: loaded {} rows from cache (frozen version)",
+                "v{}: loaded {} rows from embedded frozen data",
                 version,
-                cached.len()
+                frozen_rows.len()
             );
-            all_rows.extend(cached);
+            all_rows.extend(frozen_rows);
             continue;
         }
 
-        let reason = if is_latest {
-            "latest version"
-        } else {
-            "cache miss"
-        };
-        tracing::info!("v{}: fetching from Google Sheets ({reason})", version);
+        tracing::info!("v{}: fetching from Google Sheets (latest version)", version);
 
         let (rows, sheet_count, failures) =
             fetch_rows_for_spreadsheet(client, spreadsheet, google_api_key, &resolver).await?;
 
         total_sheets += sheet_count;
         failed_sheets.extend(failures);
-
-        if let Err(e) = save_cached_rows(&cache_file, &rows) {
-            tracing::warn!("v{}: failed to save cache: {:#}", version, e);
-        } else {
-            tracing::info!(
-                "v{}: saved {} rows to cache at {}",
-                version,
-                rows.len(),
-                cache_file.display()
-            );
-        }
 
         all_rows.extend(rows);
     }
@@ -588,8 +578,8 @@ pub(crate) async fn fetch_internal_levels(
 
 #[cfg(test)]
 mod tests {
+    use super::super::{load_manual_override_rows, load_official_rows_from_json};
     use super::*;
-    use crate::{load_manual_override_rows, load_official_rows_from_json};
     use models::SongGenre;
     use std::sync::Once;
     use tracing_subscriber::EnvFilter;
@@ -602,8 +592,7 @@ mod tests {
         TEST_TRACING.call_once(|| {
             tracing_subscriber::fmt()
                 .with_env_filter(
-                    EnvFilter::try_from_default_env()
-                        .unwrap_or_else(|_| EnvFilter::new("maimai_songdb=warn,warn")),
+                    EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("warn")),
                 )
                 .with_test_writer()
                 .without_time()
@@ -668,6 +657,30 @@ mod tests {
         assert_eq!(rows[0].difficulty, DifficultyCategory::Master);
         assert_eq!(rows[0].internal_level, "13.7");
         assert_eq!(rows[0].source_version, 13);
+    }
+
+    #[test]
+    fn embedded_frozen_versions_cover_all_non_latest_spreadsheets() {
+        let latest_version = SPREADSHEETS
+            .iter()
+            .map(|spreadsheet| spreadsheet.source_version)
+            .max()
+            .expect("at least one spreadsheet");
+        let expected_versions = SPREADSHEETS
+            .iter()
+            .map(|spreadsheet| spreadsheet.source_version)
+            .filter(|version| *version != latest_version)
+            .collect::<HashSet<_>>();
+        let embedded_versions = FROZEN_INTERNAL_LEVEL_ROWS
+            .keys()
+            .copied()
+            .collect::<HashSet<_>>();
+
+        assert_eq!(embedded_versions, expected_versions);
+        assert!(
+            load_frozen_rows(latest_version).is_none(),
+            "latest version should stay runtime-fetched"
+        );
     }
 
     #[test]
