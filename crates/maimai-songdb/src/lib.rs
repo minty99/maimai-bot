@@ -13,11 +13,11 @@ use std::path::Path;
 
 mod aliases;
 mod internal_levels;
-mod intl_only;
+mod manual_override;
 mod sheet_versions;
 
 use internal_levels::{InternalLevelKey, InternalLevelRow};
-use intl_only::load_intl_only_rows;
+use manual_override::load_manual_override_rows;
 use sheet_versions::SheetVersionMap;
 
 pub const SONG_DATA_SUBDIR: &str = "song_data";
@@ -112,9 +112,10 @@ pub(crate) struct SheetRow {
 #[derive(Debug, Clone)]
 pub(crate) enum SheetSource {
     Official,
-    IntlOnly {
+    ManualOverride {
         version_name: String,
         internal_level: Option<String>,
+        region: SongChartRegion,
     },
 }
 
@@ -201,23 +202,16 @@ impl SongDatabase {
             .wrap_err("build reqwest client")?;
 
         tracing::info!("Fetching official maimai songs JSON...");
+        let manual_override_rows =
+            load_manual_override_rows().wrap_err("load manual_override.json")?;
+        let overridden_titles = manual_override_rows.overridden_titles.clone();
         let raw_songs = fetch_maimai_songs(&client).await?;
-        ensure_unique_song_identities(&raw_songs)?;
+        let raw_songs = filter_official_songs_by_title(raw_songs, &overridden_titles)
+            .wrap_err("filter official songs by manual override title")?;
 
-        let mut songs: Vec<SongRow> = raw_songs
-            .iter()
-            .map(extract_song)
-            .collect::<eyre::Result<Vec<_>>>()?;
-        let mut sheets: Vec<SheetRow> = raw_songs
-            .iter()
-            .map(extract_sheets)
-            .collect::<eyre::Result<Vec<_>>>()?
-            .into_iter()
-            .flatten()
-            .collect();
-        let intl_only_rows = load_intl_only_rows().wrap_err("load intl_only.json")?;
-        songs.extend(intl_only_rows.songs);
-        sheets.extend(intl_only_rows.sheets);
+        let (mut songs, mut sheets) = build_official_rows(raw_songs)?;
+        songs.extend(manual_override_rows.songs);
+        sheets.extend(manual_override_rows.sheets);
         ensure_unique_song_row_ids(&songs)?;
         ensure_unique_sheet_keys(&sheets)?;
         tracing::info!(
@@ -232,6 +226,7 @@ impl SongDatabase {
             &config.intl_sega_password,
             &songs,
             &sheets,
+            &overridden_titles,
         )
         .await
         .wrap_err("fetch INTL sheet versions")?;
@@ -339,16 +334,14 @@ fn build_data_root(
                     },
                 )
             }
-            SheetSource::IntlOnly {
+            SheetSource::ManualOverride {
                 version_name,
                 internal_level,
+                region,
             } => (
                 Some(version_name.clone()),
                 internal_level.clone(),
-                SongChartRegion {
-                    jp: false,
-                    intl: true,
-                },
+                region.clone(),
             ),
         };
 
@@ -394,6 +387,27 @@ fn parse_maimai_songs_json(json: &str) -> eyre::Result<Vec<RawSong>> {
     Ok(filtered)
 }
 
+fn build_official_rows(raw_songs: Vec<RawSong>) -> eyre::Result<(Vec<SongRow>, Vec<SheetRow>)> {
+    ensure_unique_song_identities(&raw_songs)?;
+
+    let songs: Vec<SongRow> = raw_songs
+        .iter()
+        .map(extract_song)
+        .collect::<eyre::Result<Vec<_>>>()?;
+    let sheets: Vec<SheetRow> = raw_songs
+        .iter()
+        .map(extract_sheets)
+        .collect::<eyre::Result<Vec<_>>>()?
+        .into_iter()
+        .flatten()
+        .collect();
+
+    ensure_unique_song_row_ids(&songs)?;
+    ensure_unique_sheet_keys(&sheets)?;
+
+    Ok((songs, sheets))
+}
+
 /// Hardcoded patches for known JP/INTL artist discrepancies in maimai_songs.json.
 /// The JP data is used as the primary source, but some songs have different artist
 /// strings on INTL — which affects song identity matching against INTL score records.
@@ -414,24 +428,31 @@ pub(crate) fn load_official_rows_from_json(
     json: &str,
 ) -> eyre::Result<(Vec<SongRow>, Vec<SheetRow>)> {
     let raw_songs = parse_maimai_songs_json(json)?;
-    ensure_unique_song_identities(&raw_songs)?;
+    build_official_rows(raw_songs)
+}
 
-    let songs: Vec<SongRow> = raw_songs
-        .iter()
-        .map(extract_song)
-        .collect::<eyre::Result<Vec<_>>>()?;
-    let sheets: Vec<SheetRow> = raw_songs
-        .iter()
-        .map(extract_sheets)
-        .collect::<eyre::Result<Vec<_>>>()?
+fn filter_official_songs_by_title(
+    raw_songs: Vec<RawSong>,
+    ignored_titles: &HashSet<String>,
+) -> eyre::Result<Vec<RawSong>> {
+    if ignored_titles.is_empty() {
+        return Ok(raw_songs);
+    }
+
+    raw_songs
         .into_iter()
-        .flatten()
-        .collect();
-
-    ensure_unique_song_row_ids(&songs)?;
-    ensure_unique_sheet_keys(&sheets)?;
-
-    Ok((songs, sheets))
+        .filter_map(|raw_song| match derive_song_identity(&raw_song) {
+            Ok(identity) => {
+                let normalized_title = normalize_song_title_value(&identity.title);
+                if ignored_titles.contains(&normalized_title) {
+                    None
+                } else {
+                    Some(Ok(raw_song))
+                }
+            }
+            Err(err) => Some(Err(err)),
+        })
+        .collect()
 }
 
 fn filter_out_utage_entries(raw_songs: Vec<RawSong>) -> (Vec<RawSong>, usize) {
@@ -978,7 +999,7 @@ mod tests {
     }
 
     #[test]
-    fn build_data_root_sets_region_flags_for_official_and_intl_only() {
+    fn build_data_root_sets_region_flags_for_official_and_manual_override() {
         let songs = vec![
             SongRow {
                 identity: SongIdentity::new("Official Song", SongGenre::Maimai, ""),
@@ -1021,9 +1042,13 @@ mod tests {
                 sheet_type: ChartType::Std,
                 difficulty: DifficultyCategory::Expert,
                 level: "10".to_string(),
-                source: SheetSource::IntlOnly {
+                source: SheetSource::ManualOverride {
                     version_name: "Splash".to_string(),
                     internal_level: None,
+                    region: SongChartRegion {
+                        jp: false,
+                        intl: true,
+                    },
                 },
             },
         ];
@@ -1071,15 +1096,34 @@ mod tests {
     }
 
     #[test]
-    fn load_intl_only_rows_hashes_cover_url() {
-        let rows = load_intl_only_rows().expect("load intl_only rows");
-        let intl_song = rows
+    fn load_manual_override_rows_hashes_cover_url() {
+        let rows = load_manual_override_rows().expect("load manual override rows");
+        let override_song = rows
             .songs
             .iter()
             .find(|song| song.identity.title == "全世界共通リズム感テスト")
-            .expect("intl song entry exists");
-        let expected = format!("{}.png", sha256_hex(&intl_song.image_url));
-        assert_eq!(intl_song.image_name, expected);
+            .expect("manual override song entry exists");
+        let expected = format!("{}.png", sha256_hex(&override_song.image_url));
+        assert_eq!(override_song.image_name, expected);
+    }
+
+    #[test]
+    fn filter_official_songs_by_title_skips_manual_override_titles() {
+        let manual_override_rows = load_manual_override_rows().expect("load manual override rows");
+        let raw_songs = parse_maimai_songs_json(include_str!(
+            "../examples/maimai/official/maimai_songs.json"
+        ))
+        .expect("parse fixture");
+
+        let filtered =
+            filter_official_songs_by_title(raw_songs, &manual_override_rows.overridden_titles)
+                .expect("filter official songs");
+        let titles = filtered
+            .iter()
+            .map(|song| normalize_song_title_value(&song.title))
+            .collect::<HashSet<_>>();
+
+        assert!(!titles.contains("Link"));
     }
 
     #[test]
@@ -1097,9 +1141,13 @@ mod tests {
                 sheet_type: ChartType::Std,
                 difficulty: DifficultyCategory::Master,
                 level: "13+".to_string(),
-                source: SheetSource::IntlOnly {
+                source: SheetSource::ManualOverride {
                     version_name: "Splash".to_string(),
                     internal_level: None,
+                    region: SongChartRegion {
+                        jp: false,
+                        intl: true,
+                    },
                 },
             },
         ];

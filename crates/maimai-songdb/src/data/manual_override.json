@@ -1,0 +1,157 @@
+{
+  "songs": [
+    {
+      "title": "Break The Speakers",
+      "genre": "maimai",
+      "artist": "DJ Myosuke",
+      "image_url": "https://maimaidx-eng.com/maimai-mobile/img/Music/cd7cdd7115f1ff5f.png",
+      "sheets": [
+        {
+          "type": "DX",
+          "difficulty": "BASIC",
+          "level": "5",
+          "version": "CiRCLE",
+          "region": { "jp": false, "intl": true }
+        },
+        {
+          "type": "DX",
+          "difficulty": "ADVANCED",
+          "level": "8+",
+          "version": "CiRCLE",
+          "region": { "jp": false, "intl": true }
+        },
+        {
+          "type": "DX",
+          "difficulty": "EXPERT",
+          "level": "12+",
+          "version": "CiRCLE",
+          "internal_level": 12.9,
+          "region": { "jp": false, "intl": true }
+        },
+        {
+          "type": "DX",
+          "difficulty": "MASTER",
+          "level": "14+",
+          "version": "CiRCLE",
+          "internal_level": 14.7,
+          "region": { "jp": false, "intl": true }
+        }
+      ]
+    },
+    {
+      "title": "全世界共通リズム感テスト",
+      "genre": "maimai",
+      "artist": "☆リズムに合わせてボタンを叩き達成率を競うゲームです☆",
+      "image_url": "https://maimaidx-eng.com/maimai-mobile/img/Music/eabcf5ede00f256a.png",
+      "sheets": [
+        {
+          "type": "STD",
+          "difficulty": "BASIC",
+          "level": "6",
+          "version": "Splash",
+          "region": { "jp": false, "intl": true }
+        },
+        {
+          "type": "STD",
+          "difficulty": "ADVANCED",
+          "level": "8",
+          "version": "Splash",
+          "region": { "jp": false, "intl": true }
+        },
+        {
+          "type": "STD",
+          "difficulty": "EXPERT",
+          "level": "10",
+          "version": "Splash",
+          "region": { "jp": false, "intl": true }
+        },
+        {
+          "type": "STD",
+          "difficulty": "MASTER",
+          "level": "12",
+          "version": "Splash",
+          "region": { "jp": false, "intl": true }
+        }
+      ]
+    },
+    {
+      "title": "Link",
+      "genre": "maimai",
+      "artist": "Clean Tears feat. Youna",
+      "image_url": "https://maimaidx.jp/maimai-mobile/img/Music/1e44516a8a3b5a51.png",
+      "sheets": [
+        {
+          "type": "STD",
+          "difficulty": "BASIC",
+          "level": "6",
+          "version": "maimai PLUS",
+          "region": { "jp": true, "intl": true }
+        },
+        {
+          "type": "STD",
+          "difficulty": "ADVANCED",
+          "level": "7+",
+          "version": "maimai PLUS",
+          "region": { "jp": true, "intl": true }
+        },
+        {
+          "type": "STD",
+          "difficulty": "EXPERT",
+          "level": "12+",
+          "version": "maimai PLUS",
+          "region": { "jp": true, "intl": true }
+        },
+        {
+          "type": "STD",
+          "difficulty": "MASTER",
+          "level": "12",
+          "version": "maimai PLUS",
+          "region": { "jp": true, "intl": true }
+        },
+        {
+          "type": "STD",
+          "difficulty": "Re:MASTER",
+          "level": "13",
+          "version": "maimai PLUS",
+          "region": { "jp": true, "intl": true }
+        }
+      ]
+    },
+    {
+      "title": "Link",
+      "genre": "niconico＆VOCALOID™",
+      "artist": "Circle of friends(天月-あまつき-・un:c・伊東歌詞太郎・コニー・はしやん)",
+      "image_url": "https://maimaidx.jp/maimai-mobile/img/Music/e90f79d9dcff84df.png",
+      "sheets": [
+        {
+          "type": "STD",
+          "difficulty": "BASIC",
+          "level": "6",
+          "version": "ORANGE",
+          "region": { "jp": true, "intl": true }
+        },
+        {
+          "type": "STD",
+          "difficulty": "ADVANCED",
+          "level": "8",
+          "version": "ORANGE",
+          "region": { "jp": true, "intl": true }
+        },
+        {
+          "type": "STD",
+          "difficulty": "EXPERT",
+          "level": "10+",
+          "version": "ORANGE",
+          "region": { "jp": true, "intl": true }
+        },
+        {
+          "type": "STD",
+          "difficulty": "MASTER",
+          "level": "12",
+          "version": "ORANGE",
+          "region": { "jp": true, "intl": true }
+        }
+      ]
+    }
+  ]
+}

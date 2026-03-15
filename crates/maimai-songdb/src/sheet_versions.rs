@@ -4,46 +4,19 @@ use std::time::Duration;
 use eyre::WrapErr;
 use maimai_auth::intl;
 use maimai_parsers::parse_scores_html;
-use models::{ChartType, MaimaiVersion, SongGenre};
-use serde::Deserialize;
+use models::{ChartType, MaimaiVersion};
 
-use crate::{
-    SheetRow, SongIdentity, SongRow, normalize_identity_component, normalize_song_title_value,
-};
+use crate::{SheetRow, SongIdentity, SongRow, normalize_song_title_value};
 
 const INTL_VERSION_SEARCH_URL: &str =
     "https://maimaidx-eng.com/maimai-mobile/record/musicVersion/search/";
-const DUPLICATE_RESOLUTION_JSON: &str = include_str!("data/intl_version_duplicate_resolution.json");
 
 pub type SheetVersionMap = HashMap<SongIdentity, HashMap<ChartType, String>>;
-
-#[derive(Debug, Deserialize)]
-struct DuplicateResolutionData {
-    #[serde(default)]
-    overrides: Vec<DuplicateResolutionOverride>,
-}
-
-#[derive(Debug, Clone, Deserialize)]
-struct DuplicateResolutionOverride {
-    title: String,
-    version: String,
-    chart_type: ChartType,
-    genre: SongGenre,
-    artist: String,
-}
-
-#[derive(Debug, Clone, Hash, PartialEq, Eq)]
-struct OverrideLookupKey {
-    title: String,
-    version: String,
-    chart_type: ChartType,
-}
 
 #[derive(Debug, Clone)]
 struct SongVersionResolver {
     candidates_by_title: HashMap<String, Vec<SongCandidate>>,
-    intl_only_titles: HashSet<String>,
-    overrides: HashMap<OverrideLookupKey, DuplicateResolutionOverride>,
+    ignored_titles: HashSet<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -57,6 +30,7 @@ pub async fn fetch_intl_sheet_versions(
     sega_password: &str,
     songs: &[SongRow],
     sheets: &[SheetRow],
+    ignored_titles: &HashSet<String>,
 ) -> eyre::Result<SheetVersionMap> {
     let client = reqwest::Client::builder()
         .default_headers(intl::default_mobile_headers()?)
@@ -69,7 +43,7 @@ pub async fn fetch_intl_sheet_versions(
         .await
         .wrap_err("ensure INTL login")?;
 
-    let resolver = SongVersionResolver::new(songs, sheets)?;
+    let resolver = SongVersionResolver::new(songs, sheets, ignored_titles);
     let mut out: SheetVersionMap = HashMap::new();
     let mut seen = HashSet::new();
 
@@ -100,10 +74,7 @@ pub async fn fetch_intl_sheet_versions(
 }
 
 impl SongVersionResolver {
-    fn new(songs: &[SongRow], sheets: &[SheetRow]) -> eyre::Result<Self> {
-        let parsed: DuplicateResolutionData = serde_json::from_str(DUPLICATE_RESOLUTION_JSON)
-            .wrap_err("parse intl_version_duplicate_resolution.json")?;
-
+    fn new(songs: &[SongRow], sheets: &[SheetRow], ignored_titles: &HashSet<String>) -> Self {
         let mut chart_types_by_song_identity: HashMap<&SongIdentity, HashSet<ChartType>> =
             HashMap::new();
         for sheet in sheets.iter().filter(|sheet| sheet.source.is_official()) {
@@ -114,50 +85,24 @@ impl SongVersionResolver {
         }
 
         let mut candidates_by_title: HashMap<String, Vec<SongCandidate>> = HashMap::new();
-        let mut intl_only_titles = HashSet::new();
         for song in songs {
-            if !chart_types_by_song_identity.contains_key(&song.identity) {
-                intl_only_titles.insert(normalize_song_title_value(&song.identity.title));
+            let Some(chart_types) = chart_types_by_song_identity.get(&song.identity) else {
                 continue;
-            }
+            };
             let normalized_title = normalize_song_title_value(&song.identity.title);
             candidates_by_title
                 .entry(normalized_title)
                 .or_default()
                 .push(SongCandidate {
                     identity: song.identity.clone(),
-                    chart_types: chart_types_by_song_identity
-                        .get(&song.identity)
-                        .cloned()
-                        .unwrap_or_default(),
+                    chart_types: chart_types.clone(),
                 });
         }
 
-        let overrides = parsed
-            .overrides
-            .into_iter()
-            .map(|override_row| {
-                let key = OverrideLookupKey {
-                    title: normalize_song_title_value(&override_row.title),
-                    version: normalize_identity_component(&override_row.version),
-                    chart_type: override_row.chart_type,
-                };
-                let normalized = DuplicateResolutionOverride {
-                    title: key.title.clone(),
-                    version: key.version.clone(),
-                    chart_type: override_row.chart_type,
-                    genre: override_row.genre,
-                    artist: normalize_identity_component(&override_row.artist),
-                };
-                (key, normalized)
-            })
-            .collect();
-
-        Ok(Self {
+        Self {
             candidates_by_title,
-            intl_only_titles,
-            overrides,
-        })
+            ignored_titles: ignored_titles.clone(),
+        }
     }
 
     fn resolve_song_identity(
@@ -167,7 +112,10 @@ impl SongVersionResolver {
         chart_type: ChartType,
     ) -> eyre::Result<Option<SongIdentity>> {
         let title = normalize_song_title_value(title);
-        let version_name = normalize_identity_component(version_name);
+
+        if self.ignored_titles.contains(&title) {
+            return Ok(None);
+        }
 
         let candidates = self
             .candidates_by_title
@@ -176,9 +124,6 @@ impl SongVersionResolver {
             .unwrap_or_default();
 
         if candidates.is_empty() {
-            if self.intl_only_titles.contains(&title) {
-                return Ok(None);
-            }
             return Err(eyre::eyre!(
                 "no official song matches INTL version title '{}' ({})",
                 title,
@@ -198,49 +143,12 @@ impl SongVersionResolver {
             return Ok(Some(chart_type_matches[0].identity.clone()));
         }
 
-        let override_key = OverrideLookupKey {
-            title: title.clone(),
-            version: version_name.clone(),
-            chart_type,
-        };
-        let Some(override_row) = self.overrides.get(&override_key) else {
-            return Err(eyre::eyre!(
-                "ambiguous INTL version title '{}' ({}, {}) without override",
-                title,
-                version_name,
-                chart_type.as_str()
-            ));
-        };
-
-        let matched = candidates
-            .iter()
-            .filter(|candidate| {
-                candidate.identity.genre == override_row.genre
-                    && candidate.identity.artist == override_row.artist
-            })
-            .collect::<Vec<_>>();
-
-        match matched.as_slice() {
-            [candidate] => Ok(Some(candidate.identity.clone())),
-            [] => Err(eyre::eyre!(
-                "override for '{}' ({}, {}) did not match any official song: ({}, {}, {})",
-                title,
-                version_name,
-                chart_type.as_str(),
-                title,
-                override_row.genre.as_str(),
-                override_row.artist
-            )),
-            _ => Err(eyre::eyre!(
-                "override for '{}' ({}, {}) matched multiple official songs: ({}, {}, {})",
-                title,
-                version_name,
-                chart_type.as_str(),
-                title,
-                override_row.genre.as_str(),
-                override_row.artist
-            )),
-        }
+        Err(eyre::eyre!(
+            "ambiguous INTL version title '{}' ({}, {}) across official songs",
+            title,
+            version_name,
+            chart_type.as_str()
+        ))
     }
 }
 
@@ -340,7 +248,10 @@ fn parse_rows(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{SheetSource, SongIdentity, load_official_rows_from_json};
+    use crate::{
+        SheetSource, SongIdentity, load_manual_override_rows, load_official_rows_from_json,
+    };
+    use models::SongGenre;
 
     const OFFICIAL_JP_SONGS_JSON: &str =
         include_str!("../examples/maimai/official/maimai_songs.json");
@@ -381,8 +292,8 @@ mod tests {
         let resolver = SongVersionResolver::new(
             std::slice::from_ref(&song),
             &[official_sheet(&song.identity, ChartType::Std)],
-        )
-        .expect("resolver");
+            &HashSet::new(),
+        );
 
         assert_eq!(
             resolver
@@ -402,8 +313,8 @@ mod tests {
                 official_sheet(&std_song.identity, ChartType::Std),
                 official_sheet(&dx_song.identity, ChartType::Dx),
             ],
-        )
-        .expect("resolver");
+            &HashSet::new(),
+        );
 
         assert_eq!(
             resolver
@@ -414,7 +325,7 @@ mod tests {
     }
 
     #[test]
-    fn duplicate_title_requires_override_when_still_ambiguous() {
+    fn duplicate_title_errors_when_still_ambiguous() {
         let songs = vec![
             official_song("Link", "maimai", ""),
             official_song("Link", "niconico＆ボーカロイド", ""),
@@ -423,20 +334,20 @@ mod tests {
             .iter()
             .map(|song| official_sheet(&song.identity, ChartType::Std))
             .collect::<Vec<_>>();
-        let resolver = SongVersionResolver::new(&songs, &sheets).expect("resolver");
+        let resolver = SongVersionResolver::new(&songs, &sheets, &HashSet::new());
 
         let err = resolver
             .resolve_song_identity("Link", "BUDDiES", ChartType::Std)
             .expect_err("expected ambiguity");
         assert!(
-            err.to_string().contains("without override"),
+            err.to_string().contains("ambiguous INTL version title"),
             "unexpected error: {err:#}"
         );
     }
 
     #[test]
-    fn skips_intl_only_titles_without_failing() {
-        let intl_only_song = SongRow {
+    fn skips_ignored_titles_without_failing() {
+        let override_song = SongRow {
             identity: SongIdentity::new(
                 "全世界共通リズム感テスト",
                 SongGenre::Maimai,
@@ -450,18 +361,24 @@ mod tests {
             is_locked: false,
             comment: None,
         };
-        let intl_only_sheet = SheetRow {
-            song_identity: intl_only_song.identity.clone(),
+        let override_sheet = SheetRow {
+            song_identity: override_song.identity.clone(),
             sheet_type: ChartType::Std,
             difficulty: models::DifficultyCategory::Basic,
             level: "6".to_string(),
-            source: SheetSource::IntlOnly {
+            source: SheetSource::ManualOverride {
                 version_name: "Splash".to_string(),
                 internal_level: None,
+                region: models::SongChartRegion {
+                    jp: false,
+                    intl: true,
+                },
             },
         };
+        let ignored_titles =
+            HashSet::from([normalize_song_title_value("全世界共通リズム感テスト")]);
         let resolver =
-            SongVersionResolver::new(&[intl_only_song], &[intl_only_sheet]).expect("resolver");
+            SongVersionResolver::new(&[override_song], &[override_sheet], &ignored_titles);
 
         assert_eq!(
             resolver
@@ -475,7 +392,7 @@ mod tests {
     fn parses_intl_version_fixture_against_official_jp_fixture() {
         let (songs, sheets) =
             load_official_rows_from_json(OFFICIAL_JP_SONGS_JSON).expect("load official JP rows");
-        let resolver = SongVersionResolver::new(&songs, &sheets).expect("resolver");
+        let resolver = SongVersionResolver::new(&songs, &sheets, &HashSet::new());
 
         let rows =
             parse_rows(INTL_VERSION0_MAIMAI_DIFF0_HTML, "maimai", &resolver).expect("parse rows");
@@ -489,33 +406,30 @@ mod tests {
     }
 
     #[test]
-    fn orange_fixture_resolves_link_to_expected_official_song() {
+    fn orange_fixture_skips_manual_override_title() {
         let (songs, sheets) =
             load_official_rows_from_json(OFFICIAL_JP_SONGS_JSON).expect("load official JP rows");
-        let resolver = SongVersionResolver::new(&songs, &sheets).expect("resolver");
+        let manual_override_rows = load_manual_override_rows().expect("load manual override rows");
+        let resolver =
+            SongVersionResolver::new(&songs, &sheets, &manual_override_rows.overridden_titles);
 
         let rows = parse_rows(INTL_VERSION4_ORANGE_DIFF0_HTML, "ORANGE", &resolver)
             .expect("parse ORANGE rows");
-        let expected_song_identity = SongIdentity::new(
-            "Link",
-            SongGenre::NiconicoVocaloid,
-            "Circle of friends(天月-あまつき-・un:c・伊東歌詞太郎・コニー・はしやん)",
-        );
 
         assert!(
-            rows.iter().any(
-                |(song_identity, chart_type)| song_identity == &expected_song_identity
-                    && *chart_type == ChartType::Std
-            ),
-            "expected ORANGE fixture to resolve Link STD using official JP song identity"
+            rows.iter()
+                .all(|(song_identity, _)| song_identity.title != "Link"),
+            "expected ORANGE fixture to skip manual override titles"
         );
     }
 
     #[test]
-    fn maimai_plus_fixture_resolves_link_to_expected_official_song() {
+    fn maimai_plus_fixture_skips_manual_override_title() {
         let (songs, sheets) =
             load_official_rows_from_json(OFFICIAL_JP_SONGS_JSON).expect("load official JP rows");
-        let resolver = SongVersionResolver::new(&songs, &sheets).expect("resolver");
+        let manual_override_rows = load_manual_override_rows().expect("load manual override rows");
+        let resolver =
+            SongVersionResolver::new(&songs, &sheets, &manual_override_rows.overridden_titles);
 
         let rows = parse_rows(
             INTL_VERSION1_MAIMAI_PLUS_DIFF0_HTML,
@@ -523,15 +437,11 @@ mod tests {
             &resolver,
         )
         .expect("parse maimai PLUS rows");
-        let expected_song_identity =
-            SongIdentity::new("Link", SongGenre::Maimai, "Clean Tears feat. Youna");
 
         assert!(
-            rows.iter().any(
-                |(song_identity, chart_type)| song_identity == &expected_song_identity
-                    && *chart_type == ChartType::Std
-            ),
-            "expected maimai PLUS fixture to resolve Link STD using official JP song identity"
+            rows.iter()
+                .all(|(song_identity, _)| song_identity.title != "Link"),
+            "expected maimai PLUS fixture to skip manual override titles"
         );
     }
 }
