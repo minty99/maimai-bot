@@ -43,6 +43,18 @@
       "genre": "POPS＆ANIME",
       "artist": "x0o0x_",
       "image_url": "https://maimaidx.jp/maimai-mobile/img/Music/5bb69b619f266d0a.png",
+      "aliases": {
+        "en": [
+          "x0o0x",
+          "empty",
+          "blank",
+          "/ / // / /",
+          "no title",
+          "kisaragi",
+          "kisaragi station"
+        ],
+        "ko": ["공백", "키사라기", "키사라기역"]
+      },
       "sheets": [
         {
           "type": "DX",

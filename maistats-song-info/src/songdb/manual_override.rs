@@ -221,4 +221,46 @@ mod tests {
         assert_eq!(rows.songs[0].identity.title, "");
         assert_eq!(rows.songs[0].identity.artist, "");
     }
+
+    #[test]
+    fn manual_override_keeps_aliases_for_empty_title_song() {
+        let json = r#"
+        {
+          "songs": [
+            {
+              "title": "",
+              "genre": "POPS＆ANIME",
+              "artist": "x0o0x_",
+              "image_url": "https://example.com/test.png",
+              "aliases": {
+                "en": ["empty", "blank"],
+                "ko": ["공백", "키사라기역"]
+              },
+              "sheets": [
+                {
+                  "type": "DX",
+                  "difficulty": "BASIC",
+                  "level": "3",
+                  "version": "UNiVERSE PLUS",
+                  "region": { "jp": true, "intl": true }
+                }
+              ]
+            }
+          ]
+        }
+        "#;
+        let parsed: ManualOverrideData =
+            serde_json::from_str(json).expect("parse manual_override test json");
+        let rows = map_to_rows(parsed).expect("map rows");
+        assert_eq!(rows.aliases.len(), 1);
+        assert_eq!(rows.aliases[0].0.title, "");
+        assert_eq!(
+            rows.aliases[0].1.en,
+            vec!["empty".to_string(), "blank".to_string()]
+        );
+        assert_eq!(
+            rows.aliases[0].1.ko,
+            vec!["공백".to_string(), "키사라기역".to_string()]
+        );
+    }
 }
