@@ -1,37 +1,46 @@
+use std::collections::HashSet;
+
 use eyre::WrapErr;
-use models::{ChartType, DifficultyCategory, MaimaiVersion, SongGenre};
+use models::{
+    ChartType, DifficultyCategory, MaimaiVersion, SongAliases, SongChartRegion, SongGenre,
+};
 use serde::Deserialize;
 
 use crate::{
-    SheetRow, SheetSource, SongIdentity, SongRow, normalize_identity_component, sha256_hex,
+    SheetRow, SheetSource, SongIdentity, SongRow, normalize_identity_component,
+    normalize_song_title_value, sha256_hex,
 };
 
-const INTL_ONLY_DATA_JSON: &str = include_str!("data/intl_only.json");
+const MANUAL_OVERRIDE_DATA_JSON: &str = include_str!("data/manual_override.json");
 
 #[derive(Debug)]
-pub(crate) struct IntlOnlyRows {
+pub(crate) struct ManualOverrideRows {
     pub(crate) songs: Vec<SongRow>,
     pub(crate) sheets: Vec<SheetRow>,
+    pub(crate) aliases: Vec<(SongIdentity, SongAliases)>,
+    pub(crate) overridden_titles: HashSet<String>,
 }
 
 #[derive(Debug, Deserialize)]
-struct IntlOnlyData {
+struct ManualOverrideData {
     #[serde(default)]
-    songs: Vec<IntlOnlySong>,
+    songs: Vec<ManualOverrideSong>,
 }
 
 #[derive(Debug, Deserialize)]
-struct IntlOnlySong {
+struct ManualOverrideSong {
     title: String,
-    category: String,
+    genre: SongGenre,
     artist: String,
     image_url: String,
     #[serde(default)]
-    sheets: Vec<IntlOnlySheet>,
+    aliases: SongAliases,
+    #[serde(default)]
+    sheets: Vec<ManualOverrideSheet>,
 }
 
 #[derive(Debug, Deserialize)]
-struct IntlOnlySheet {
+struct ManualOverrideSheet {
     #[serde(rename = "type")]
     chart_type: ChartType,
     difficulty: DifficultyCategory,
@@ -39,38 +48,38 @@ struct IntlOnlySheet {
     version: MaimaiVersion,
     #[serde(default)]
     internal_level: Option<f32>,
+    region: SongChartRegion,
 }
 
-pub(crate) fn load_intl_only_rows() -> eyre::Result<IntlOnlyRows> {
-    let parsed: IntlOnlyData =
-        serde_json::from_str(INTL_ONLY_DATA_JSON).wrap_err("parse intl_only.json")?;
+pub(crate) fn load_manual_override_rows() -> eyre::Result<ManualOverrideRows> {
+    let parsed: ManualOverrideData =
+        serde_json::from_str(MANUAL_OVERRIDE_DATA_JSON).wrap_err("parse manual_override.json")?;
     map_to_rows(parsed)
 }
 
-fn map_to_rows(parsed: IntlOnlyData) -> eyre::Result<IntlOnlyRows> {
+fn map_to_rows(parsed: ManualOverrideData) -> eyre::Result<ManualOverrideRows> {
     let mut songs = Vec::new();
     let mut sheets = Vec::new();
+    let mut aliases = Vec::new();
+    let mut overridden_titles = HashSet::new();
 
     for song in parsed.songs {
-        let title = normalize_identity_component(&song.title);
-        let genre = song.category.parse::<SongGenre>().ok().ok_or_else(|| {
-            eyre::eyre!(
-                "intl_only song '{}' has unknown category: {}",
-                title,
-                song.category.trim()
-            )
-        })?;
+        let title = normalize_song_title_value(&song.title);
         let artist = normalize_identity_component(&song.artist);
-        let identity = SongIdentity::new(&title, genre, &artist);
+        let identity = SongIdentity::new(&title, song.genre, &artist);
         let image_url = song.image_url.trim().to_string();
         if !image_url.starts_with("http://") && !image_url.starts_with("https://") {
             return Err(eyre::eyre!(
-                "intl_only song '{}' has invalid image_url: {}",
+                "manual_override song '{}' has invalid image_url: {}",
                 title,
                 image_url
             ));
         }
         let image_name = format!("{}.png", sha256_hex(&image_url));
+        overridden_titles.insert(normalize_song_title_value(&identity.title));
+        if !song.aliases.is_empty() {
+            aliases.push((identity.clone(), song.aliases.clone()));
+        }
 
         songs.push(SongRow {
             identity: identity.clone(),
@@ -86,7 +95,7 @@ fn map_to_rows(parsed: IntlOnlyData) -> eyre::Result<IntlOnlyRows> {
         for sheet in song.sheets {
             let level = sheet.level.trim();
             if level.is_empty() {
-                return Err(eyre::eyre!("intl_only '{}' has empty level", title));
+                return Err(eyre::eyre!("manual_override '{}' has empty level", title));
             }
 
             sheets.push(SheetRow {
@@ -94,84 +103,103 @@ fn map_to_rows(parsed: IntlOnlyData) -> eyre::Result<IntlOnlyRows> {
                 sheet_type: sheet.chart_type,
                 difficulty: sheet.difficulty,
                 level: level.to_string(),
-                source: SheetSource::IntlOnly {
+                source: SheetSource::ManualOverride {
                     version_name: sheet.version.as_str().to_string(),
                     internal_level: sheet.internal_level.map(|value| format!("{value:.1}")),
+                    region: sheet.region,
                 },
             });
         }
     }
 
-    Ok(IntlOnlyRows { songs, sheets })
+    Ok(ManualOverrideRows {
+        songs,
+        sheets,
+        aliases,
+        overridden_titles,
+    })
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{IntlOnlyData, map_to_rows};
-    use models::{ChartType, DifficultyCategory, MaimaiVersion};
+    use super::{ManualOverrideData, map_to_rows};
+    use models::{ChartType, DifficultyCategory, MaimaiVersion, SongGenre};
 
     #[test]
-    fn intl_only_requires_image_url_field() {
+    fn manual_override_requires_image_url_field() {
         let json = r#"
         {
           "songs": [
             {
               "title": "Test Song",
-              "category": "maimai",
+              "genre": "maimai",
               "artist": "",
               "sheets": [
                 {
                   "type": "STD",
                   "difficulty": "BASIC",
                   "level": "6",
-                  "version": "Splash"
+                  "version": "Splash",
+                  "region": { "jp": false, "intl": true }
                 }
               ]
             }
           ]
         }
         "#;
-        let parsed = serde_json::from_str::<IntlOnlyData>(json);
+        let parsed = serde_json::from_str::<ManualOverrideData>(json);
         assert!(parsed.is_err(), "image_url should be required");
     }
 
     #[test]
-    fn intl_only_sheet_uses_typed_fields() {
+    fn manual_override_sheet_uses_typed_fields() {
         let json = r#"
         {
           "songs": [
             {
               "title": "Test Song",
-              "category": "maimai",
+              "genre": "maimai",
               "artist": "",
               "image_url": "https://example.com/test.png",
+              "aliases": {
+                "en": ["Alias"],
+                "ko": ["별칭"]
+              },
               "sheets": [
                 {
                   "type": "STD",
                   "difficulty": "BASIC",
                   "level": "6",
-                  "version": "Splash"
+                  "version": "Splash",
+                  "region": { "jp": false, "intl": true }
                 }
               ]
             }
           ]
         }
         "#;
-        let parsed: IntlOnlyData = serde_json::from_str(json).expect("parse intl_only test json");
-        let sheet = &parsed.songs[0].sheets[0];
+        let parsed: ManualOverrideData =
+            serde_json::from_str(json).expect("parse manual_override test json");
+        let song = &parsed.songs[0];
+        let sheet = &song.sheets[0];
+        assert_eq!(song.genre, SongGenre::Maimai);
         assert_eq!(sheet.chart_type, ChartType::Std);
         assert_eq!(sheet.difficulty, DifficultyCategory::Basic);
         assert_eq!(sheet.version, MaimaiVersion::Splash);
+        assert!(!sheet.region.jp);
+        assert!(sheet.region.intl);
+        assert_eq!(song.aliases.en, vec!["Alias".to_string()]);
+        assert_eq!(song.aliases.ko, vec!["별칭".to_string()]);
     }
 
     #[test]
-    fn intl_only_allows_empty_title_and_artist() {
+    fn manual_override_allows_empty_title_and_artist() {
         let json = r#"
         {
           "songs": [
             {
               "title": "",
-              "category": "niconico＆ボーカロイド",
+              "genre": "niconico＆VOCALOID™",
               "artist": "",
               "image_url": "https://example.com/test.png",
               "sheets": [
@@ -179,14 +207,16 @@ mod tests {
                   "type": "STD",
                   "difficulty": "BASIC",
                   "level": "6",
-                  "version": "Splash"
+                  "version": "Splash",
+                  "region": { "jp": false, "intl": true }
                 }
               ]
             }
           ]
         }
         "#;
-        let parsed: IntlOnlyData = serde_json::from_str(json).expect("parse intl_only test json");
+        let parsed: ManualOverrideData =
+            serde_json::from_str(json).expect("parse manual_override test json");
         let rows = map_to_rows(parsed).expect("map rows");
         assert_eq!(rows.songs[0].identity.title, "");
         assert_eq!(rows.songs[0].identity.artist, "");
