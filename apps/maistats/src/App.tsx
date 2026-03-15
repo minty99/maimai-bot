@@ -283,6 +283,7 @@ function App() {
   const [pickerVersionOptions, setPickerVersionOptions] = useState<SongVersionResponse[]>([]);
 
   const [query, setQuery] = useState('');
+  const [scoreQueryDraft, setScoreQueryDraft] = useState(query);
   const [chartFilter, setChartFilter] = useState<ChartType[]>(() => {
     const values = coerceArray(savedScoreFilters?.chartFilter, CHART_TYPES);
     return values.length > 0 ? values : [...CHART_TYPES];
@@ -353,6 +354,7 @@ function App() {
   const [showJackets, setShowJackets] = useState<boolean>(readShowJacketsPreference);
 
   const [playlogQuery, setPlaylogQuery] = useState('');
+  const [playlogQueryDraft, setPlaylogQueryDraft] = useState(playlogQuery);
   const [playlogChartFilter, setPlaylogChartFilter] = useState<ChartType[]>(() => {
     const values = coerceArray(savedPlaylogFilters?.chartFilter, CHART_TYPES);
     return values.length > 0 ? values : [...CHART_TYPES];
@@ -830,8 +832,21 @@ function App() {
     setSyncFilter(shouldCollapseToAll ? [ALL_FILTER_PRESET_ID] : nextSelection);
   }, [filteredSyncOptions, syncFilter, syncSelectionState]);
 
+  const handleApplyScoreQuery = useCallback(() => {
+    const nextQuery = scoreQueryDraft.trim();
+    setScoreQueryDraft(nextQuery);
+    setQuery(nextQuery);
+  }, [scoreQueryDraft]);
+
+  const handleApplyPlaylogQuery = useCallback(() => {
+    const nextQuery = playlogQueryDraft.trim();
+    setPlaylogQueryDraft(nextQuery);
+    setPlaylogQuery(nextQuery);
+  }, [playlogQueryDraft]);
+
   const handleResetScoreFilters = useCallback(() => {
     setQuery('');
+    setScoreQueryDraft('');
     setChartFilter([...CHART_TYPES]);
     setDifficultyFilter([...DIFFICULTIES]);
     setVersionSelection(DEFAULT_SCORE_FILTERS.versionSelection);
@@ -1150,8 +1165,10 @@ function App() {
               isLoading={isLoading}
               showJackets={showJackets}
               setShowJackets={setShowJackets}
-              query={query}
-              setQuery={setQuery}
+              appliedQuery={query}
+              queryDraft={scoreQueryDraft}
+              setQueryDraft={setScoreQueryDraft}
+              onApplyQuery={handleApplyScoreQuery}
               chartTypes={CHART_TYPES}
               chartFilter={chartFilter}
               setChartFilter={setChartFilter}
@@ -1204,8 +1221,10 @@ function App() {
               playlogCountLabel={playlogCountLabel}
               showJackets={showJackets}
               setShowJackets={setShowJackets}
-              playlogQuery={playlogQuery}
-              setPlaylogQuery={setPlaylogQuery}
+              appliedPlaylogQuery={playlogQuery}
+              playlogQueryDraft={playlogQueryDraft}
+              setPlaylogQueryDraft={setPlaylogQueryDraft}
+              onApplyPlaylogQuery={handleApplyPlaylogQuery}
               chartTypes={CHART_TYPES}
               playlogChartFilter={playlogChartFilter}
               setPlaylogChartFilter={setPlaylogChartFilter}

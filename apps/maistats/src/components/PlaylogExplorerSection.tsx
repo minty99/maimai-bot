@@ -22,8 +22,10 @@ interface PlaylogExplorerSectionProps {
   playlogCountLabel: string;
   showJackets: boolean;
   setShowJackets: Dispatch<SetStateAction<boolean>>;
-  playlogQuery: string;
-  setPlaylogQuery: Dispatch<SetStateAction<string>>;
+  appliedPlaylogQuery: string;
+  playlogQueryDraft: string;
+  setPlaylogQueryDraft: Dispatch<SetStateAction<string>>;
+  onApplyPlaylogQuery: () => void;
   chartTypes: ChartType[];
   playlogChartFilter: ChartType[];
   setPlaylogChartFilter: Dispatch<SetStateAction<ChartType[]>>;
@@ -64,8 +66,10 @@ export function PlaylogExplorerSection({
   playlogCountLabel,
   showJackets,
   setShowJackets,
-  playlogQuery,
-  setPlaylogQuery,
+  appliedPlaylogQuery,
+  playlogQueryDraft,
+  setPlaylogQueryDraft,
+  onApplyPlaylogQuery,
   chartTypes,
   playlogChartFilter,
   setPlaylogChartFilter,
@@ -97,6 +101,8 @@ export function PlaylogExplorerSection({
   playlogSortDesc,
   onSortBy,
 }: PlaylogExplorerSectionProps) {
+  const isSearchDirty = playlogQueryDraft.trim() !== appliedPlaylogQuery.trim();
+
   const handlePlaylogDayInputChange = (value: string) => {
     if (!value) {
       return;
@@ -124,15 +130,26 @@ export function PlaylogExplorerSection({
             </div>
           </div>
           <div className="filter-grid">
-            <label className="search-box">
+            <form
+              className="search-box search-submit-group"
+              onSubmit={(event) => {
+                event.preventDefault();
+                onApplyPlaylogQuery();
+              }}
+            >
               <span>검색 (곡명/alias/시각)</span>
-              <input
-                type="search"
-                value={playlogQuery}
-                onChange={(event) => setPlaylogQuery(event.target.value)}
-                placeholder="예: 2026/02/25, BUDDiES, 배드애플"
-              />
-            </label>
+              <div className="search-submit-row">
+                <input
+                  type="search"
+                  value={playlogQueryDraft}
+                  onChange={(event) => setPlaylogQueryDraft(event.target.value)}
+                  placeholder="예: 2026/02/25, BUDDiES, 배드애플"
+                />
+                <button type="submit" disabled={!isSearchDirty}>
+                  검색
+                </button>
+              </div>
+            </form>
 
             <div className="playlog-day-filter">
               <label className="playlog-day-toggle">

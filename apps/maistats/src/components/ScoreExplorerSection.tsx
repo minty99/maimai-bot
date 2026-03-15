@@ -29,8 +29,10 @@ interface ScoreExplorerSectionProps {
   isLoading: boolean;
   showJackets: boolean;
   setShowJackets: Dispatch<SetStateAction<boolean>>;
-  query: string;
-  setQuery: Dispatch<SetStateAction<string>>;
+  appliedQuery: string;
+  queryDraft: string;
+  setQueryDraft: Dispatch<SetStateAction<string>>;
+  onApplyQuery: () => void;
   chartTypes: ChartType[];
   chartFilter: ChartType[];
   setChartFilter: Dispatch<SetStateAction<ChartType[]>>;
@@ -80,8 +82,10 @@ export function ScoreExplorerSection({
   isLoading,
   showJackets,
   setShowJackets,
-  query,
-  setQuery,
+  appliedQuery,
+  queryDraft,
+  setQueryDraft,
+  onApplyQuery,
   chartTypes,
   chartFilter,
   setChartFilter,
@@ -125,6 +129,7 @@ export function ScoreExplorerSection({
   onResetFilters,
 }: ScoreExplorerSectionProps) {
   const tableWrapRef = useRef<HTMLDivElement | null>(null);
+  const isSearchDirty = queryDraft.trim() !== appliedQuery.trim();
 
   const virtualizer = useVirtualizer({
     count: filteredScoreRows.length,
@@ -159,15 +164,26 @@ export function ScoreExplorerSection({
             </button>
           </div>
           <div className="filter-grid">
-            <label className="search-box">
+            <form
+              className="search-box search-submit-group"
+              onSubmit={(event) => {
+                event.preventDefault();
+                onApplyQuery();
+              }}
+            >
               <span>검색 (곡명/alias/버전/레벨)</span>
-              <input
-                type="search"
-                value={query}
-                onChange={(event) => setQuery(event.target.value)}
-                placeholder="예: VERTeX, 버텍스, PRiSM, 14+"
-              />
-            </label>
+              <div className="search-submit-row">
+                <input
+                  type="search"
+                  value={queryDraft}
+                  onChange={(event) => setQueryDraft(event.target.value)}
+                  placeholder="예: VERTeX, 버텍스, PRiSM, 14+"
+                />
+                <button type="submit" disabled={!isSearchDirty}>
+                  검색
+                </button>
+              </div>
+            </form>
 
             <ToggleGroup
               label="채보 유형"
