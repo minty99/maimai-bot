@@ -92,31 +92,19 @@ async fn fetch_alias_file(client: &reqwest::Client, url: &str) -> eyre::Result<S
 fn parse_alias_tsv(input: &str) -> eyre::Result<HashMap<String, Vec<String>>> {
     let mut aliases_by_title = HashMap::<String, Vec<String>>::new();
 
-    for (line_index, raw_line) in input.lines().enumerate() {
-        let line = raw_line.trim();
-        if line.is_empty() {
+    for raw_line in input.lines() {
+        if raw_line.trim().is_empty() {
             continue;
         }
 
-        let columns = line
-            .split('\t')
-            .map(str::trim)
-            .filter(|value| !value.is_empty())
-            .collect::<Vec<_>>();
+        let columns = raw_line.split('\t').map(str::trim).collect::<Vec<_>>();
 
         let Some(title) = columns.first() else {
             continue;
         };
 
-        if title.is_empty() {
-            return Err(eyre::eyre!(
-                "missing title at alias line {}",
-                line_index + 1
-            ));
-        }
-
         let mut aliases = aliases_by_title.remove(*title).unwrap_or_default();
-        for alias in columns.iter().skip(1) {
+        for alias in columns.iter().skip(1).filter(|value| !value.is_empty()) {
             if *alias == *title || aliases.iter().any(|existing| existing == alias) {
                 continue;
             }
@@ -167,6 +155,17 @@ mod tests {
 
         assert_eq!(
             parsed.get("Song A").cloned(),
+            Some(vec!["Alias 1".to_string(), "Alias 2".to_string()])
+        );
+    }
+
+    #[test]
+    fn parse_alias_tsv_allows_empty_title() {
+        let parsed =
+            parse_alias_tsv("\tAlias 1\tAlias 2\n").expect("parse aliases with empty title");
+
+        assert_eq!(
+            parsed.get("").cloned(),
             Some(vec!["Alias 1".to_string(), "Alias 2".to_string()])
         );
     }
