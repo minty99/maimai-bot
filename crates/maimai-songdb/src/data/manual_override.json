@@ -43,6 +43,10 @@
       "genre": "maimai",
       "artist": "☆リズムに合わせてボタンを叩き達成率を競うゲームです☆",
       "image_url": "https://maimaidx-eng.com/maimai-mobile/img/Music/eabcf5ede00f256a.png",
+      "aliases": {
+        "en": ["Rhythm test", "Rhythm sense test"],
+        "ko": ["리듬감 테스트", "전세계 리듬감 테스트"]
+      },
       "sheets": [
         {
           "type": "STD",
@@ -79,6 +83,10 @@
       "genre": "maimai",
       "artist": "Clean Tears feat. Youna",
       "image_url": "https://maimaidx.jp/maimai-mobile/img/Music/1e44516a8a3b5a51.png",
+      "aliases": {
+        "en": ["Link (maimai)"],
+        "ko": ["링크 (마이마이)"]
+      },
       "sheets": [
         {
           "type": "STD",
@@ -122,6 +130,10 @@
       "genre": "niconico＆VOCALOID™",
       "artist": "Circle of friends(天月-あまつき-・un:c・伊東歌詞太郎・コニー・はしやん)",
       "image_url": "https://maimaidx.jp/maimai-mobile/img/Music/e90f79d9dcff84df.png",
+      "aliases": {
+        "en": ["Link nico", "Circle of Friends", "Link Circle of Friends"],
+        "ko": ["링크"]
+      },
       "sheets": [
         {
           "type": "STD",

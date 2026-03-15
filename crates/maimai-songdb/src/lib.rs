@@ -188,7 +188,7 @@ pub struct SongDatabase {
     sheets: Vec<SheetRow>,
     sheet_versions: SheetVersionMap,
     internal_levels: HashMap<InternalLevelKey, InternalLevelRow>,
-    aliases: HashMap<String, SongAliases>,
+    aliases: HashMap<SongIdentity, SongAliases>,
 }
 
 impl SongDatabase {
@@ -204,6 +204,11 @@ impl SongDatabase {
         tracing::info!("Fetching official maimai songs JSON...");
         let manual_override_rows =
             load_manual_override_rows().wrap_err("load manual_override.json")?;
+        let manual_override_aliases = manual_override_rows
+            .aliases
+            .iter()
+            .cloned()
+            .collect::<HashMap<_, _>>();
         let overridden_titles = manual_override_rows.overridden_titles.clone();
         let raw_songs = fetch_maimai_songs(&client).await?;
         let raw_songs = filter_official_songs_by_title(raw_songs, &overridden_titles)
@@ -250,6 +255,12 @@ impl SongDatabase {
                 tracing::warn!("failed to fetch song aliases; continuing without aliases: {err:#}");
                 HashMap::new()
             });
+        let aliases = build_song_alias_map(
+            &songs,
+            aliases,
+            &manual_override_aliases,
+            &overridden_titles,
+        );
 
         tracing::info!("Downloading covers...");
         let cover_dir = song_data_dir.join("cover");
@@ -280,7 +291,7 @@ fn build_data_root(
     sheets: &[SheetRow],
     sheet_versions: &SheetVersionMap,
     internal_levels: &HashMap<InternalLevelKey, InternalLevelRow>,
-    aliases: &HashMap<String, SongAliases>,
+    aliases: &HashMap<SongIdentity, SongAliases>,
 ) -> SongCatalog {
     use std::collections::BTreeMap;
 
@@ -294,10 +305,7 @@ fn build_data_root(
                 genre: song.identity.genre.clone(),
                 artist: song.identity.artist.clone(),
                 image_name: Some(song.image_name.clone()),
-                aliases: aliases
-                    .get(&song.identity.title)
-                    .cloned()
-                    .unwrap_or_default(),
+                aliases: aliases.get(&song.identity).cloned().unwrap_or_default(),
                 sheets: Vec::new(),
             },
         );
@@ -358,6 +366,33 @@ fn build_data_root(
     SongCatalog {
         songs: song_map.into_values().collect(),
     }
+}
+
+fn build_song_alias_map(
+    songs: &[SongRow],
+    fetched_aliases: HashMap<String, SongAliases>,
+    manual_override_aliases: &HashMap<SongIdentity, SongAliases>,
+    overridden_titles: &HashSet<String>,
+) -> HashMap<SongIdentity, SongAliases> {
+    let mut aliases_by_identity = HashMap::new();
+
+    for song in songs {
+        if let Some(aliases) = manual_override_aliases.get(&song.identity) {
+            aliases_by_identity.insert(song.identity.clone(), aliases.clone());
+            continue;
+        }
+
+        let normalized_title = normalize_song_title_value(&song.identity.title);
+        if overridden_titles.contains(&normalized_title) {
+            continue;
+        }
+
+        if let Some(aliases) = fetched_aliases.get(&song.identity.title) {
+            aliases_by_identity.insert(song.identity.clone(), aliases.clone());
+        }
+    }
+
+    aliases_by_identity
 }
 
 async fn fetch_maimai_songs(client: &reqwest::Client) -> eyre::Result<Vec<RawSong>> {
@@ -1105,6 +1140,79 @@ mod tests {
             .expect("manual override song entry exists");
         let expected = format!("{}.png", sha256_hex(&override_song.image_url));
         assert_eq!(override_song.image_name, expected);
+    }
+
+    #[test]
+    fn build_song_alias_map_prefers_manual_override_aliases() {
+        let songs = vec![
+            SongRow {
+                identity: SongIdentity::new("Link", SongGenre::Maimai, "Clean Tears feat. Youna"),
+                image_name: "maimai.png".to_string(),
+                image_url: "https://example.com/maimai.png".to_string(),
+                release_date: None,
+                sort_order: None,
+                is_new: false,
+                is_locked: false,
+                comment: None,
+            },
+            SongRow {
+                identity: SongIdentity::new(
+                    "Link",
+                    SongGenre::NiconicoVocaloid,
+                    "Circle of friends(天月-あまつき-・un:c・伊東歌詞太郎・コニー・はしやん)",
+                ),
+                image_name: "nico.png".to_string(),
+                image_url: "https://example.com/nico.png".to_string(),
+                release_date: None,
+                sort_order: None,
+                is_new: false,
+                is_locked: false,
+                comment: None,
+            },
+        ];
+        let fetched_aliases = HashMap::from([(
+            "Link".to_string(),
+            SongAliases {
+                en: vec!["Fetched Alias".to_string()],
+                ko: vec!["가져온 별칭".to_string()],
+            },
+        )]);
+        let manual_override_aliases = HashMap::from([
+            (
+                songs[0].identity.clone(),
+                SongAliases {
+                    en: vec!["Link (maimai)".to_string()],
+                    ko: vec!["링크 (마이마이)".to_string()],
+                },
+            ),
+            (
+                songs[1].identity.clone(),
+                SongAliases {
+                    en: vec!["Link nico".to_string()],
+                    ko: vec!["링크".to_string()],
+                },
+            ),
+        ]);
+        let overridden_titles = HashSet::from([normalize_song_title_value("Link")]);
+
+        let alias_map = build_song_alias_map(
+            &songs,
+            fetched_aliases,
+            &manual_override_aliases,
+            &overridden_titles,
+        );
+
+        assert_eq!(
+            alias_map
+                .get(&songs[0].identity)
+                .expect("maimai aliases")
+                .en,
+            vec!["Link (maimai)".to_string()]
+        );
+        assert_eq!(
+            alias_map.get(&songs[1].identity).expect("nico aliases").en,
+            vec!["Link nico".to_string()]
+        );
     }
 
     #[test]

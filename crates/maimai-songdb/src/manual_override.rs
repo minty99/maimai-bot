@@ -1,7 +1,9 @@
 use std::collections::HashSet;
 
 use eyre::WrapErr;
-use models::{ChartType, DifficultyCategory, MaimaiVersion, SongChartRegion, SongGenre};
+use models::{
+    ChartType, DifficultyCategory, MaimaiVersion, SongAliases, SongChartRegion, SongGenre,
+};
 use serde::Deserialize;
 
 use crate::{
@@ -15,6 +17,7 @@ const MANUAL_OVERRIDE_DATA_JSON: &str = include_str!("data/manual_override.json"
 pub(crate) struct ManualOverrideRows {
     pub(crate) songs: Vec<SongRow>,
     pub(crate) sheets: Vec<SheetRow>,
+    pub(crate) aliases: Vec<(SongIdentity, SongAliases)>,
     pub(crate) overridden_titles: HashSet<String>,
 }
 
@@ -30,6 +33,8 @@ struct ManualOverrideSong {
     genre: SongGenre,
     artist: String,
     image_url: String,
+    #[serde(default)]
+    aliases: SongAliases,
     #[serde(default)]
     sheets: Vec<ManualOverrideSheet>,
 }
@@ -55,6 +60,7 @@ pub(crate) fn load_manual_override_rows() -> eyre::Result<ManualOverrideRows> {
 fn map_to_rows(parsed: ManualOverrideData) -> eyre::Result<ManualOverrideRows> {
     let mut songs = Vec::new();
     let mut sheets = Vec::new();
+    let mut aliases = Vec::new();
     let mut overridden_titles = HashSet::new();
 
     for song in parsed.songs {
@@ -71,6 +77,9 @@ fn map_to_rows(parsed: ManualOverrideData) -> eyre::Result<ManualOverrideRows> {
         }
         let image_name = format!("{}.png", sha256_hex(&image_url));
         overridden_titles.insert(normalize_song_title_value(&identity.title));
+        if !song.aliases.is_empty() {
+            aliases.push((identity.clone(), song.aliases.clone()));
+        }
 
         songs.push(SongRow {
             identity: identity.clone(),
@@ -106,6 +115,7 @@ fn map_to_rows(parsed: ManualOverrideData) -> eyre::Result<ManualOverrideRows> {
     Ok(ManualOverrideRows {
         songs,
         sheets,
+        aliases,
         overridden_titles,
     })
 }
@@ -151,6 +161,10 @@ mod tests {
               "genre": "maimai",
               "artist": "",
               "image_url": "https://example.com/test.png",
+              "aliases": {
+                "en": ["Alias"],
+                "ko": ["별칭"]
+              },
               "sheets": [
                 {
                   "type": "STD",
@@ -174,6 +188,8 @@ mod tests {
         assert_eq!(sheet.version, MaimaiVersion::Splash);
         assert!(!sheet.region.jp);
         assert!(sheet.region.intl);
+        assert_eq!(song.aliases.en, vec!["Alias".to_string()]);
+        assert_eq!(song.aliases.ko, vec!["별칭".to_string()]);
     }
 
     #[test]
