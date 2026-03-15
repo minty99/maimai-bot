@@ -657,6 +657,25 @@ select {
   gap: 6px;
 }
 
+.search-submit-group {
+  display: grid;
+  gap: 6px;
+}
+
+.search-submit-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+}
+
+.search-submit-row input {
+  min-width: 0;
+}
+
+.search-submit-row button {
+  min-width: 72px;
+}
+
 .search-box span,
 label > span {
   font-size: 13px;
@@ -2284,6 +2303,10 @@ tbody tr:hover {
   .range-grid,
   .range-grid.compact,
   .toggle-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .search-submit-row {
     grid-template-columns: 1fr;
   }
 
