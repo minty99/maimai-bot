@@ -243,8 +243,7 @@ impl SongDatabase {
                 .wrap_err("fetch internal levels")?;
 
         tracing::info!("Fetching song aliases...");
-        let alias_cache_dir = song_data_dir.join("aliases");
-        let aliases = aliases::fetch_song_aliases(&client, &alias_cache_dir)
+        let aliases = aliases::fetch_song_aliases(&client)
             .await
             .unwrap_or_else(|err| {
                 tracing::warn!("failed to fetch song aliases; continuing without aliases: {err:#}");

@@ -1,7 +1,6 @@
 use eyre::WrapErr;
 use models::SongAliases;
 use std::collections::HashMap;
-use std::path::Path;
 
 // The GCM-bot author granted permission to reuse these maimai alias files here.
 const EN_ALIAS_URL: &str =
@@ -11,69 +10,22 @@ const KO_ALIAS_URL: &str =
 
 pub(crate) async fn fetch_song_aliases(
     client: &reqwest::Client,
-    cache_dir: &Path,
 ) -> eyre::Result<HashMap<String, SongAliases>> {
-    std::fs::create_dir_all(cache_dir).wrap_err("create alias cache dir")?;
-
-    let en = load_aliases_with_cache(client, cache_dir, "en", EN_ALIAS_URL).await;
-    let ko = load_aliases_with_cache(client, cache_dir, "ko", KO_ALIAS_URL).await;
+    let en = fetch_aliases(client, "en", EN_ALIAS_URL).await?;
+    let ko = fetch_aliases(client, "ko", KO_ALIAS_URL).await?;
 
     Ok(merge_alias_maps(en, ko))
 }
 
-async fn load_aliases_with_cache(
+async fn fetch_aliases(
     client: &reqwest::Client,
-    cache_dir: &Path,
     language: &str,
     url: &str,
-) -> HashMap<String, Vec<String>> {
-    let cache_path = cache_dir.join(format!("{language}.tsv"));
-
-    match fetch_alias_file(client, url).await {
-        Ok(body) => {
-            if let Err(err) = std::fs::write(&cache_path, &body) {
-                tracing::warn!(
-                    "failed to write alias cache {}: {err:#}",
-                    cache_path.display()
-                );
-            }
-            match parse_alias_tsv(&body) {
-                Ok(map) => map,
-                Err(err) => {
-                    tracing::warn!("failed to parse fetched {language} alias file: {err:#}");
-                    load_aliases_from_cache(&cache_path, language)
-                }
-            }
-        }
-        Err(err) => {
-            tracing::warn!("failed to fetch {language} aliases: {err:#}");
-            load_aliases_from_cache(&cache_path, language)
-        }
-    }
-}
-
-fn load_aliases_from_cache(cache_path: &Path, language: &str) -> HashMap<String, Vec<String>> {
-    let cached = match std::fs::read_to_string(cache_path) {
-        Ok(cached) => cached,
-        Err(err) => {
-            tracing::warn!(
-                "failed to read cached {language} aliases {}: {err:#}",
-                cache_path.display()
-            );
-            return HashMap::new();
-        }
-    };
-
-    match parse_alias_tsv(&cached) {
-        Ok(map) => map,
-        Err(err) => {
-            tracing::warn!(
-                "failed to parse cached {language} aliases {}: {err:#}",
-                cache_path.display()
-            );
-            HashMap::new()
-        }
-    }
+) -> eyre::Result<HashMap<String, Vec<String>>> {
+    let body = fetch_alias_file(client, url)
+        .await
+        .wrap_err_with(|| format!("fetch {language} aliases"))?;
+    parse_alias_tsv(&body).wrap_err_with(|| format!("parse fetched {language} alias file"))
 }
 
 async fn fetch_alias_file(client: &reqwest::Client, url: &str) -> eyre::Result<String> {
