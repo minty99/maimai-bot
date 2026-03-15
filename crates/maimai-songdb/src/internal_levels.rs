@@ -62,6 +62,22 @@ struct InternalLevelTitleResolver {
     rename_titles: HashMap<String, String>,
 }
 
+#[derive(Debug)]
+enum TitleResolution {
+    Matched(SongIdentity),
+    Skipped,
+    Unmatched(String),
+}
+
+#[derive(Debug)]
+enum RowKeyMappingFailure {
+    MissingTitle,
+    SkippedTitle(String),
+    UnmatchedTitle(String),
+    InvalidSheetType { title: String, sheet_type: String },
+    InvalidDifficulty { title: String, difficulty: String },
+}
+
 impl InternalLevelTitleResolver {
     fn new(songs: &[SongRow]) -> Self {
         let mappings = &*TITLE_MAPPINGS;
@@ -104,14 +120,17 @@ impl InternalLevelTitleResolver {
         }
     }
 
-    fn song_identity_for_title(&self, title: &str) -> Option<SongIdentity> {
+    fn resolve_title(&self, title: &str) -> TitleResolution {
         let title = normalize_song_title_value(title);
         if self.skipped_titles.contains(&title) {
-            return None;
+            return TitleResolution::Skipped;
         }
 
         let title = self.rename_titles.get(&title).cloned().unwrap_or(title);
-        self.song_identity_by_title.get(&title).cloned()
+        match self.song_identity_by_title.get(&title) {
+            Some(song_identity) => TitleResolution::Matched(song_identity.clone()),
+            None => TitleResolution::Unmatched(title),
+        }
     }
 }
 
@@ -225,12 +244,22 @@ fn extract_records_from_values(
             let raw_type = row.get(type_idx).and_then(parse_string);
             let raw_diff = row.get(diff_idx).and_then(parse_string);
 
-            let Some((song_identity, sheet_type, difficulty)) = map_row_keys(
+            let mapped_row = map_row_keys(
                 title.as_deref(),
                 raw_type.as_deref(),
                 raw_diff.as_deref(),
                 resolver,
-            ) else {
+            );
+            let Ok((song_identity, sheet_type, difficulty)) = mapped_row else {
+                log_unmatched_internal_level_row(
+                    spec,
+                    source_version,
+                    title.as_deref(),
+                    raw_type.as_deref(),
+                    raw_diff.as_deref(),
+                    internal,
+                    mapped_row.expect_err("already checked error case"),
+                );
                 continue;
             };
 
@@ -252,23 +281,117 @@ fn map_row_keys(
     sheet_type: Option<&str>,
     difficulty: Option<&str>,
     resolver: &InternalLevelTitleResolver,
-) -> Option<(SongIdentity, ChartType, DifficultyCategory)> {
-    let title = title?.trim();
-    if title.is_empty() {
-        return None;
-    }
+) -> Result<(SongIdentity, ChartType, DifficultyCategory), RowKeyMappingFailure> {
+    let title = title.ok_or(RowKeyMappingFailure::MissingTitle)?.trim();
 
-    let song_identity = resolver.song_identity_for_title(title)?;
-
-    let sheet_type = match sheet_type?.trim() {
-        "STD" => ChartType::Std,
-        "DX" => ChartType::Dx,
-        _ => return None,
+    let song_identity = match resolver.resolve_title(title) {
+        TitleResolution::Matched(song_identity) => song_identity,
+        TitleResolution::Skipped => {
+            return Err(RowKeyMappingFailure::SkippedTitle(title.to_string()));
+        }
+        TitleResolution::Unmatched(normalized_title) => {
+            return Err(RowKeyMappingFailure::UnmatchedTitle(normalized_title));
+        }
     };
 
-    let difficulty = difficulty?.trim().parse::<DifficultyCategory>().ok()?;
+    let raw_sheet_type = sheet_type
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .ok_or_else(|| RowKeyMappingFailure::InvalidSheetType {
+            title: title.to_string(),
+            sheet_type: String::new(),
+        })?;
+    let sheet_type = match raw_sheet_type {
+        "STD" => ChartType::Std,
+        "DX" => ChartType::Dx,
+        _ => {
+            return Err(RowKeyMappingFailure::InvalidSheetType {
+                title: title.to_string(),
+                sheet_type: raw_sheet_type.to_string(),
+            });
+        }
+    };
 
-    Some((song_identity, sheet_type, difficulty))
+    let raw_difficulty = difficulty
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .ok_or_else(|| RowKeyMappingFailure::InvalidDifficulty {
+            title: title.to_string(),
+            difficulty: String::new(),
+        })?;
+    let difficulty = raw_difficulty.parse::<DifficultyCategory>().map_err(|_| {
+        RowKeyMappingFailure::InvalidDifficulty {
+            title: title.to_string(),
+            difficulty: raw_difficulty.to_string(),
+        }
+    })?;
+
+    Ok((song_identity, sheet_type, difficulty))
+}
+
+fn log_unmatched_internal_level_row(
+    spec: &ExtractSpec,
+    source_version: i64,
+    title: Option<&str>,
+    sheet_type: Option<&str>,
+    difficulty: Option<&str>,
+    internal_level: f64,
+    failure: RowKeyMappingFailure,
+) {
+    match failure {
+        RowKeyMappingFailure::MissingTitle => tracing::debug!(
+            "Skipped internal level row without title: v{} / {} (type='{}', difficulty='{}', internal_level={:.1})",
+            source_version,
+            spec.sheet_name,
+            sheet_type.unwrap_or(""),
+            difficulty.unwrap_or(""),
+            internal_level,
+        ),
+        RowKeyMappingFailure::SkippedTitle(normalized_title) => tracing::debug!(
+            "Skipped internal level row due to configured skipped title: v{} / {} (title='{}', normalized_title='{}', type='{}', difficulty='{}', internal_level={:.1})",
+            source_version,
+            spec.sheet_name,
+            title.unwrap_or(""),
+            normalized_title,
+            sheet_type.unwrap_or(""),
+            difficulty.unwrap_or(""),
+            internal_level,
+        ),
+        RowKeyMappingFailure::UnmatchedTitle(normalized_title) => tracing::debug!(
+            "Unmatched internal level row title: v{} / {} (title='{}', normalized_title='{}', type='{}', difficulty='{}', internal_level={:.1})",
+            source_version,
+            spec.sheet_name,
+            title.unwrap_or(""),
+            normalized_title,
+            sheet_type.unwrap_or(""),
+            difficulty.unwrap_or(""),
+            internal_level,
+        ),
+        RowKeyMappingFailure::InvalidSheetType {
+            title,
+            sheet_type: invalid_sheet_type,
+        } => tracing::debug!(
+            "Invalid internal level row chart type: v{} / {} (title='{}', type='{}', difficulty='{}', internal_level={:.1})",
+            source_version,
+            spec.sheet_name,
+            title,
+            invalid_sheet_type,
+            difficulty.unwrap_or(""),
+            internal_level,
+        ),
+        RowKeyMappingFailure::InvalidDifficulty {
+            title,
+            difficulty: invalid_difficulty,
+        } => tracing::debug!(
+            "Invalid internal level row difficulty: v{} / {} (title='{}', type='{}', difficulty='{}', internal_level={:.1})",
+            source_version,
+            spec.sheet_name,
+            title,
+            sheet_type.unwrap_or(""),
+            invalid_difficulty,
+            internal_level,
+        ),
+    }
 }
 
 fn parse_string(v: &Value) -> Option<String> {
@@ -466,7 +589,28 @@ pub(crate) async fn fetch_internal_levels(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::{load_manual_override_rows, load_official_rows_from_json};
     use models::SongGenre;
+    use std::sync::Once;
+    use tracing_subscriber::EnvFilter;
+
+    const OFFICIAL_JP_SONGS_JSON: &str =
+        include_str!("../examples/maimai/official/maimai_songs.json");
+    static TEST_TRACING: Once = Once::new();
+
+    fn init_test_tracing() {
+        TEST_TRACING.call_once(|| {
+            tracing_subscriber::fmt()
+                .with_env_filter(
+                    EnvFilter::try_from_default_env()
+                        .unwrap_or_else(|_| EnvFilter::new("maimai_songdb=warn,warn")),
+                )
+                .with_test_writer()
+                .without_time()
+                .try_init()
+                .ok();
+        });
+    }
 
     fn resolver_for_tests() -> InternalLevelTitleResolver {
         InternalLevelTitleResolver::new(&[SongRow {
@@ -479,6 +623,14 @@ mod tests {
             is_locked: false,
             comment: None,
         }])
+    }
+
+    fn fixture_resolver() -> InternalLevelTitleResolver {
+        let (mut songs, _) =
+            load_official_rows_from_json(OFFICIAL_JP_SONGS_JSON).expect("load official JP rows");
+        let manual_override_rows = load_manual_override_rows().expect("load manual override rows");
+        songs.extend(manual_override_rows.songs);
+        InternalLevelTitleResolver::new(&songs)
     }
 
     #[test]
@@ -519,6 +671,38 @@ mod tests {
     }
 
     #[test]
+    fn extract_records_from_values_allows_empty_title_song() {
+        let spec = ExtractSpec {
+            sheet_name: "dummy".to_string(),
+            data_indexes: vec![0],
+            data_offsets: [0, 1, 2, 3],
+        };
+        let resolver = InternalLevelTitleResolver::new(&[SongRow {
+            identity: SongIdentity::new("", SongGenre::PopsAnime, "x0o0x_"),
+            image_name: "cover.png".to_string(),
+            image_url: "https://example.com/cover.png".to_string(),
+            release_date: None,
+            sort_order: None,
+            is_new: false,
+            is_locked: false,
+            comment: None,
+        }]);
+
+        let values = vec![vec![
+            Value::String(String::new()),
+            Value::String("DX".to_string()),
+            Value::String("MAS".to_string()),
+            Value::Number(serde_json::Number::from_f64(12.5).unwrap()),
+        ]];
+
+        let rows = extract_records_from_values(&values, &spec, 6, &resolver);
+        assert_eq!(rows.len(), 1);
+        assert_eq!(rows[0].song_identity.title, "");
+        assert_eq!(rows[0].sheet_type, ChartType::Dx);
+        assert_eq!(rows[0].difficulty, DifficultyCategory::Master);
+    }
+
+    #[test]
     fn parse_string_converts_numbers_to_strings() {
         assert_eq!(
             parse_string(&Value::Number(serde_json::Number::from(13))),
@@ -530,44 +714,200 @@ mod tests {
         );
     }
 
-    #[tokio::test]
-    #[ignore]
-    async fn fetch_latest_version_first_sheet() {
+    #[test]
+    fn resolver_applies_punctuation_title_mappings() {
+        let songs = vec![
+            SongRow {
+                identity: SongIdentity::new(
+                    "Love's Theme of BADASS ～バッド・アス 愛のテーマ～",
+                    SongGenre::GameVariety,
+                    "",
+                ),
+                image_name: "love.png".to_string(),
+                image_url: "https://example.com/love.png".to_string(),
+                release_date: None,
+                sort_order: None,
+                is_new: false,
+                is_locked: false,
+                comment: None,
+            },
+            SongRow {
+                identity: SongIdentity::new("Party 4U ”holy nite mix”", SongGenre::GameVariety, ""),
+                image_name: "party.png".to_string(),
+                image_url: "https://example.com/party.png".to_string(),
+                release_date: None,
+                sort_order: None,
+                is_new: false,
+                is_locked: false,
+                comment: None,
+            },
+            SongRow {
+                identity: SongIdentity::new("Boys O’Clock", SongGenre::Maimai, ""),
+                image_name: "boys.png".to_string(),
+                image_url: "https://example.com/boys.png".to_string(),
+                release_date: None,
+                sort_order: None,
+                is_new: false,
+                is_locked: false,
+                comment: None,
+            },
+            SongRow {
+                identity: SongIdentity::new("Tic Tac DREAMIN’", SongGenre::OngekiChunithm, ""),
+                image_name: "tic.png".to_string(),
+                image_url: "https://example.com/tic.png".to_string(),
+                release_date: None,
+                sort_order: None,
+                is_new: false,
+                is_locked: false,
+                comment: None,
+            },
+            SongRow {
+                identity: SongIdentity::new("L'épilogue", SongGenre::Maimai, ""),
+                image_name: "lepilogue.png".to_string(),
+                image_url: "https://example.com/lepilogue.png".to_string(),
+                release_date: None,
+                sort_order: None,
+                is_new: false,
+                is_locked: false,
+                comment: None,
+            },
+        ];
+        let resolver = InternalLevelTitleResolver::new(&songs);
+
+        assert!(matches!(
+            resolver.resolve_title("Love’s Theme of BADASS ～バッド・アス 愛のテーマ～"),
+            TitleResolution::Matched(_)
+        ));
+        assert!(matches!(
+            resolver.resolve_title("Party 4U \"holy nite mix\""),
+            TitleResolution::Matched(_)
+        ));
+        assert!(matches!(
+            resolver.resolve_title("Boys O'Clock"),
+            TitleResolution::Matched(_)
+        ));
+        assert!(matches!(
+            resolver.resolve_title("Tic Tac DREAMIN'"),
+            TitleResolution::Matched(_)
+        ));
+        assert!(matches!(
+            resolver.resolve_title("L'epilogue"),
+            TitleResolution::Matched(_)
+        ));
+    }
+
+    async fn fetch_rows_for_version(source_version: i64) -> Vec<InternalLevelRow> {
+        init_test_tracing();
         dotenvy::dotenv().ok();
         let api_key = std::env::var("GOOGLE_API_KEY").expect("GOOGLE_API_KEY required");
-        let spreadsheets = &*SPREADSHEETS;
-        let latest = spreadsheets
+        let spreadsheet = SPREADSHEETS
             .iter()
-            .max_by_key(|s| s.source_version)
-            .expect("no spreadsheets defined");
-        let extract = &latest.extracts[0];
-
+            .find(|spreadsheet| spreadsheet.source_version == source_version)
+            .unwrap_or_else(|| panic!("missing spreadsheet for source_version {source_version}"));
         let client = reqwest::Client::new();
-        let values = fetch_sheet_values(
-            &client,
-            &latest.spreadsheet_id,
-            &extract.sheet_name,
-            max_column_for_extract(extract),
-            &api_key,
-        )
-        .await
-        .expect("fetch_sheet_values failed");
+        let resolver = fixture_resolver();
+        let mut all_rows = Vec::new();
 
-        let rows = extract_records_from_values(
-            &values,
-            extract,
-            latest.source_version,
-            &resolver_for_tests(),
-        );
+        for extract in &spreadsheet.extracts {
+            let values = fetch_sheet_values(
+                &client,
+                &spreadsheet.spreadsheet_id,
+                &extract.sheet_name,
+                max_column_for_extract(extract),
+                &api_key,
+            )
+            .await
+            .unwrap_or_else(|err| {
+                panic!(
+                    "fetch_sheet_values failed for v{} / {}: {err:#}",
+                    spreadsheet.source_version, extract.sheet_name
+                )
+            });
+
+            let rows = extract_records_from_values(
+                &values,
+                extract,
+                spreadsheet.source_version,
+                &resolver,
+            );
+
+            eprintln!(
+                "v{} / {}: {} raw rows, {} parsed records",
+                spreadsheet.source_version,
+                extract.sheet_name,
+                values.len(),
+                rows.len()
+            );
+            if rows.is_empty() {
+                eprintln!(
+                    "v{} / {}: parsed zero records",
+                    spreadsheet.source_version, extract.sheet_name
+                );
+            }
+            all_rows.extend(rows);
+        }
 
         eprintln!(
-            "v{} / {}: {} raw rows, {} parsed records",
-            latest.source_version,
-            extract.sheet_name,
-            values.len(),
-            rows.len()
+            "v{} total parsed records: {}",
+            spreadsheet.source_version,
+            all_rows.len()
         );
-        eprintln!("rows: {:#?}", rows);
-        assert!(!rows.is_empty(), "expected at least one parsed record");
+        all_rows
+    }
+
+    #[tokio::test]
+    #[ignore]
+    async fn fetch_version_6_sheets() {
+        let rows = fetch_rows_for_version(6).await;
+        assert!(!rows.is_empty(), "expected parsed records for version 6");
+    }
+
+    #[tokio::test]
+    #[ignore]
+    async fn fetch_version_7_sheets() {
+        let rows = fetch_rows_for_version(7).await;
+        assert!(!rows.is_empty(), "expected parsed records for version 7");
+    }
+
+    #[tokio::test]
+    #[ignore]
+    async fn fetch_version_8_sheets() {
+        let rows = fetch_rows_for_version(8).await;
+        assert!(!rows.is_empty(), "expected parsed records for version 8");
+    }
+
+    #[tokio::test]
+    #[ignore]
+    async fn fetch_version_9_sheets() {
+        let rows = fetch_rows_for_version(9).await;
+        assert!(!rows.is_empty(), "expected parsed records for version 9");
+    }
+
+    #[tokio::test]
+    #[ignore]
+    async fn fetch_version_10_sheets() {
+        let rows = fetch_rows_for_version(10).await;
+        assert!(!rows.is_empty(), "expected parsed records for version 10");
+    }
+
+    #[tokio::test]
+    #[ignore]
+    async fn fetch_version_11_sheets() {
+        let rows = fetch_rows_for_version(11).await;
+        assert!(!rows.is_empty(), "expected parsed records for version 11");
+    }
+
+    #[tokio::test]
+    #[ignore]
+    async fn fetch_version_12_sheets() {
+        let rows = fetch_rows_for_version(12).await;
+        assert!(!rows.is_empty(), "expected parsed records for version 12");
+    }
+
+    #[tokio::test]
+    #[ignore]
+    async fn fetch_version_13_sheets() {
+        let rows = fetch_rows_for_version(13).await;
+        assert!(!rows.is_empty(), "expected parsed records for version 13");
     }
 }
