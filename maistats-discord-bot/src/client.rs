@@ -119,6 +119,23 @@ fn build_client() -> Result<Client> {
         .wrap_err("build http client")
 }
 
+fn normalize_record_collector_path(path: &str) -> String {
+    let trimmed = path.trim_end_matches('/');
+    let trimmed = if trimmed.is_empty() { "/" } else { trimmed };
+
+    for suffix in ["/health/ready", "/api/player"] {
+        if let Some(prefix) = trimmed.strip_suffix(suffix) {
+            return if prefix.is_empty() {
+                "/".to_string()
+            } else {
+                prefix.to_string()
+            };
+        }
+    }
+
+    trimmed.to_string()
+}
+
 pub(crate) fn normalize_record_collector_url(input: &str) -> Result<String> {
     let trimmed = input.trim();
     eyre::ensure!(
@@ -136,7 +153,8 @@ pub(crate) fn normalize_record_collector_url(input: &str) -> Result<String> {
         "Record collector URL must include a host."
     );
 
-    url.set_path("");
+    let normalized_path = normalize_record_collector_path(url.path());
+    url.set_path(&normalized_path);
     url.set_query(None);
     url.set_fragment(None);
 
@@ -329,5 +347,35 @@ mod tests {
         .expect("url should normalize");
 
         assert_eq!(normalized, "https://collector.example:3000");
+    }
+
+    #[test]
+    fn normalize_record_collector_url_preserves_path_prefix() {
+        let normalized = normalize_record_collector_url(
+            " https://collector.example:3000/maistats?foo=bar#frag ",
+        )
+        .expect("url should normalize");
+
+        assert_eq!(normalized, "https://collector.example:3000/maistats");
+    }
+
+    #[test]
+    fn normalize_record_collector_url_strips_player_endpoint_but_keeps_prefix() {
+        let normalized = normalize_record_collector_url(
+            " https://collector.example:3000/maistats/api/player?foo=bar#frag ",
+        )
+        .expect("url should normalize");
+
+        assert_eq!(normalized, "https://collector.example:3000/maistats");
+    }
+
+    #[test]
+    fn normalize_record_collector_url_strips_health_endpoint_but_keeps_prefix() {
+        let normalized = normalize_record_collector_url(
+            " https://collector.example:3000/maistats/health/ready?foo=bar#frag ",
+        )
+        .expect("url should normalize");
+
+        assert_eq!(normalized, "https://collector.example:3000/maistats");
     }
 }
