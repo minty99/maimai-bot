@@ -1269,7 +1269,6 @@ function App() {
               newRows={newRatingRows}
               oldRows={oldRatingRows}
               onOpenSongDetail={handleOpenSongDetail}
-              onOpenHistory={handleOpenHistory}
             />
           </>
         ) : activePage === 'picker' ? (
