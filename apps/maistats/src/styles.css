@@ -885,6 +885,269 @@ select:focus-visible {
   gap: 14px;
 }
 
+.rating-card-grid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.rating-song-card {
+  --rating-card-accent: var(--accent);
+  display: grid;
+  grid-template-rows: auto auto;
+  gap: 0;
+  padding: 0;
+  border: 1px solid color-mix(in srgb, var(--rating-card-accent) 22%, var(--line));
+  border-radius: 12px;
+  background:
+    radial-gradient(circle at top left, color-mix(in srgb, var(--rating-card-accent) 8%, white), transparent 36%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.99), rgba(244, 247, 252, 0.96));
+  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.05);
+  overflow: hidden;
+  cursor: pointer;
+  transition: transform 140ms ease, box-shadow 140ms ease, border-color 140ms ease;
+}
+
+.rating-song-card:hover,
+.rating-song-card:focus-visible {
+  border-color: color-mix(in srgb, var(--rating-card-accent) 40%, var(--line));
+  box-shadow: 0 18px 32px rgba(15, 23, 42, 0.10);
+  transform: translateY(-2px);
+}
+
+.rating-song-card:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--rating-card-accent) 42%, white);
+  outline-offset: 2px;
+}
+
+.rating-song-stage {
+  position: relative;
+  aspect-ratio: 1;
+  overflow: hidden;
+  background:
+    linear-gradient(165deg, rgba(15, 23, 42, 0.94), color-mix(in srgb, var(--rating-card-accent) 70%, #0f172a));
+}
+
+.rating-song-card.diff-basic,
+.rating-song-stage.diff-basic {
+  --rating-card-accent: var(--diff-basic);
+}
+
+.rating-song-card.diff-advanced,
+.rating-song-stage.diff-advanced {
+  --rating-card-accent: var(--diff-advanced);
+}
+
+.rating-song-card.diff-expert,
+.rating-song-stage.diff-expert {
+  --rating-card-accent: var(--diff-expert);
+}
+
+.rating-song-card.diff-master,
+.rating-song-stage.diff-master {
+  --rating-card-accent: var(--diff-master);
+}
+
+.rating-song-card.diff-remaster,
+.rating-song-stage.diff-remaster {
+  --rating-card-accent: var(--diff-remaster);
+}
+
+.rating-song-card.diff-unknown,
+.rating-song-stage.diff-unknown {
+  --rating-card-accent: #64748b;
+}
+
+.rating-song-jacket-wrap {
+  position: absolute;
+  inset: 0;
+}
+
+.rating-song-jacket-wrap > div {
+  position: absolute;
+  inset: 0;
+}
+
+.rating-song-jacket-wrap .jacket.rating-song-jacket {
+  position: absolute;
+  inset: 0;
+  display: block;
+  width: 100%;
+  height: 100%;
+  border: 0;
+  border-radius: 0;
+  object-fit: contain;
+  background:
+    radial-gradient(circle at top left, rgba(255, 255, 255, 0.08), transparent 42%),
+    rgba(255, 255, 255, 0.02);
+}
+
+.rating-song-stage-gradient {
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(180deg, rgba(10, 24, 18, 0.08) 0%, rgba(10, 24, 18, 0.04) 36%, rgba(10, 24, 18, 0.82) 100%);
+  pointer-events: none;
+}
+
+.rating-song-stage-topline {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  right: 10px;
+  z-index: 1;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  font-size: 10px;
+  font-weight: 700;
+  color: rgba(248, 250, 252, 0.96);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.rating-song-stage-topline span {
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+  padding: 0 8px;
+  border-radius: 999px;
+  background: rgba(15, 23, 42, 0.62);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  backdrop-filter: blur(10px);
+}
+
+.rating-song-stage-badges {
+  position: absolute;
+  left: 10px;
+  right: 76px;
+  bottom: 10px;
+  z-index: 1;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.rating-song-stage-badges .chart-type-badge,
+.rating-difficulty-chip {
+  min-height: 23px;
+  padding: 0 8px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  background: rgba(255, 255, 255, 0.90);
+  backdrop-filter: blur(10px);
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1.1;
+}
+
+.rating-difficulty-chip {
+  display: inline-flex;
+  align-items: center;
+}
+
+.rating-song-rating-chip {
+  position: absolute;
+  right: 10px;
+  bottom: 10px;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 9px 10px;
+  border-radius: 10px;
+  background: rgba(15, 23, 42, 0.62);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  color: #f8fafc;
+  text-align: right;
+}
+
+.rating-song-rating-chip strong {
+  font-family: 'Pretendard Variable', Pretendard, sans-serif;
+  font-size: 1.05rem;
+  line-height: 1;
+}
+
+.rating-song-info {
+  display: grid;
+  gap: 8px;
+  padding: 12px;
+  min-height: 126px;
+}
+
+.rating-song-info h3 {
+  margin: 0;
+  font-size: 0.98rem;
+  line-height: 1.32;
+  overflow-wrap: anywhere;
+}
+
+.rating-song-level-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.rating-song-stat-grid {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) repeat(2, minmax(0, 1fr));
+  gap: 0;
+  margin-top: auto;
+  margin-left: -12px;
+  margin-right: -12px;
+  padding-top: 8px;
+  border-top: 1px solid var(--line);
+}
+
+.rating-song-stat-grid::before,
+.rating-song-stat-grid::after {
+  content: '';
+  position: absolute;
+  top: calc(50% + 4px);
+  width: 1px;
+  height: 14px;
+  background: var(--line);
+  transform: translate(-50%, -50%);
+}
+
+.rating-song-stat-grid::before {
+  left: 50%;
+}
+
+.rating-song-stat-grid::after {
+  left: 75%;
+}
+
+.rating-song-stat {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 0;
+  min-height: 24px;
+  padding: 0 8px;
+  text-align: center;
+  overflow: hidden;
+}
+
+.rating-song-stat strong {
+  display: block;
+  width: 100%;
+  font-size: 0.76rem;
+  line-height: 1.05;
+  white-space: nowrap;
+  text-align: center;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.04em;
+}
+
 .table-wrap {
   border: 1px solid var(--line);
   border-radius: 12px;
@@ -2202,6 +2465,12 @@ tbody tr:hover {
   color: #1e293b;
 }
 
+@media (max-width: 1500px) {
+  .rating-card-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
 @media (max-width: 1200px) {
   .app-sidebar-inline {
     display: none;
@@ -2390,6 +2659,42 @@ tbody tr:hover {
 
   .picker-song-card {
     width: min(100%, calc(100vw - 20px));
+  }
+
+  .rating-song-info {
+    min-height: 0;
+  }
+
+  .rating-song-stat-grid {
+    margin-left: -10px;
+    margin-right: -10px;
+  }
+
+  .rating-song-stat {
+    min-height: 22px;
+    padding: 0 5px;
+  }
+
+  .rating-song-stat strong {
+    font-size: 0.66rem;
+    letter-spacing: -0.05em;
+  }
+}
+
+@media (max-width: 480px) {
+  .rating-song-stat-grid {
+    margin-left: -8px;
+    margin-right: -8px;
+  }
+
+  .rating-song-stat {
+    min-height: 20px;
+    padding: 0 3px;
+  }
+
+  .rating-song-stat strong {
+    font-size: 0.6rem;
+    letter-spacing: -0.06em;
   }
 }
 
