@@ -19,6 +19,7 @@ import {
   readStoredJson,
   type StoredRandomPickerFilters,
 } from '../app/storage';
+import { daysSince, parseMaimaiPlayedAtToUnix } from '../app/maimaiTime';
 import { formatNumber, formatPercent, formatVersionLabel } from '../app/utils';
 import { DEFAULT_SCORE_FILTERS } from '../app/scoreFilterPresets';
 import { chartIdentityKey } from '../songIdentity';
@@ -84,31 +85,6 @@ function normalizeInput(value: string, fallback: number): number {
   return clampLevel(parsed);
 }
 
-
-function parseMaimaiPlayedAtToUnix(playedAt: string | null | undefined): number | null {
-  const text = playedAt?.trim();
-  if (!text) {
-    return null;
-  }
-
-  const match = /^(\d{4})\/(\d{2})\/(\d{2})\s+(\d{2}):(\d{2})$/.exec(text);
-  if (!match) {
-    return null;
-  }
-
-  const [, yearText, monthText, dayText, hourText, minuteText] = match;
-  const year = Number(yearText);
-  const month = Number(monthText);
-  const day = Number(dayText);
-  const hour = Number(hourText);
-  const minute = Number(minuteText);
-  const date = new Date(year, month - 1, day, hour, minute, 0, 0);
-  if (Number.isNaN(date.getTime())) {
-    return null;
-  }
-
-  return date.getTime();
-}
 
 function formatAchievement(achievementX10000: number | null): string {
   if (achievementX10000 === null) {
@@ -694,9 +670,7 @@ export function RandomPickerPage({
           }
 
           const latestPlayedAtUnix = parseMaimaiPlayedAtToUnix(score?.last_played_at);
-          const daysSinceLastPlayed = latestPlayedAtUnix === null
-            ? null
-            : Math.max(0, Math.floor((Date.now() - latestPlayedAtUnix) / (1000 * 60 * 60 * 24)));
+          const daysSinceLastPlayed = daysSince(latestPlayedAtUnix);
           if (
             daysSinceLastPlayed !== null &&
             (daysSinceLastPlayed < normalizedDaysMin || daysSinceLastPlayed > normalizedDaysMax)
