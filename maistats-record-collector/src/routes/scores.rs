@@ -5,8 +5,7 @@ use axum::{
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    error::{AppError, Result},
-    http_client::is_maintenance_window_now,
+    error::{AppError, Result, app_error_from_maimai},
     routes::responses::{ScoreApiResponse, score_response_from_entry},
     state::AppState,
     tasks::utils::{
@@ -109,29 +108,21 @@ pub(crate) async fn refresh_song_scores(
     State(state): State<AppState>,
     Json(payload): Json<RefreshSongScoresRequest>,
 ) -> Result<Json<RefreshSongScoresResponse>> {
-    if is_maintenance_window_now() {
-        return Err(crate::error::AppError::Maintenance(
-            "maimai DX NET maintenance window (04:00-07:00 local time)".to_string(),
-        ));
-    }
-
     let target = RefreshSongScoresTarget {
         title: payload.title.trim().to_string(),
         genre: payload.genre.trim().to_string(),
         artist: payload.artist.trim().to_string(),
     };
 
-    let mut client = state
-        .maimai_client()
-        .map_err(|e| AppError::InternalError(e.to_string()))?;
+    let mut client = state.maimai_client().map_err(app_error_from_maimai)?;
     ensure_session(&mut client)
         .await
-        .map_err(|e| AppError::InternalError(e.to_string()))?;
+        .map_err(app_error_from_maimai)?;
 
     let outcome: RefreshSongScoresOutcome =
         refresh_song_scores_task(&state.db_pool, &mut client, &target)
             .await
-            .map_err(|e| AppError::InternalError(e.to_string()))?;
+            .map_err(app_error_from_maimai)?;
 
     Ok(Json(RefreshSongScoresResponse {
         detail_pages_refreshed: outcome.detail_pages_refreshed,

@@ -32,7 +32,6 @@ mod tests {
     use eyre::WrapErr;
 
     use crate::config::RecordCollectorConfig;
-    use crate::http_client::is_maintenance_window_now;
     use crate::tasks::utils::auth::build_client;
     use crate::tasks::utils::playlog_detail::fetch_playlog_detail;
     use crate::tasks::utils::recent::fetch_recent_entries_logged_in;
@@ -46,11 +45,6 @@ mod tests {
     #[tokio::test]
     #[ignore]
     async fn recent_to_playlog_detail_to_music_detail_titles_match_live() -> eyre::Result<()> {
-        if is_maintenance_window_now() {
-            eprintln!("skipping live test during maintenance window");
-            return Ok(());
-        }
-
         let config = config_from_env()?;
         let mut client = build_client(&config)?;
         client.ensure_logged_in().await?;
@@ -92,11 +86,6 @@ mod tests {
     #[tokio::test]
     #[ignore]
     async fn playlog_detail_chain_resolves_music_detail_live() -> eyre::Result<()> {
-        if is_maintenance_window_now() {
-            eprintln!("skipping live test during maintenance window");
-            return Ok(());
-        }
-
         let config = config_from_env()?;
         let mut client = build_client(&config)?;
         client.ensure_logged_in().await?;

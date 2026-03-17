@@ -8,7 +8,6 @@ use eyre::WrapErr;
 use rand::Rng;
 use reqwest::Url;
 use reqwest_cookie_store::{CookieStore, CookieStoreMutex};
-use time::OffsetDateTime;
 use tokio::sync::Mutex;
 use tokio::time::{Instant, sleep, sleep_until};
 use tracing::warn;
@@ -40,6 +39,8 @@ const LOGIN_RETRY_BACKOFFS: [Duration; 3] = [
     Duration::from_secs(15),
     Duration::from_secs(30),
 ];
+pub(crate) const MAIMAI_UNAVAILABLE_MESSAGE: &str =
+    "maimai DX NET is unavailable or under maintenance";
 
 impl MaimaiClient {
     pub(crate) fn new(config: &AppConfig) -> eyre::Result<Self> {
@@ -63,12 +64,10 @@ impl MaimaiClient {
     }
 
     pub(crate) async fn check_logged_in(&mut self) -> eyre::Result<bool> {
-        ensure_not_maintenance_now()?;
         intl::check_logged_in(self.client.as_ref()).await
     }
 
     pub(crate) async fn ensure_logged_in(&mut self) -> eyre::Result<()> {
-        ensure_not_maintenance_now()?;
         if self.check_logged_in().await? {
             return Ok(());
         }
@@ -87,7 +86,6 @@ impl MaimaiClient {
                 }
             }
 
-            ensure_not_maintenance_now()?;
             sleep(*backoff).await;
         }
 
@@ -98,7 +96,6 @@ impl MaimaiClient {
     }
 
     pub(crate) async fn login(&mut self) -> eyre::Result<()> {
-        ensure_not_maintenance_now()?;
         intl::login(
             self.client.as_ref(),
             &self.config.sega_id,
@@ -122,7 +119,6 @@ impl MaimaiClient {
     }
 
     pub(crate) async fn get_response(&self, url: &Url) -> eyre::Result<HttpResponse> {
-        ensure_not_maintenance_now()?;
         wait_for_request_slot().await;
         let resp = self
             .client
@@ -175,22 +171,13 @@ fn next_request_interval_ms() -> u64 {
     rand::thread_rng().gen_range(500..=1_000)
 }
 
-pub(crate) fn is_maintenance_window_now() -> bool {
-    let now = OffsetDateTime::now_local().unwrap_or_else(|_| OffsetDateTime::now_utc());
-    is_maintenance_window_hour(now.hour())
-}
-
-fn is_maintenance_window_hour(hour: u8) -> bool {
-    (4..7).contains(&hour)
-}
-
-fn ensure_not_maintenance_now() -> eyre::Result<()> {
-    if is_maintenance_window_now() {
-        return Err(eyre::eyre!(
-            "maimai DX NET maintenance window (04:00-07:00 local time); skipping request"
-        ));
-    }
-    Ok(())
+pub(crate) fn is_maintenance_error(err: &eyre::Error) -> bool {
+    err.chain().any(|cause| {
+        let message = cause.to_string();
+        message.contains("site unavailable (503)")
+            || message.contains("under maintenance")
+            || message.contains(MAIMAI_UNAVAILABLE_MESSAGE)
+    })
 }
 
 fn load_cookie_store(path: &std::path::Path) -> eyre::Result<CookieStore> {
@@ -222,7 +209,7 @@ fn save_cookie_store(
 
 #[cfg(test)]
 mod tests {
-    use super::next_request_interval_ms;
+    use super::{is_maintenance_error, next_request_interval_ms};
 
     #[test]
     fn request_interval_is_within_expected_range() {
@@ -230,5 +217,18 @@ mod tests {
             let interval_ms = next_request_interval_ms();
             assert!((500..=1_000).contains(&interval_ms));
         }
+    }
+
+    #[test]
+    fn maintenance_error_detects_site_unavailable_response() {
+        let err =
+            eyre::eyre!("site unavailable (503). maimai DX NET may be under maintenance. url=test");
+        assert!(is_maintenance_error(&err));
+    }
+
+    #[test]
+    fn maintenance_error_ignores_unrelated_failures() {
+        let err = eyre::eyre!("non-success status: 502 Bad Gateway url=test");
+        assert!(!is_maintenance_error(&err));
     }
 }

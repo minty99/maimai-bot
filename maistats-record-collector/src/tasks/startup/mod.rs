@@ -3,7 +3,7 @@ use sqlx::SqlitePool;
 use tracing::info;
 
 use crate::config::RecordCollectorConfig;
-use crate::http_client::is_maintenance_window_now;
+use crate::http_client::is_maintenance_error;
 use crate::tasks::utils::auth::{build_client, ensure_session};
 use crate::tasks::utils::player::fetch_player_data_logged_in;
 use crate::tasks::utils::recent::sync_recent_if_play_count_changed;
@@ -18,19 +18,34 @@ pub(crate) async fn startup_sync(
 ) -> Result<StartupSyncReport> {
     info!("Starting startup sync...");
 
-    if is_maintenance_window_now() {
-        info!("Skipping startup sync due to maintenance window (04:00-07:00 local time)");
-        return Ok(StartupSyncReport {
-            skipped_for_maintenance: true,
-            ..StartupSyncReport::default()
-        });
+    let mut client = build_client(config)?;
+    if let Err(err) = ensure_session(&mut client).await {
+        if is_maintenance_error(&err) {
+            info!(
+                "Skipping startup sync because maimai DX NET is unavailable or under maintenance"
+            );
+            return Ok(StartupSyncReport {
+                skipped_for_maintenance: true,
+                ..StartupSyncReport::default()
+            });
+        }
+        return Err(err);
     }
 
-    let mut client = build_client(config)?;
-    ensure_session(&mut client).await?;
-
     let seeded_scores = ensure_scores_seeded(db_pool, &mut client).await?;
-    let player_data = fetch_player_data_logged_in(&mut client).await?;
+    let player_data = match fetch_player_data_logged_in(&mut client).await {
+        Ok(player_data) => player_data,
+        Err(err) if is_maintenance_error(&err) => {
+            info!(
+                "Skipping startup sync because maimai DX NET is unavailable or under maintenance"
+            );
+            return Ok(StartupSyncReport {
+                skipped_for_maintenance: true,
+                ..StartupSyncReport::default()
+            });
+        }
+        Err(err) => return Err(err),
+    };
     let recent_outcome =
         sync_recent_if_play_count_changed(db_pool, &mut client, &player_data).await;
 
