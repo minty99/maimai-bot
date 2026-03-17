@@ -1,4 +1,3 @@
-use crate::http_client::is_maintenance_window_now;
 use axum::{Json, extract::State, http::StatusCode};
 use eyre::WrapErr;
 use reqwest::Url;
@@ -7,7 +6,7 @@ use tracing::debug;
 use maimai_parsers::parse_player_data_html;
 use models::ParsedPlayerProfile;
 
-use crate::error::Result;
+use crate::error::{Result, app_error_from_maimai};
 use crate::state::AppState;
 
 /// GET /api/player
@@ -17,42 +16,35 @@ pub(crate) async fn get_player(
 ) -> Result<(StatusCode, Json<ParsedPlayerProfile>)> {
     debug!("GET /api/player: fetching player data");
 
-    if is_maintenance_window_now() {
-        debug!("GET /api/player: maintenance window detected (04:00-07:00)");
-        return Err(crate::error::AppError::Maintenance(
-            "maimai DX NET maintenance window (04:00-07:00 local time)".to_string(),
-        ));
-    }
-
     let mut client = state
         .maimai_client()
         .wrap_err("create HTTP client")
-        .map_err(|e| crate::error::AppError::InternalError(e.to_string()))?;
+        .map_err(app_error_from_maimai)?;
 
     client
         .ensure_logged_in()
         .await
         .wrap_err("ensure logged in")
-        .map_err(|e| crate::error::AppError::InternalError(e.to_string()))?;
+        .map_err(app_error_from_maimai)?;
 
     let url = Url::parse("https://maimaidx-eng.com/maimai-mobile/playerData/")
         .wrap_err("parse playerData url")
-        .map_err(|e| crate::error::AppError::InternalError(e.to_string()))?;
+        .map_err(app_error_from_maimai)?;
 
     let bytes = client
         .get_response(&url)
         .await
         .wrap_err("fetch playerData url")
-        .map_err(|e| crate::error::AppError::HttpClientError(e.to_string()))?
+        .map_err(app_error_from_maimai)?
         .body;
 
     let html = String::from_utf8(bytes)
         .wrap_err("playerData response is not utf-8")
-        .map_err(|e| crate::error::AppError::InternalError(e.to_string()))?;
+        .map_err(app_error_from_maimai)?;
 
     let player_data = parse_player_data_html(&html)
         .wrap_err("parse playerData html")
-        .map_err(|e| crate::error::AppError::InternalError(e.to_string()))?;
+        .map_err(app_error_from_maimai)?;
 
     debug!(
         "GET /api/player: successfully fetched player data for {}",

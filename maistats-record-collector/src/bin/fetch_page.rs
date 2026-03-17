@@ -2,6 +2,7 @@ use eyre::WrapErr;
 use models::config::AppConfig;
 use reqwest::Url;
 
+#[allow(dead_code)]
 #[path = "../http_client.rs"]
 mod http_client;
 

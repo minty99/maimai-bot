@@ -19,7 +19,9 @@ import {
   readStoredJson,
   type StoredRandomPickerFilters,
 } from '../app/storage';
+import { daysSince, parseMaimaiPlayedAtToUnix } from '../app/maimaiTime';
 import { formatNumber, formatPercent, formatVersionLabel } from '../app/utils';
+import { DEFAULT_SCORE_FILTERS } from '../app/scoreFilterPresets';
 import { chartIdentityKey } from '../songIdentity';
 import type {
   ChartType,
@@ -49,6 +51,16 @@ interface FilterOption {
   subtitle?: string;
 }
 
+interface NumericRangeFilterCardProps {
+  label: string;
+  minValue: number;
+  maxValue: number;
+  onMinChange: (value: number) => void;
+  onMaxChange: (value: number) => void;
+  minInputStep?: number;
+  maxInputStep?: number;
+}
+
 const DIFFICULTY_COLORS: Record<DifficultyCategory, string> = {
   BASIC: '#4f9d69',
   ADVANCED: '#dba631',
@@ -72,6 +84,7 @@ function normalizeInput(value: string, fallback: number): number {
   }
   return clampLevel(parsed);
 }
+
 
 function formatAchievement(achievementX10000: number | null): string {
   if (achievementX10000 === null) {
@@ -133,6 +146,50 @@ function buildCompactVersionSummary(includeVersionIndices: number[] | null): str
     return 'VER ALL';
   }
   return `VER ${includeVersionIndices.length.toLocaleString()}`;
+}
+
+
+
+function NumericRangeFilterCard({
+  label,
+  minValue,
+  maxValue,
+  onMinChange,
+  onMaxChange,
+  minInputStep = 1,
+  maxInputStep = 1,
+}: NumericRangeFilterCardProps) {
+  return (
+    <section className="picker-filter-section">
+      <div className="filter-label">{label}</div>
+      <div className="picker-range-row">
+        <div className="picker-range-card">
+          <span>MIN</span>
+          <div className="picker-range-editor">
+            <input
+              type="number"
+              inputMode="decimal"
+              step={minInputStep}
+              value={minValue}
+              onChange={(event) => onMinChange(Number(event.target.value))}
+            />
+          </div>
+        </div>
+        <div className="picker-range-card">
+          <span>MAX</span>
+          <div className="picker-range-editor">
+            <input
+              type="number"
+              inputMode="decimal"
+              step={maxInputStep}
+              value={maxValue}
+              onChange={(event) => onMaxChange(Number(event.target.value))}
+            />
+          </div>
+        </div>
+      </div>
+    </section>
+  );
 }
 
 function getPickerResultMessage(error: Error): { empty: boolean; message: string } {
@@ -215,9 +272,17 @@ function FiltersMenu({
   versionSummary,
   isVersionLoading,
   versionError,
+  achievementMin,
+  achievementMax,
+  daysMin,
+  daysMax,
   onToggleChartType,
   onToggleDifficulty,
   onOpenVersions,
+  onAchievementMinChange,
+  onAchievementMaxChange,
+  onDaysMinChange,
+  onDaysMaxChange,
   onClose,
 }: {
   chartTypes: ChartType[];
@@ -225,9 +290,17 @@ function FiltersMenu({
   versionSummary: string;
   isVersionLoading: boolean;
   versionError: string | null;
+  achievementMin: number;
+  achievementMax: number;
+  daysMin: number;
+  daysMax: number;
   onToggleChartType: (value: ChartType) => void;
   onToggleDifficulty: (value: number) => void;
   onOpenVersions: () => void;
+  onAchievementMinChange: (value: number) => void;
+  onAchievementMaxChange: (value: number) => void;
+  onDaysMinChange: (value: number) => void;
+  onDaysMaxChange: (value: number) => void;
   onClose: () => void;
 }) {
   return (
@@ -300,6 +373,24 @@ function FiltersMenu({
             </button>
             {versionError ? <p className="picker-filter-error">{versionError}</p> : null}
           </section>
+
+          <NumericRangeFilterCard
+            label="Achievement"
+            minValue={achievementMin}
+            maxValue={achievementMax}
+            minInputStep={0.0001}
+            maxInputStep={0.0001}
+            onMinChange={onAchievementMinChange}
+            onMaxChange={onAchievementMaxChange}
+          />
+
+          <NumericRangeFilterCard
+            label="Last played (days)"
+            minValue={daysMin}
+            maxValue={daysMax}
+            onMinChange={onDaysMinChange}
+            onMaxChange={onDaysMaxChange}
+          />
         </div>
       </section>
     </div>
@@ -350,6 +441,19 @@ export function RandomPickerPage({
     }
     return coerceNumberArray(storedFilters.includeVersionIndices).sort((left, right) => left - right);
   });
+  const [achievementMin, setAchievementMin] = useState(() =>
+    coerceNumber(storedFilters?.achievementMin, DEFAULT_SCORE_FILTERS.achievementMin),
+  );
+  const [achievementMax, setAchievementMax] = useState(() =>
+    coerceNumber(storedFilters?.achievementMax, DEFAULT_SCORE_FILTERS.achievementMax),
+  );
+  const [daysMin, setDaysMin] = useState(() =>
+    coerceNumber(storedFilters?.daysMin, DEFAULT_SCORE_FILTERS.daysMin),
+  );
+  const [daysMax, setDaysMax] = useState(() =>
+    coerceNumber(storedFilters?.daysMax, DEFAULT_SCORE_FILTERS.daysMax),
+  );
+
   const [activeModal, setActiveModal] = useState<ModalKind>(null);
   const [pickedSong, setPickedSong] = useState<RandomPickerSong | null>(null);
   const [pickerError, setPickerError] = useState<string | null>(null);
@@ -365,9 +469,23 @@ export function RandomPickerPage({
       chartTypes,
       difficultyIndices,
       includeVersionIndices,
+      achievementMin,
+      achievementMax,
+      daysMin,
+      daysMax,
     };
     localStorage.setItem(RANDOM_PICKER_FILTERS_STORAGE_KEY, JSON.stringify(payload));
-  }, [chartTypes, difficultyIndices, includeVersionIndices, rangeFrom, rangeTo]);
+  }, [
+    achievementMax,
+    achievementMin,
+    chartTypes,
+    daysMax,
+    daysMin,
+    difficultyIndices,
+    includeVersionIndices,
+    rangeFrom,
+    rangeTo,
+  ]);
 
   const sortedVersionOptions = useMemo(() => {
     return [...versionOptions].sort((left, right) => {
@@ -455,6 +573,13 @@ export function RandomPickerPage({
     applyRange(rangeFrom, nextTo);
   }, [applyRange, rangeFrom, rangeTo, toDraft]);
 
+
+
+  const normalizedAchievementMin = Math.min(achievementMin, achievementMax);
+  const normalizedAchievementMax = Math.max(achievementMin, achievementMax);
+  const normalizedDaysMin = Math.max(0, Math.min(daysMin, daysMax));
+  const normalizedDaysMax = Math.max(0, Math.max(daysMin, daysMax));
+
   const toggleChartType = useCallback((value: ChartType) => {
     setChartTypes((current) => {
       if (current.includes(value)) {
@@ -507,10 +632,12 @@ export function RandomPickerPage({
       const versionSet = includeVersionIndices === null ? null : new Set(includeVersionIndices);
 
       const candidates: RandomPickerSong[] = [];
-      const levelPoolSet = new Set<string>();
 
       for (const song of songMetadata.values()) {
         for (const sheet of song.sheets) {
+          if (!sheet.region.intl) {
+            continue;
+          }
           if (sheet.internal_level === null || sheet.internal_level < rangeFrom || sheet.internal_level > rangeTo) {
             continue;
           }
@@ -522,8 +649,6 @@ export function RandomPickerPage({
             sheet.chart_type,
             sheet.difficulty,
           );
-          levelPoolSet.add(key);
-
           if (!chartTypeSet.has(sheet.chart_type)) {
             continue;
           }
@@ -539,6 +664,20 @@ export function RandomPickerPage({
           }
 
           const score = scoreMap.get(key);
+          const achievementPercent = (score?.achievement_x10000 ?? 0) / 10000;
+          if (achievementPercent < normalizedAchievementMin || achievementPercent > normalizedAchievementMax) {
+            continue;
+          }
+
+          const latestPlayedAtUnix = parseMaimaiPlayedAtToUnix(score?.last_played_at);
+          const daysSinceLastPlayed = daysSince(latestPlayedAtUnix);
+          if (
+            daysSinceLastPlayed !== null &&
+            (daysSinceLastPlayed < normalizedDaysMin || daysSinceLastPlayed > normalizedDaysMax)
+          ) {
+            continue;
+          }
+
           candidates.push({
             title: song.title,
             genre: song.genre,
@@ -557,7 +696,7 @@ export function RandomPickerPage({
             dxScoreMax: score?.dx_score_max ?? null,
             lastPlayedAt: score?.last_played_at ?? null,
             playCount: typeof score?.play_count === 'number' ? Math.trunc(score.play_count) : null,
-            levelSongCount: levelPoolSet.size,
+            levelSongCount: null,
             filteredSongCount: null,
           });
         }
@@ -571,7 +710,7 @@ export function RandomPickerPage({
       const withStats: RandomPickerSong = {
         ...selected,
         filteredSongCount: candidates.length,
-        levelSongCount: levelPoolSet.size,
+        levelSongCount: candidates.length,
       };
 
       if (!controller.signal.aborted) {
@@ -594,6 +733,10 @@ export function RandomPickerPage({
     chartTypes,
     difficultyIndices,
     includeVersionIndices,
+    normalizedAchievementMax,
+    normalizedAchievementMin,
+    normalizedDaysMax,
+    normalizedDaysMin,
     rangeFrom,
     rangeTo,
     scoreMap,
@@ -728,10 +871,10 @@ export function RandomPickerPage({
 
           {pickedSong.filteredSongCount !== null && pickedSong.levelSongCount !== null ? (
             <p className="picker-pool-line">
-              Picked from {formatNumber(pickedSong.filteredSongCount)} / {formatNumber(pickedSong.levelSongCount)} songs
+              Picked from {formatNumber(pickedSong.filteredSongCount)} songs
             </p>
           ) : (
-            <p className="picker-pool-line">Picked from No Data / No Data songs</p>
+            <p className="picker-pool-line">Picked from No Data songs</p>
           )}
 
           <div className={hasPersonal ? 'picker-achievement-row' : 'picker-achievement-row is-empty'}>
@@ -763,6 +906,14 @@ export function RandomPickerPage({
           onToggleChartType={toggleChartType}
           onToggleDifficulty={toggleDifficulty}
           onOpenVersions={() => setActiveModal('versions')}
+          achievementMin={achievementMin}
+          achievementMax={achievementMax}
+          daysMin={daysMin}
+          daysMax={daysMax}
+          onAchievementMinChange={setAchievementMin}
+          onAchievementMaxChange={setAchievementMax}
+          onDaysMinChange={setDaysMin}
+          onDaysMaxChange={setDaysMax}
           onClose={() => setActiveModal(null)}
         />
       );

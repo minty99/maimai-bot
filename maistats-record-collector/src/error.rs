@@ -1,10 +1,11 @@
 use axum::{Json, http::StatusCode, response::IntoResponse};
 use serde::Serialize;
 
+use crate::http_client::{MAIMAI_UNAVAILABLE_MESSAGE, is_maintenance_error};
+
 #[derive(Debug)]
 pub(crate) enum AppError {
     DatabaseError(String),
-    HttpClientError(String),
     NotFound(String),
     InternalError(String),
     BadRequest(String),
@@ -28,9 +29,6 @@ impl IntoResponse for AppError {
                 "DATABASE_ERROR",
                 None,
             ),
-            AppError::HttpClientError(msg) => {
-                (StatusCode::BAD_GATEWAY, msg, "HTTP_CLIENT_ERROR", None)
-            }
             AppError::NotFound(msg) => (StatusCode::NOT_FOUND, msg, "NOT_FOUND", None),
             AppError::InternalError(msg) => (
                 StatusCode::INTERNAL_SERVER_ERROR,
@@ -71,3 +69,11 @@ impl From<eyre::Error> for AppError {
 }
 
 pub(crate) type Result<T> = std::result::Result<T, AppError>;
+
+pub(crate) fn app_error_from_maimai(err: eyre::Error) -> AppError {
+    if is_maintenance_error(&err) {
+        return AppError::Maintenance(MAIMAI_UNAVAILABLE_MESSAGE.to_string());
+    }
+
+    AppError::InternalError(err.to_string())
+}

@@ -32,6 +32,10 @@ export interface StoredRandomPickerFilters {
   chartTypes?: ChartType[];
   difficultyIndices?: number[];
   includeVersionIndices?: number[] | null;
+  achievementMin?: number;
+  achievementMax?: number;
+  daysMin?: number;
+  daysMax?: number;
 }
 
 export function readStoredValue(key: string, fallbackValue: string): string {
