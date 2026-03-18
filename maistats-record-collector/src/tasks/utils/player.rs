@@ -1,7 +1,7 @@
 use eyre::{Result, WrapErr};
 use sqlx::SqlitePool;
 
-use crate::db::{get_app_state_u32, set_app_state_u32};
+use crate::db::get_app_state_u32;
 use crate::http_client::MaimaiClient;
 use crate::tasks::utils::auth::{ExpectedPage, fetch_html_with_auth_recovery};
 use maimai_parsers::parse_player_data_html;
@@ -23,31 +23,4 @@ pub(crate) async fn load_stored_total_play_count(pool: &SqlitePool) -> Result<Op
     get_app_state_u32(pool, STATE_KEY_TOTAL_PLAY_COUNT)
         .await
         .wrap_err("load stored total play count")
-}
-
-pub(crate) async fn persist_player_snapshot(
-    pool: &SqlitePool,
-    player_data: &ParsedPlayerProfile,
-) -> Result<()> {
-    let now = unix_timestamp();
-    set_app_state_u32(
-        pool,
-        STATE_KEY_TOTAL_PLAY_COUNT,
-        player_data.total_play_count,
-        now,
-    )
-    .await
-    .wrap_err("store total play count")?;
-    set_app_state_u32(pool, STATE_KEY_RATING, player_data.rating, now)
-        .await
-        .wrap_err("store rating")?;
-    Ok(())
-}
-
-fn unix_timestamp() -> i64 {
-    use std::time::{SystemTime, UNIX_EPOCH};
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap_or_default()
-        .as_secs() as i64
 }
