@@ -4,7 +4,8 @@ use eyre::WrapErr;
 use sqlx::sqlite::{SqliteConnectOptions, SqliteJournalMode, SqlitePoolOptions, SqliteSynchronous};
 use sqlx::{Pool, Sqlite};
 
-use models::{ChartType, ParsedPlayRecord, ParsedScoreEntry};
+use crate::tasks::utils::player::{STATE_KEY_RATING, STATE_KEY_TOTAL_PLAY_COUNT};
+use models::{ChartType, ParsedPlayRecord, ParsedPlayerProfile, ParsedScoreEntry};
 
 pub(crate) type SqlitePool = Pool<Sqlite>;
 
@@ -64,22 +65,6 @@ pub(crate) async fn replace_scores(
     Ok(())
 }
 
-pub(crate) async fn upsert_playlogs(
-    pool: &SqlitePool,
-    entries: &[ParsedPlayRecord],
-) -> eyre::Result<()> {
-    let mut tx = pool.begin().await.wrap_err("begin transaction")?;
-
-    for entry in entries {
-        let Some(played_at_unixtime) = entry.played_at_unixtime else {
-            continue;
-        };
-        insert_playlog(&mut tx, played_at_unixtime, entry).await?;
-    }
-
-    tx.commit().await.wrap_err("commit transaction")?;
-    Ok(())
-}
 pub(crate) async fn count_scores_rows(pool: &SqlitePool) -> eyre::Result<i64> {
     sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM scores")
         .fetch_one(pool)
@@ -100,8 +85,44 @@ pub(crate) async fn get_app_state_u32(pool: &SqlitePool, key: &str) -> eyre::Res
     Ok(Some(parsed))
 }
 
-pub(crate) async fn set_app_state_u32(
+pub(crate) async fn apply_recent_sync_atomic(
     pool: &SqlitePool,
+    score_updates: &[ParsedScoreEntry],
+    playlogs: &[ParsedPlayRecord],
+    player_data: &ParsedPlayerProfile,
+    updated_at: i64,
+) -> eyre::Result<()> {
+    let mut tx = pool.begin().await.wrap_err("begin transaction")?;
+
+    for entry in score_updates {
+        upsert_score(&mut tx, entry).await?;
+    }
+
+    for entry in playlogs {
+        let Some(played_at_unixtime) = entry.played_at_unixtime else {
+            continue;
+        };
+        insert_playlog(&mut tx, played_at_unixtime, entry).await?;
+    }
+
+    set_app_state_u32_in_tx(
+        &mut tx,
+        STATE_KEY_TOTAL_PLAY_COUNT,
+        player_data.total_play_count,
+        updated_at,
+    )
+    .await
+    .wrap_err("store total play count")?;
+    set_app_state_u32_in_tx(&mut tx, STATE_KEY_RATING, player_data.rating, updated_at)
+        .await
+        .wrap_err("store rating")?;
+
+    tx.commit().await.wrap_err("commit transaction")?;
+    Ok(())
+}
+
+async fn set_app_state_u32_in_tx(
+    tx: &mut sqlx::Transaction<'_, Sqlite>,
     key: &str,
     value: u32,
     updated_at: i64,
@@ -118,7 +139,7 @@ ON CONFLICT(key) DO UPDATE SET
     .bind(key)
     .bind(value.to_string())
     .bind(updated_at)
-    .execute(pool)
+    .execute(&mut **tx)
     .await
     .wrap_err("set app_state value")?;
     Ok(())

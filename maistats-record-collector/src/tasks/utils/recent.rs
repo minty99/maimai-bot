@@ -6,15 +6,17 @@ use sqlx::SqlitePool;
 use tokio::time::sleep;
 use tracing::warn;
 
-use crate::db::{upsert_playlogs, upsert_scores};
+use crate::db::apply_recent_sync_atomic;
 use crate::http_client::MaimaiClient;
 use crate::tasks::utils::auth::{ExpectedPage, fetch_html_with_auth_recovery};
-use crate::tasks::utils::player::{load_stored_total_play_count, persist_player_snapshot};
+use crate::tasks::utils::player::load_stored_total_play_count;
 use crate::tasks::utils::playlog_detail::fetch_playlog_detail;
 use crate::tasks::utils::scores::score_entries_from_song_detail;
 use crate::tasks::utils::song_detail::{SongDetailCache, fetch_song_detail_by_idx};
 use maimai_parsers::parse_recent_html;
-use models::{ParsedPlayRecord, ParsedPlayerProfile, ParsedPlaylogDetail, ParsedSongDetail};
+use models::{
+    ParsedPlayRecord, ParsedPlayerProfile, ParsedPlaylogDetail, ParsedScoreEntry, ParsedSongDetail,
+};
 
 const MAX_STALE_SONG_DETAIL_RETRIES: usize = 3;
 const STALE_SONG_DETAIL_RETRY_DELAY: Duration = Duration::from_secs(5);
@@ -71,17 +73,17 @@ pub(crate) async fn sync_recent_if_play_count_changed(
             Err(err) => return RecentSyncOutcome::FailedValidation(format!("{err:#}")),
         };
 
-    let (resolved_entries, refreshed_scores) =
+    let (resolved_entries, score_updates) =
         match resolve_recent_entries_and_collect_score_updates(pool, client, &entries).await {
             Ok(value) => value,
             Err(err) => return RecentSyncOutcome::FailedRequest(format!("{err:#}")),
         };
 
-    if let Err(err) = upsert_playlogs(pool, &resolved_entries).await {
-        return RecentSyncOutcome::FailedRequest(format!("{err:#}"));
-    }
-
-    if let Err(err) = persist_player_snapshot(pool, player_data).await {
+    let refreshed_scores = score_updates.len();
+    let now = unix_timestamp();
+    if let Err(err) =
+        apply_recent_sync_atomic(pool, &score_updates, &resolved_entries, player_data, now).await
+    {
         return RecentSyncOutcome::FailedRequest(format!("{err:#}"));
     }
 
@@ -104,7 +106,7 @@ async fn resolve_recent_entries_and_collect_score_updates(
     pool: &SqlitePool,
     client: &mut MaimaiClient,
     entries: &[ParsedPlayRecord],
-) -> Result<(Vec<ParsedPlayRecord>, usize)> {
+) -> Result<(Vec<ParsedPlayRecord>, Vec<ParsedScoreEntry>)> {
     let mut detail_cache = SongDetailCache::default();
     let mut resolved_entries = Vec::with_capacity(entries.len());
     let mut songs_to_refresh = HashMap::new();
@@ -146,18 +148,11 @@ async fn resolve_recent_entries_and_collect_score_updates(
         resolved_entries.push(resolved);
     }
 
-    if !songs_to_refresh.is_empty() {
-        let updates = songs_to_refresh
-            .into_values()
-            .flat_map(|entries| entries.into_iter())
-            .collect::<Vec<_>>();
-        upsert_scores(pool, &updates)
-            .await
-            .wrap_err("upsert affected song detail rows")?;
-        Ok((resolved_entries, updates.len()))
-    } else {
-        Ok((resolved_entries, 0))
-    }
+    let updates = songs_to_refresh
+        .into_values()
+        .flat_map(|entries| entries.into_iter())
+        .collect::<Vec<_>>();
+    Ok((resolved_entries, updates))
 }
 
 async fn score_row_is_affected(pool: &SqlitePool, recent: &ParsedPlayRecord) -> Result<bool> {
@@ -202,6 +197,14 @@ fn titles_mismatch_when_present(left: &str, right: &str) -> bool {
     let right = right.trim();
 
     !left.is_empty() && !right.is_empty() && left != right
+}
+
+fn unix_timestamp() -> i64 {
+    use std::time::{SystemTime, UNIX_EPOCH};
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs() as i64
 }
 
 async fn fetch_song_detail_for_recent_entry(
