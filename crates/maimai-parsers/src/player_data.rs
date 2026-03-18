@@ -67,13 +67,26 @@ fn extract_number_after(haystack: &str, needle: &str) -> Option<u32> {
     let start = haystack.find(needle)? + needle.len();
     let after = &haystack[start..];
 
-    let digits = after
+    let numeric = after
         .chars()
         .skip_while(|c| !c.is_ascii_digit())
-        .take_while(|c| c.is_ascii_digit())
+        .take_while(|c| c.is_ascii_digit() || *c == ',')
         .collect::<String>();
+    let digits = numeric.replace(',', "");
     if digits.is_empty() {
         return None;
     }
     digits.parse::<u32>().wrap_err("parse number").ok()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::extract_number_after;
+
+    #[test]
+    fn extract_number_after_parses_comma_separated_value() {
+        let text = "play count of current version 123 maimaiDX total play count 7,586";
+        let parsed = extract_number_after(text, "maimaiDX total play count");
+        assert_eq!(parsed, Some(7586));
+    }
 }
