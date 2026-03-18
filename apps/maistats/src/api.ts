@@ -14,6 +14,7 @@ export interface ExplorerPayload {
   playlogs: PlayRecordApiResponse[];
   songMetadata: Map<string, SongInfoResponse>;
   versions: SongVersionsListResponse | null;
+  playerProfile: PlayerProfile | null;
 }
 
 const RECENT_LIMIT = 10000;
@@ -108,13 +109,14 @@ export async function fetchExplorerPayload(
   const songInfoBase = normalizeBaseUrl(songInfoBaseUrl);
   const recordBase = normalizeBaseUrl(recordCollectorBaseUrl);
 
-  const [ratedScores, playlogs, versionsResult, songMetadata] = await Promise.all([
+  const [ratedScores, playlogs, versionsResult, songMetadata, playerProfile] = await Promise.all([
     getJson<ScoreApiResponse[]>(`${recordBase}/api/scores/rated`, signal),
     getJson<PlayRecordApiResponse[]>(`${recordBase}/api/recent?limit=${RECENT_LIMIT}`, signal),
     getJson<SongVersionsListResponse>(`${songInfoBase}/api/songs/versions`, signal).catch(
       () => null,
     ),
     fetchAllSongMetadata(songInfoBase, signal).catch(() => new Map<string, SongInfoResponse>()),
+    fetchPlayerProfile(recordBase, signal),
   ]);
 
   return {
@@ -122,6 +124,7 @@ export async function fetchExplorerPayload(
     playlogs,
     songMetadata,
     versions: versionsResult,
+    playerProfile,
   };
 }
 

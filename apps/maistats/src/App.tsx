@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import {
   fetchExplorerPayload,
+  type PlayerProfile,
   refreshSongScores,
 } from './api';
 import { HomePage } from './components/HomePage';
@@ -281,6 +282,7 @@ function App() {
   );
   const [versionsResponse, setVersionsResponse] = useState<string[]>([]);
   const [pickerVersionOptions, setPickerVersionOptions] = useState<SongVersionResponse[]>([]);
+  const [playerProfile, setPlayerProfile] = useState<PlayerProfile | null>(null);
 
   const [query, setQuery] = useState('');
   const [scoreQueryDraft, setScoreQueryDraft] = useState(query);
@@ -438,6 +440,7 @@ function App() {
       setPlaylogRecords([]);
       setVersionsResponse([]);
       setPickerVersionOptions([]);
+      setPlayerProfile(null);
       setSongMetadata(new Map<string, SongInfoResponse>());
       setLoadingError('Scores와 Playlogs 페이지는 Song Info와 Record Collector URL이 모두 필요합니다.');
       return;
@@ -480,6 +483,7 @@ function App() {
           .filter((name) => name.length > 0) ?? [],
       );
       setPickerVersionOptions(payload.versions?.versions ?? []);
+      setPlayerProfile(payload.playerProfile);
       loadedExplorerKeyRef.current = requestKey;
     } catch (error) {
       if (controller.signal.aborted) {
@@ -493,6 +497,7 @@ function App() {
       setSongMetadata(new Map<string, SongInfoResponse>());
       setVersionsResponse([]);
       setPickerVersionOptions([]);
+      setPlayerProfile(null);
       if (options?.throwOnError) {
         throw error instanceof Error ? error : new Error(String(error));
       }
@@ -1068,6 +1073,21 @@ function App() {
   const activeNavItem = NAV_ITEMS.find((item) => item.page === activePage) ?? NAV_ITEMS[0];
   const ActiveNavIcon = activeNavItem.Icon;
   const mobileNavItems = NAV_ITEMS;
+  const currentVersionPlayCount = playerProfile?.current_version_play_count;
+  const playerSummary = playerProfile ? (
+    <section className="app-player-summary">
+      <p className="app-player-summary-label">Connected player</p>
+      <p className="app-player-summary-name">{playerProfile.user_name}</p>
+      <p className="app-player-summary-count">
+        Play count:{' '}
+        <strong>
+          {typeof currentVersionPlayCount === 'number'
+            ? currentVersionPlayCount.toLocaleString()
+            : '-'}
+        </strong>
+      </p>
+    </section>
+  ) : null;
   const desktopSidebarTopContent = (
     <section className="panel app-sidebar-inline">
       <div className="brand-copy">
@@ -1090,6 +1110,7 @@ function App() {
           ))}
         </div>
       </nav>
+      {playerSummary}
     </section>
   );
 
@@ -1145,6 +1166,7 @@ function App() {
             ))}
           </div>
         </nav>
+        {playerSummary}
       </aside>
 
       <main className="app-main">
