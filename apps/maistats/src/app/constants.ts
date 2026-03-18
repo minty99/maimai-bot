@@ -65,6 +65,7 @@ export const VERSION_ORDER = [
   'PRiSM',
   'PRiSM PLUS',
   'CiRCLE',
+  'CiRCLE PLUS',
 ] as const;
 
 export const SCORE_RANK_ORDER: ScoreRank[] = [

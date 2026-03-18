@@ -19,7 +19,7 @@ import {
   ScoreSortKey,
   VERSION_ORDER_MAP,
 } from './app/constants';
-import { sortByOrder } from './app/utils';
+import { filterAvailableVersions, sortByOrder } from './app/utils';
 import {
   ALL_FILTER_PRESET_ID,
   DEFAULT_SCORE_FILTERS,
@@ -486,12 +486,9 @@ function App() {
       setScoreRecords(payload.ratedScores);
       setPlaylogRecords(payload.playlogs);
       setSongMetadata(payload.songMetadata);
-      setVersionsResponse(
-        payload.versions?.versions
-          .map((version) => version.version_name)
-          .filter((name) => name.length > 0) ?? [],
-      );
-      setPickerVersionOptions(payload.versions?.versions ?? []);
+      const availableVersions = filterAvailableVersions(payload.versions?.versions ?? []);
+      setVersionsResponse(availableVersions.map((version) => version.version_name));
+      setPickerVersionOptions(availableVersions);
       setPlayerProfile(payload.playerProfile);
       loadedExplorerKeyRef.current = requestKey;
     } catch (error) {

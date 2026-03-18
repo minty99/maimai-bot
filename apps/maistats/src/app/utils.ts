@@ -1,4 +1,4 @@
-import type { SongAliases } from '../types';
+import type { SongAliases, SongVersionResponse } from '../types';
 
 export function formatPercent(value: number | null, digits = 4): string {
   if (value === null) {
@@ -64,6 +64,10 @@ export function sortByOrder<T extends string>(
     }
     return left.localeCompare(right, locale);
   });
+}
+
+export function filterAvailableVersions(versions: SongVersionResponse[]): SongVersionResponse[] {
+  return versions.filter((version) => version.song_count > 0 && version.version_name.trim().length > 0);
 }
 
 export function sortIndicator(isActive: boolean, isDesc: boolean): string {

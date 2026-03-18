@@ -130,6 +130,7 @@ fn parse_maimai_version(value: &str) -> Option<MaimaiVersion> {
         "prism" => Some(MaimaiVersion::Prism),
         "prismplus" => Some(MaimaiVersion::PrismPlus),
         "circle" => Some(MaimaiVersion::Circle),
+        "circleplus" => Some(MaimaiVersion::CirclePlus),
         _ => None,
     }
 }
@@ -415,11 +416,16 @@ pub enum MaimaiVersion {
     Prism = 23,
     PrismPlus = 24,
     Circle = 25,
+    CirclePlus = 26,
 }
 
 impl MaimaiVersion {
     pub const fn as_index(self) -> u8 {
         self as u8
+    }
+
+    pub const fn is_available_in_intl(self) -> bool {
+        !matches!(self, Self::CirclePlus)
     }
 
     pub const fn as_str(self) -> &'static str {
@@ -450,6 +456,7 @@ impl MaimaiVersion {
             Self::Prism => "PRiSM",
             Self::PrismPlus => "PRiSM PLUS",
             Self::Circle => "CiRCLE",
+            Self::CirclePlus => "CiRCLE PLUS",
         }
     }
 
@@ -780,6 +787,12 @@ mod tests {
     }
 
     #[test]
+    fn intl_availability_skips_future_jp_only_versions() {
+        assert!(MaimaiVersion::Circle.is_available_in_intl());
+        assert!(!MaimaiVersion::CirclePlus.is_available_in_intl());
+    }
+
+    #[test]
     fn chart_and_difficulty_display_are_canonical() {
         assert_eq!(ChartType::Std.to_string(), "STD");
         assert_eq!(ChartType::Dx.to_string(), "DX");
@@ -816,6 +829,10 @@ mod tests {
         assert_eq!(
             "25".parse::<MaimaiVersion>().ok(),
             Some(MaimaiVersion::Circle)
+        );
+        assert_eq!(
+            "circle plus".parse::<MaimaiVersion>().ok(),
+            Some(MaimaiVersion::CirclePlus)
         );
         assert_eq!(
             "music_icon_sssp.png".parse::<ScoreRank>().ok(),
