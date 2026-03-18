@@ -18,6 +18,7 @@
 공용 곡 정보 서버입니다.
 
 - 내부 `songdb` 서브시스템으로 곡 목록, 버전, 내부 레벨, 재킷 이미지를 준비합니다.
+- 내부 레벨은 maimai DX NET의 레벨별 곡 목록 페이지를 읽어 매일 다시 추론합니다.
 - `data/song_data/data.json`을 메모리로 로드해 API로 제공합니다.
 - SongDB 관련 env가 설정돼 있으면 시작 시 업데이트를 시도하고, 이후 매일 **07:30 KST**에 다시 갱신합니다.
 - 대표 엔드포인트:
@@ -99,7 +100,7 @@
 - npm
 - SEGA ID 계정
 - Discord Bot Token 및 개발자 Discord User ID
-- Song Info 갱신까지 사용할 경우 SongDB 관련 인증 정보와 `GOOGLE_API_KEY`
+- Song Info 갱신까지 사용할 경우 SongDB 관련 인증 정보
 
 ## 환경 변수
 
@@ -131,7 +132,6 @@ cp .env.example .env
   - `MAIMAI_JP_SEGA_ID`
   - `MAIMAI_JP_SEGA_PASSWORD`
   - `USER_AGENT`
-  - `GOOGLE_API_KEY`
 
 프런트엔드는 별도 `.env`를 사용합니다.
 
