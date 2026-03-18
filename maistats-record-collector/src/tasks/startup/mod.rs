@@ -4,13 +4,13 @@ use tracing::info;
 
 use crate::config::RecordCollectorConfig;
 use crate::http_client::is_maintenance_error;
-use crate::tasks::utils::auth::{build_client, ensure_session};
-use crate::tasks::utils::player::fetch_player_data_logged_in;
+use crate::tasks::utils::auth::build_client;
 use crate::tasks::utils::recent::sync_recent_if_play_count_changed;
 use crate::tasks::utils::reporting::{SyncCycleReport, log_recent_outcome};
 use crate::tasks::utils::scores::ensure_scores_seeded;
+use crate::tasks::utils::source::CollectorSource;
 
-pub(crate) type StartupSyncReport = SyncCycleReport;
+pub type StartupSyncReport = SyncCycleReport;
 
 pub(crate) async fn startup_sync(
     db_pool: &SqlitePool,
@@ -19,7 +19,14 @@ pub(crate) async fn startup_sync(
     info!("Starting startup sync...");
 
     let mut client = build_client(config)?;
-    if let Err(err) = ensure_session(&mut client).await {
+    startup_sync_with_source(db_pool, &mut client).await
+}
+
+pub async fn startup_sync_with_source(
+    db_pool: &SqlitePool,
+    source: &mut impl CollectorSource,
+) -> Result<StartupSyncReport> {
+    if let Err(err) = source.ensure_session().await {
         if is_maintenance_error(&err) {
             info!(
                 "Skipping startup sync because maimai DX NET is unavailable or under maintenance"
@@ -32,8 +39,8 @@ pub(crate) async fn startup_sync(
         return Err(err);
     }
 
-    let seeded_scores = ensure_scores_seeded(db_pool, &mut client).await?;
-    let player_data = match fetch_player_data_logged_in(&mut client).await {
+    let seeded_scores = ensure_scores_seeded(db_pool, source).await?;
+    let player_data = match source.fetch_player_data().await {
         Ok(player_data) => player_data,
         Err(err) if is_maintenance_error(&err) => {
             info!(
@@ -46,8 +53,7 @@ pub(crate) async fn startup_sync(
         }
         Err(err) => return Err(err),
     };
-    let recent_outcome =
-        sync_recent_if_play_count_changed(db_pool, &mut client, &player_data).await;
+    let recent_outcome = sync_recent_if_play_count_changed(db_pool, source, &player_data).await;
 
     log_recent_outcome("startup", &recent_outcome);
     info!(
@@ -57,7 +63,8 @@ pub(crate) async fn startup_sync(
 
     Ok(StartupSyncReport {
         skipped_for_maintenance: false,
-        seeded_scores,
+        seeded: seeded_scores.seeded,
+        seeded_rows_written: seeded_scores.rows_written,
         recent_outcome: Some(recent_outcome),
     })
 }

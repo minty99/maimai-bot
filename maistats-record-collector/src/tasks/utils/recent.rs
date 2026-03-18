@@ -8,11 +8,12 @@ use tracing::warn;
 
 use crate::db::apply_recent_sync_atomic;
 use crate::http_client::MaimaiClient;
-use crate::tasks::utils::auth::{ExpectedPage, fetch_html_with_auth_recovery};
+use crate::tasks::utils::auth::fetch_html_with_auth_recovery;
 use crate::tasks::utils::player::load_stored_total_play_count;
-use crate::tasks::utils::playlog_detail::fetch_playlog_detail;
 use crate::tasks::utils::scores::score_entries_from_song_detail;
-use crate::tasks::utils::song_detail::{SongDetailCache, fetch_song_detail_by_idx};
+use crate::tasks::utils::song_detail::SongDetailCache;
+use crate::tasks::utils::source::CollectorSource;
+use crate::tasks::utils::source::ExpectedPage;
 use maimai_parsers::parse_recent_html;
 use models::{
     ParsedPlayRecord, ParsedPlayerProfile, ParsedPlaylogDetail, ParsedScoreEntry, ParsedSongDetail,
@@ -22,7 +23,7 @@ const MAX_STALE_SONG_DETAIL_RETRIES: usize = 3;
 const STALE_SONG_DETAIL_RETRY_DELAY: Duration = Duration::from_secs(5);
 
 #[derive(Debug, Clone)]
-pub(crate) enum RecentSyncOutcome {
+pub enum RecentSyncOutcome {
     SkippedUnchanged,
     SeededWithoutPriorSnapshot {
         inserted_playlogs: usize,
@@ -49,7 +50,7 @@ pub(crate) async fn fetch_recent_entries_logged_in(
 
 pub(crate) async fn sync_recent_if_play_count_changed(
     pool: &SqlitePool,
-    client: &mut MaimaiClient,
+    source: &mut impl CollectorSource,
     player_data: &ParsedPlayerProfile,
 ) -> RecentSyncOutcome {
     let stored_total = match load_stored_total_play_count(pool).await {
@@ -63,7 +64,7 @@ pub(crate) async fn sync_recent_if_play_count_changed(
         return RecentSyncOutcome::SkippedUnchanged;
     }
 
-    let entries = match fetch_recent_entries_logged_in(client).await {
+    let entries = match source.fetch_recent_entries().await {
         Ok(entries) => entries,
         Err(err) => return RecentSyncOutcome::FailedRequest(format!("{err:#}")),
     };
@@ -74,7 +75,7 @@ pub(crate) async fn sync_recent_if_play_count_changed(
         };
 
     let (resolved_entries, score_updates) =
-        match resolve_recent_entries_and_collect_score_updates(pool, client, &entries).await {
+        match resolve_recent_entries_and_collect_score_updates(pool, source, &entries).await {
             Ok(value) => value,
             Err(err) => return RecentSyncOutcome::FailedRequest(format!("{err:#}")),
         };
@@ -104,7 +105,7 @@ pub(crate) async fn sync_recent_if_play_count_changed(
 
 async fn resolve_recent_entries_and_collect_score_updates(
     pool: &SqlitePool,
-    client: &mut MaimaiClient,
+    source: &mut impl CollectorSource,
     entries: &[ParsedPlayRecord],
 ) -> Result<(Vec<ParsedPlayRecord>, Vec<ParsedScoreEntry>)> {
     let mut detail_cache = SongDetailCache::default();
@@ -116,7 +117,8 @@ async fn resolve_recent_entries_and_collect_score_updates(
             .playlog_detail_idx
             .as_deref()
             .ok_or_else(|| eyre::eyre!("recent entry is missing playlogDetail idx"))?;
-        let playlog_detail = fetch_playlog_detail(client, playlog_idx)
+        let playlog_detail = source
+            .fetch_playlog_detail(playlog_idx)
             .await
             .wrap_err("fetch playlogDetail from recent entry")?;
         if titles_mismatch_when_present(&playlog_detail.title, &entry.title) {
@@ -128,7 +130,7 @@ async fn resolve_recent_entries_and_collect_score_updates(
         }
 
         let detail =
-            fetch_song_detail_for_recent_entry(client, &mut detail_cache, &playlog_detail, entry)
+            fetch_song_detail_for_recent_entry(source, &mut detail_cache, &playlog_detail, entry)
                 .await?;
 
         let mut resolved = entry.clone();
@@ -208,7 +210,7 @@ fn unix_timestamp() -> i64 {
 }
 
 async fn fetch_song_detail_for_recent_entry(
-    client: &mut MaimaiClient,
+    source: &mut impl CollectorSource,
     cache: &mut SongDetailCache,
     playlog_detail: &ParsedPlaylogDetail,
     recent: &ParsedPlayRecord,
@@ -220,7 +222,8 @@ async fn fetch_song_detail_for_recent_entry(
     }
 
     for attempt in 1..=MAX_STALE_SONG_DETAIL_RETRIES {
-        let detail = fetch_song_detail_by_idx(client, &playlog_detail.music_detail_idx)
+        let detail = source
+            .fetch_song_detail(&playlog_detail.music_detail_idx)
             .await
             .wrap_err("fetch musicDetail from playlogDetail")?;
         if titles_mismatch_when_present(&detail.title, &playlog_detail.title) {

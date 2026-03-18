@@ -1,0 +1,11 @@
+[
+  {"title":"Song Alpha","genre":"POPS","artist":"Artist A","chart_type":"STD","diff_category":"BASIC","achievement_x10000":888888,"rank":"A","fc":null,"sync":null,"dx_score":900,"dx_score_max":1000,"last_played_at":"2026/03/01 10:00","play_count":4},
+  {"title":"Song Alpha","genre":"POPS","artist":"Artist A","chart_type":"STD","diff_category":"ADVANCED","achievement_x10000":910000,"rank":"AAA","fc":"FC","sync":"FS","dx_score":1100,"dx_score_max":1200,"last_played_at":"2026/03/01 10:00","play_count":2},
+  {"title":"Song Bravo","genre":"niconico","artist":"Artist B","chart_type":"DX","diff_category":"BASIC","achievement_x10000":971234,"rank":"S","fc":"FC","sync":"FS","dx_score":1000,"dx_score_max":1500,"last_played_at":"2026/02/28 09:00","play_count":5},
+  {"title":"Song Bravo","genre":"niconico","artist":"Artist B","chart_type":"DX","diff_category":"EXPERT","achievement_x10000":987654,"rank":"S","fc":"FC","sync":"FS","dx_score":1450,"dx_score_max":1500,"last_played_at":"2026/03/02 11:00","play_count":6},
+  {"title":"Song Charlie","genre":"GAME","artist":"Artist C","chart_type":"STD","diff_category":"BASIC","achievement_x10000":null,"rank":null,"fc":null,"sync":null,"dx_score":null,"dx_score_max":null,"last_played_at":null,"play_count":null},
+  {"title":"Song Delta","genre":"VARIETY","artist":"Artist D","chart_type":"DX","diff_category":"BASIC","achievement_x10000":1000000,"rank":"SSS","fc":"AP","sync":"FDX+","dx_score":2000,"dx_score_max":2000,"last_played_at":"2026/03/01 12:00","play_count":7},
+  {"title":"Song Delta","genre":"VARIETY","artist":"Artist D","chart_type":"DX","diff_category":"MASTER","achievement_x10000":990100,"rank":"SSS","fc":"AP","sync":"FDX+","dx_score":1990,"dx_score_max":2000,"last_played_at":"2026/03/03 12:00","play_count":8},
+  {"title":"Song Echo","genre":"TOUHOU","artist":"Artist E","chart_type":"STD","diff_category":"BASIC","achievement_x10000":800000,"rank":"BBB","fc":null,"sync":null,"dx_score":1200,"dx_score_max":2000,"last_played_at":"2026/03/01 13:00","play_count":1},
+  {"title":"Song Echo","genre":"TOUHOU","artist":"Artist E","chart_type":"STD","diff_category":"Re:MASTER","achievement_x10000":995000,"rank":"SS","fc":"FC+","sync":"FS+","dx_score":1800,"dx_score_max":2000,"last_played_at":"2026/03/04 13:00","play_count":2}
+]

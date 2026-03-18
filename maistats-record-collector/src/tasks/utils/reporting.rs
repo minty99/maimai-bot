@@ -4,10 +4,22 @@ use crate::tasks::utils::recent::RecentSyncOutcome;
 use crate::tasks::utils::scores::SeedScoresOutcome;
 
 #[derive(Debug, Clone, Default)]
-pub(crate) struct SyncCycleReport {
-    pub(crate) skipped_for_maintenance: bool,
-    pub(crate) seeded_scores: SeedScoresOutcome,
-    pub(crate) recent_outcome: Option<RecentSyncOutcome>,
+pub struct SyncCycleReport {
+    pub skipped_for_maintenance: bool,
+    pub seeded: bool,
+    pub seeded_rows_written: usize,
+    pub recent_outcome: Option<RecentSyncOutcome>,
+}
+
+impl From<SeedScoresOutcome> for SyncCycleReport {
+    fn from(value: SeedScoresOutcome) -> Self {
+        Self {
+            skipped_for_maintenance: false,
+            seeded: value.seeded,
+            seeded_rows_written: value.rows_written,
+            recent_outcome: None,
+        }
+    }
 }
 
 pub(crate) fn log_recent_outcome(scope: &str, outcome: &RecentSyncOutcome) {

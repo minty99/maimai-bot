@@ -1,0 +1,332 @@
+{
+  "player_data": {
+    "user_name": "fixture-user",
+    "rating": 12345,
+    "current_version_play_count": 50,
+    "total_play_count": 200
+  },
+  "recent_entries": [
+    {
+      "played_at_unixtime": 200001,
+      "playlog_detail_idx": "pl-echo-200001",
+      "track": 3,
+      "played_at": "2026/03/04 13:00",
+      "credit_id": null,
+      "title": "Song Echo",
+      "genre": null,
+      "artist": null,
+      "chart_type": "STD",
+      "diff_category": "Re:MASTER",
+      "level": "13+",
+      "achievement_percent": 99.5,
+      "achievement_new_record": true,
+      "score_rank": "SS",
+      "fc": "FC+",
+      "sync": "FS+",
+      "dx_score": 1800,
+      "dx_score_max": 2000
+    },
+    {
+      "played_at_unixtime": 200000,
+      "playlog_detail_idx": "pl-delta-200000",
+      "track": 2,
+      "played_at": "2026/03/03 12:00",
+      "credit_id": null,
+      "title": "Song Delta",
+      "genre": null,
+      "artist": null,
+      "chart_type": "DX",
+      "diff_category": "MASTER",
+      "level": "12",
+      "achievement_percent": 99.01,
+      "achievement_new_record": false,
+      "score_rank": "SSS",
+      "fc": "AP",
+      "sync": "FDX+",
+      "dx_score": 1990,
+      "dx_score_max": 2000
+    },
+    {
+      "played_at_unixtime": 199999,
+      "playlog_detail_idx": "pl-bravo-199999",
+      "track": 1,
+      "played_at": "2026/03/02 11:00",
+      "credit_id": null,
+      "title": "Song Bravo",
+      "genre": null,
+      "artist": null,
+      "chart_type": "DX",
+      "diff_category": "EXPERT",
+      "level": "10+",
+      "achievement_percent": 98.7654,
+      "achievement_new_record": false,
+      "score_rank": "S",
+      "fc": "FC",
+      "sync": "FS",
+      "dx_score": 1450,
+      "dx_score_max": 1500
+    }
+  ],
+  "score_lists": {
+    "diff0": [
+      {
+        "title": "Song Alpha",
+        "genre": "",
+        "artist": "",
+        "chart_type": "STD",
+        "diff_category": "BASIC",
+        "level": "2",
+        "achievement_percent": null,
+        "rank": null,
+        "fc": null,
+        "sync": null,
+        "dx_score": null,
+        "dx_score_max": null,
+        "last_played_at": null,
+        "play_count": null,
+        "source_idx": "song-alpha"
+      },
+      {
+        "title": "Song Bravo",
+        "genre": "",
+        "artist": "",
+        "chart_type": "DX",
+        "diff_category": "BASIC",
+        "level": "3",
+        "achievement_percent": 97.1234,
+        "rank": "S",
+        "fc": "FC",
+        "sync": "FS",
+        "dx_score": 1000,
+        "dx_score_max": 1500,
+        "last_played_at": null,
+        "play_count": null,
+        "source_idx": "song-bravo"
+      },
+      {
+        "title": "Song Charlie",
+        "genre": "",
+        "artist": "",
+        "chart_type": "STD",
+        "diff_category": "BASIC",
+        "level": "4",
+        "achievement_percent": null,
+        "rank": null,
+        "fc": null,
+        "sync": null,
+        "dx_score": null,
+        "dx_score_max": null,
+        "last_played_at": null,
+        "play_count": null,
+        "source_idx": "song-charlie"
+      },
+      {
+        "title": "Song Delta",
+        "genre": "",
+        "artist": "",
+        "chart_type": "DX",
+        "diff_category": "BASIC",
+        "level": "5",
+        "achievement_percent": 100.0,
+        "rank": "SSS",
+        "fc": "AP",
+        "sync": "FDX+",
+        "dx_score": 2000,
+        "dx_score_max": 2000,
+        "last_played_at": null,
+        "play_count": null,
+        "source_idx": "song-delta"
+      },
+      {
+        "title": "Song Echo",
+        "genre": "",
+        "artist": "",
+        "chart_type": "STD",
+        "diff_category": "BASIC",
+        "level": "6",
+        "achievement_percent": 80.0,
+        "rank": "BBB",
+        "fc": null,
+        "sync": null,
+        "dx_score": 1200,
+        "dx_score_max": 2000,
+        "last_played_at": null,
+        "play_count": null,
+        "source_idx": "song-echo"
+      }
+    ]
+  },
+  "playlog_details": {
+    "pl-echo-200001": {
+      "title": "Song Echo",
+      "music_detail_idx": "song-echo"
+    },
+    "pl-delta-200000": {
+      "title": "Song Delta",
+      "music_detail_idx": "song-delta"
+    },
+    "pl-bravo-199999": {
+      "title": "Song Bravo",
+      "music_detail_idx": "song-bravo"
+    }
+  },
+  "song_details": {
+    "song-alpha": {
+      "title": "Song Alpha",
+      "genre": "POPS",
+      "artist": "Artist A",
+      "chart_type": "STD",
+      "difficulties": [
+        {
+          "diff_category": "BASIC",
+          "level": "2",
+          "chart_type": "STD",
+          "achievement_percent": 88.8888,
+          "rank": "A",
+          "fc": null,
+          "sync": null,
+          "dx_score": 900,
+          "dx_score_max": 1000,
+          "last_played_at": "2026/03/01 10:00",
+          "play_count": 4
+        },
+        {
+          "diff_category": "ADVANCED",
+          "level": "7",
+          "chart_type": "STD",
+          "achievement_percent": 91.0,
+          "rank": "AAA",
+          "fc": "FC",
+          "sync": "FS",
+          "dx_score": 1100,
+          "dx_score_max": 1200,
+          "last_played_at": "2026/03/01 10:00",
+          "play_count": 2
+        }
+      ]
+    },
+    "song-bravo": {
+      "title": "Song Bravo",
+      "genre": "niconico",
+      "artist": "Artist B",
+      "chart_type": "DX",
+      "difficulties": [
+        {
+          "diff_category": "BASIC",
+          "level": "3",
+          "chart_type": "DX",
+          "achievement_percent": 97.1234,
+          "rank": "S",
+          "fc": "FC",
+          "sync": "FS",
+          "dx_score": 1000,
+          "dx_score_max": 1500,
+          "last_played_at": "2026/02/28 09:00",
+          "play_count": 5
+        },
+        {
+          "diff_category": "EXPERT",
+          "level": "10+",
+          "chart_type": "DX",
+          "achievement_percent": 98.7654,
+          "rank": "S",
+          "fc": "FC",
+          "sync": "FS",
+          "dx_score": 1450,
+          "dx_score_max": 1500,
+          "last_played_at": "2026/03/02 11:00",
+          "play_count": 6
+        }
+      ]
+    },
+    "song-charlie": {
+      "title": "Song Charlie",
+      "genre": "GAME",
+      "artist": "Artist C",
+      "chart_type": "STD",
+      "difficulties": [
+        {
+          "diff_category": "BASIC",
+          "level": "4",
+          "chart_type": "STD",
+          "achievement_percent": null,
+          "rank": null,
+          "fc": null,
+          "sync": null,
+          "dx_score": null,
+          "dx_score_max": null,
+          "last_played_at": null,
+          "play_count": null
+        }
+      ]
+    },
+    "song-delta": {
+      "title": "Song Delta",
+      "genre": "VARIETY",
+      "artist": "Artist D",
+      "chart_type": "DX",
+      "difficulties": [
+        {
+          "diff_category": "BASIC",
+          "level": "5",
+          "chart_type": "DX",
+          "achievement_percent": 100.0,
+          "rank": "SSS",
+          "fc": "AP",
+          "sync": "FDX+",
+          "dx_score": 2000,
+          "dx_score_max": 2000,
+          "last_played_at": "2026/03/01 12:00",
+          "play_count": 7
+        },
+        {
+          "diff_category": "MASTER",
+          "level": "12",
+          "chart_type": "DX",
+          "achievement_percent": 99.01,
+          "rank": "SSS",
+          "fc": "AP",
+          "sync": "FDX+",
+          "dx_score": 1990,
+          "dx_score_max": 2000,
+          "last_played_at": "2026/03/03 12:00",
+          "play_count": 8
+        }
+      ]
+    },
+    "song-echo": {
+      "title": "Song Echo",
+      "genre": "TOUHOU",
+      "artist": "Artist E",
+      "chart_type": "STD",
+      "difficulties": [
+        {
+          "diff_category": "BASIC",
+          "level": "6",
+          "chart_type": "STD",
+          "achievement_percent": 80.0,
+          "rank": "BBB",
+          "fc": null,
+          "sync": null,
+          "dx_score": 1200,
+          "dx_score_max": 2000,
+          "last_played_at": "2026/03/01 13:00",
+          "play_count": 1
+        },
+        {
+          "diff_category": "Re:MASTER",
+          "level": "13+",
+          "chart_type": "STD",
+          "achievement_percent": 99.5,
+          "rank": "SS",
+          "fc": "FC+",
+          "sync": "FS+",
+          "dx_score": 1800,
+          "dx_score_max": 2000,
+          "last_played_at": "2026/03/04 13:00",
+          "play_count": 2
+        }
+      ]
+    }
+  }
+}

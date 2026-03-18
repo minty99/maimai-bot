@@ -1,0 +1,96 @@
+{
+  "player_data": {
+    "user_name": "fixture-user",
+    "rating": 12380,
+    "current_version_play_count": 51,
+    "total_play_count": 201
+  },
+  "recent_entries": [
+    {
+      "played_at_unixtime": 200101,
+      "playlog_detail_idx": "pl-alpha-200101",
+      "track": 2,
+      "played_at": "2026/03/05 14:30",
+      "credit_id": null,
+      "title": "Song Alpha",
+      "genre": null,
+      "artist": null,
+      "chart_type": "STD",
+      "diff_category": "ADVANCED",
+      "level": "7",
+      "achievement_percent": 94.0,
+      "achievement_new_record": true,
+      "score_rank": "AAA",
+      "fc": "FC",
+      "sync": "FS",
+      "dx_score": 1120,
+      "dx_score_max": 1200
+    },
+    {
+      "played_at_unixtime": 200100,
+      "playlog_detail_idx": "pl-alpha-200100",
+      "track": 1,
+      "played_at": "2026/03/05 14:10",
+      "credit_id": null,
+      "title": "Song Alpha",
+      "genre": null,
+      "artist": null,
+      "chart_type": "STD",
+      "diff_category": "BASIC",
+      "level": "2",
+      "achievement_percent": 90.0,
+      "achievement_new_record": false,
+      "score_rank": "AA",
+      "fc": null,
+      "sync": null,
+      "dx_score": 920,
+      "dx_score_max": 1000
+    }
+  ],
+  "playlog_details": {
+    "pl-alpha-200101": {
+      "title": "Song Alpha",
+      "music_detail_idx": "song-alpha"
+    },
+    "pl-alpha-200100": {
+      "title": "Song Alpha",
+      "music_detail_idx": "song-alpha"
+    }
+  },
+  "song_details": {
+    "song-alpha": {
+      "title": "Song Alpha",
+      "genre": "POPS",
+      "artist": "Artist A",
+      "chart_type": "STD",
+      "difficulties": [
+        {
+          "diff_category": "BASIC",
+          "level": "2",
+          "chart_type": "STD",
+          "achievement_percent": 90.0,
+          "rank": "AA",
+          "fc": null,
+          "sync": null,
+          "dx_score": 920,
+          "dx_score_max": 1000,
+          "last_played_at": "2026/03/05 14:10",
+          "play_count": 5
+        },
+        {
+          "diff_category": "ADVANCED",
+          "level": "7",
+          "chart_type": "STD",
+          "achievement_percent": 94.0,
+          "rank": "AAA",
+          "fc": "FC",
+          "sync": "FS",
+          "dx_score": 1120,
+          "dx_score_max": 1200,
+          "last_played_at": "2026/03/05 14:30",
+          "play_count": 3
+        }
+      ]
+    }
+  }
+}

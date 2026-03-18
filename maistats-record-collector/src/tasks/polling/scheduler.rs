@@ -20,8 +20,8 @@ pub(crate) fn start_background_polling(app_state: AppState) {
                 Ok(report) => info!(
                     "Periodic poll finished: maintenance_skip={} seeded={} seeded_rows={} recent_present={}",
                     report.skipped_for_maintenance,
-                    report.seeded_scores.seeded,
-                    report.seeded_scores.rows_written,
+                    report.seeded,
+                    report.seeded_rows_written,
                     report.recent_outcome.is_some()
                 ),
                 Err(err) => error!("Periodic poll failed: {err:#}"),

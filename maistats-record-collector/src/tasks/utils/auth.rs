@@ -3,17 +3,9 @@ use reqwest::Url;
 
 use crate::config::RecordCollectorConfig;
 use crate::http_client::MaimaiClient;
+use crate::tasks::utils::source::ExpectedPage;
 use maimai_auth::intl;
 use models::config::AppConfig;
-
-#[derive(Debug, Clone)]
-pub(crate) enum ExpectedPage {
-    PlayerData,
-    Recent,
-    ScoresList { diff: u8 },
-    PlaylogDetail { idx: String },
-    MusicDetail { idx: String },
-}
 
 pub(crate) fn to_app_config(config: &RecordCollectorConfig) -> AppConfig {
     use std::path::PathBuf;

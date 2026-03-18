@@ -7,8 +7,10 @@ use tracing::{info, warn};
 
 use crate::db::{count_scores_rows, replace_scores, upsert_scores};
 use crate::http_client::MaimaiClient;
-use crate::tasks::utils::auth::{ExpectedPage, fetch_html_with_auth_recovery};
-use crate::tasks::utils::song_detail::{SongDetailCache, fetch_song_detail_by_idx};
+use crate::tasks::utils::auth::fetch_html_with_auth_recovery;
+use crate::tasks::utils::song_detail::SongDetailCache;
+use crate::tasks::utils::source::CollectorSource;
+use crate::tasks::utils::source::ExpectedPage;
 use maimai_parsers::parse_scores_html;
 use models::{ChartType, ParsedScoreEntry, ParsedSongDetail};
 
@@ -54,7 +56,7 @@ struct SeedSongIndexEntry {
 
 pub(crate) async fn ensure_scores_seeded(
     pool: &SqlitePool,
-    client: &mut MaimaiClient,
+    source: &mut impl CollectorSource,
 ) -> Result<SeedScoresOutcome> {
     let existing_rows = count_scores_rows(pool)
         .await
@@ -63,7 +65,7 @@ pub(crate) async fn ensure_scores_seeded(
         return Ok(SeedScoresOutcome::default());
     }
 
-    let seed_targets = fetch_seed_song_index_entries(client)
+    let seed_targets = fetch_seed_song_index_entries(source)
         .await
         .wrap_err("fetch diff=0 song index")?;
     let mut detail_cache = SongDetailCache::default();
@@ -74,7 +76,7 @@ pub(crate) async fn ensure_scores_seeded(
     info!("startup score seeding started: songs={total_songs}");
 
     for (idx, target) in seed_targets.iter().enumerate() {
-        let detail = fetch_seed_song_detail(client, target, &mut detail_cache)
+        let detail = fetch_seed_song_detail(source, target, &mut detail_cache)
             .await
             .wrap_err_with(|| format!("fetch seed song detail for '{}'", target.title))?;
         entries.extend(score_entries_from_song_detail(detail));
@@ -106,9 +108,9 @@ pub(crate) async fn ensure_scores_seeded(
 }
 
 async fn fetch_seed_song_index_entries(
-    client: &mut MaimaiClient,
+    source: &mut impl CollectorSource,
 ) -> Result<Vec<SeedSongIndexEntry>> {
-    let snapshot = fetch_score_list_snapshot(client, 0)
+    let snapshot = fetch_score_list_snapshot(source, 0)
         .await
         .wrap_err("fetch diff=0 snapshot")?;
 
@@ -140,21 +142,30 @@ async fn fetch_seed_song_index_entries(
     Ok(targets)
 }
 
-async fn fetch_score_list_snapshot(
+pub(crate) async fn fetch_score_entries_logged_in(
     client: &mut MaimaiClient,
     diff: u8,
-) -> Result<ScoreListSnapshot> {
+) -> Result<Vec<ParsedScoreEntry>> {
     let url = scores_url(diff).wrap_err("build scores url")?;
     let html = fetch_html_with_auth_recovery(client, &url, ExpectedPage::ScoresList { diff })
         .await
         .wrap_err("fetch scores html with auth recovery")?;
-    let entries = parse_scores_html(&html, diff).wrap_err("parse scores html")?;
+    parse_scores_html(&html, diff).wrap_err("parse scores html")
+}
 
+async fn fetch_score_list_snapshot(
+    source: &mut impl CollectorSource,
+    diff: u8,
+) -> Result<ScoreListSnapshot> {
+    let entries = source
+        .fetch_score_entries(diff)
+        .await
+        .wrap_err_with(|| format!("fetch parsed score entries (diff={diff})"))?;
     Ok(ScoreListSnapshot { entries })
 }
 
 async fn fetch_seed_song_detail(
-    client: &mut MaimaiClient,
+    source: &mut impl CollectorSource,
     target: &SeedSongIndexEntry,
     cache: &mut SongDetailCache,
 ) -> Result<models::ParsedSongDetail> {
@@ -170,7 +181,7 @@ async fn fetch_seed_song_detail(
             return Ok(detail);
         }
 
-        match fetch_song_detail_by_idx(client, &current_target.idx).await {
+        match source.fetch_song_detail(&current_target.idx).await {
             Ok(detail) => {
                 cache.insert(current_target.idx.clone(), detail.clone());
                 return Ok(detail);
@@ -193,7 +204,7 @@ async fn fetch_seed_song_detail(
                         .unwrap_or_else(|| "unknown".to_string())
                 );
 
-                match reload_seed_song_index_entry(client, target).await {
+                match reload_seed_song_index_entry(source, target).await {
                     Ok(reloaded) => {
                         current_target = reloaded;
                     }
@@ -229,10 +240,10 @@ async fn fetch_seed_song_detail(
 }
 
 async fn reload_seed_song_index_entry(
-    client: &mut MaimaiClient,
+    source: &mut impl CollectorSource,
     target: &SeedSongIndexEntry,
 ) -> std::result::Result<SeedSongIndexEntry, ReloadSeedTargetError> {
-    let reloaded_targets = fetch_seed_song_index_entries(client).await.map_err(|err| {
+    let reloaded_targets = fetch_seed_song_index_entries(source).await.map_err(|err| {
         ReloadSeedTargetError::Retryable(
             err.wrap_err("reload diff=0 page after musicDetail failure"),
         )
@@ -312,10 +323,10 @@ pub(crate) fn canonical_title_for_detail(detail: &models::ParsedSongDetail) -> S
 
 pub(crate) async fn refresh_song_scores(
     pool: &SqlitePool,
-    client: &mut MaimaiClient,
+    source: &mut impl CollectorSource,
     target: &RefreshSongScoresTarget,
 ) -> Result<RefreshSongScoresOutcome> {
-    let details = fetch_matching_song_details(client, target)
+    let details = fetch_matching_song_details(source, target)
         .await
         .wrap_err_with(|| format!("refresh song scores for '{}'", target.title))?;
     if details.is_empty() {
@@ -344,16 +355,17 @@ pub(crate) async fn refresh_song_scores(
 }
 
 async fn fetch_matching_song_details(
-    client: &mut MaimaiClient,
+    source: &mut impl CollectorSource,
     target: &RefreshSongScoresTarget,
 ) -> Result<Vec<ParsedSongDetail>> {
-    let candidate_indices = collect_song_detail_indices_for_title(client, &target.title)
+    let candidate_indices = collect_song_detail_indices_for_title(source, &target.title)
         .await
         .wrap_err("collect candidate musicDetail indices")?;
 
     let mut details = Vec::new();
     for idx in candidate_indices {
-        let detail = fetch_song_detail_by_idx(client, &idx)
+        let detail = source
+            .fetch_song_detail(&idx)
             .await
             .wrap_err_with(|| format!("fetch musicDetail '{idx}' for manual song refresh"))?;
         if song_detail_matches_target(&detail, target) {
@@ -365,14 +377,14 @@ async fn fetch_matching_song_details(
 }
 
 async fn collect_song_detail_indices_for_title(
-    client: &mut MaimaiClient,
+    source: &mut impl CollectorSource,
     title: &str,
 ) -> Result<Vec<String>> {
     let normalized_title = title.trim();
     let mut indices = HashSet::new();
 
     for diff in 0..=4 {
-        let snapshot = fetch_score_list_snapshot(client, diff)
+        let snapshot = fetch_score_list_snapshot(source, diff)
             .await
             .wrap_err_with(|| format!("fetch scores snapshot for diff={diff}"))?;
         for entry in snapshot.entries {
