@@ -57,6 +57,7 @@
 - 봇 자체 SQLite에 `Discord user -> record collector URL` 매핑을 저장합니다.
 - 시작 시 slash command를 전역 등록하고, 개발자 계정에만 startup 요약 DM을 보냅니다.
 - 주요 커맨드:
+  - `/how-to-use`
   - `/register`
   - `/mai-score`
   - `/mai-song-info`
