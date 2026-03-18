@@ -50,7 +50,7 @@ pub(crate) struct SongCatalogResponse {
     songs: Vec<SongInfoResponse>,
 }
 
-#[derive(Serialize)]
+#[derive(Debug, PartialEq, Eq, Serialize)]
 pub(crate) struct SongVersionResponse {
     version_index: u8,
     version_name: String,
@@ -92,8 +92,35 @@ pub(crate) async fn list_versions(
         .read()
         .map_err(|_| AppError::IoError("Failed to read song data".to_string()))?;
 
+    let versions = build_song_version_responses(song_data_root.as_slice());
+
+    Ok(Json(SongVersionsListResponse { versions }))
+}
+
+fn build_song_version_responses(songs: &[models::SongCatalogSong]) -> Vec<SongVersionResponse> {
+    let version_song_titles = build_song_version_counts(songs);
+
+    MaimaiVersion::iter()
+        .filter_map(|version| {
+            let song_count = version_song_titles.get(&version).map_or(0, HashSet::len);
+            if song_count == 0 {
+                return None;
+            }
+
+            Some(SongVersionResponse {
+                version_index: version.as_index(),
+                version_name: version.as_str().to_string(),
+                song_count,
+            })
+        })
+        .collect()
+}
+
+fn build_song_version_counts(
+    songs: &[models::SongCatalogSong],
+) -> HashMap<MaimaiVersion, HashSet<String>> {
     let mut version_song_titles: HashMap<MaimaiVersion, HashSet<String>> = HashMap::new();
-    for song in song_data_root.iter() {
+    for song in songs {
         let mut seen_versions_for_song = HashSet::new();
         for sheet in &song.sheets {
             let Some(version) = parse_intl_sheet_version(sheet) else {
@@ -110,15 +137,7 @@ pub(crate) async fn list_versions(
         }
     }
 
-    let versions = MaimaiVersion::iter()
-        .map(|version| SongVersionResponse {
-            version_index: version.as_index(),
-            version_name: version.as_str().to_string(),
-            song_count: version_song_titles.get(&version).map_or(0, HashSet::len),
-        })
-        .collect();
-
-    Ok(Json(SongVersionsListResponse { versions }))
+    version_song_titles
 }
 
 fn build_song_sheet_response(sheet: &models::SongCatalogChart) -> Result<SongSheetResponse> {
@@ -397,8 +416,9 @@ pub(crate) async fn search_song_metadata(
 #[cfg(test)]
 mod tests {
     use super::{
-        SongMetadataSearchRequest, build_song_info_response, is_intl_sheet,
-        parse_intl_sheet_version, search_song_metadata_items,
+        SongMetadataSearchRequest, SongVersionResponse, build_song_info_response,
+        build_song_version_responses, is_intl_sheet, parse_intl_sheet_version,
+        search_song_metadata_items,
     };
     use models::{
         DifficultyCategory, MaimaiVersion, SongAliases, SongCatalogChart, SongCatalogSong,
@@ -463,6 +483,57 @@ mod tests {
         assert_eq!(
             parse_intl_sheet_version(&intl_sheet),
             Some(MaimaiVersion::Splash)
+        );
+    }
+
+    #[test]
+    fn build_song_version_responses_skips_jp_only_future_versions() {
+        let songs = vec![
+            SongCatalogSong {
+                title: "Current INTL Song".to_string(),
+                genre: SongGenre::Maimai,
+                artist: "".to_string(),
+                image_name: None,
+                aliases: SongAliases::default(),
+                sheets: vec![SongCatalogChart {
+                    chart_type: "std".to_string(),
+                    difficulty: "basic".to_string(),
+                    level: "10".to_string(),
+                    version_name: Some("CiRCLE".to_string()),
+                    internal_level: None,
+                    region: SongChartRegion {
+                        jp: true,
+                        intl: true,
+                    },
+                }],
+            },
+            SongCatalogSong {
+                title: "Future JP Song".to_string(),
+                genre: SongGenre::Maimai,
+                artist: "".to_string(),
+                image_name: None,
+                aliases: SongAliases::default(),
+                sheets: vec![SongCatalogChart {
+                    chart_type: "std".to_string(),
+                    difficulty: "basic".to_string(),
+                    level: "12".to_string(),
+                    version_name: Some("CiRCLE PLUS".to_string()),
+                    internal_level: None,
+                    region: SongChartRegion {
+                        jp: true,
+                        intl: false,
+                    },
+                }],
+            },
+        ];
+
+        assert_eq!(
+            build_song_version_responses(&songs),
+            vec![SongVersionResponse {
+                version_index: MaimaiVersion::Circle.as_index(),
+                version_name: "CiRCLE".to_string(),
+                song_count: 1,
+            }]
         );
     }
 

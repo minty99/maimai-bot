@@ -5,6 +5,7 @@ use eyre::WrapErr;
 use maimai_auth::intl;
 use maimai_parsers::parse_scores_html;
 use models::{ChartType, MaimaiVersion};
+use strum::IntoEnumIterator;
 
 use super::{SheetRow, SongIdentity, SongRow, normalize_song_title_value};
 
@@ -47,8 +48,7 @@ pub async fn fetch_intl_sheet_versions(
     let mut out: SheetVersionMap = HashMap::new();
     let mut seen = HashSet::new();
 
-    let mut version_index = 0u8;
-    while let Some(version) = MaimaiVersion::from_index(version_index) {
+    for version in MaimaiVersion::iter().filter(|version| version.is_available_in_intl()) {
         let rows =
             fetch_rows_for_version(&client, sega_id, sega_password, version, &resolver).await?;
         for (song_identity, chart_type) in rows {
@@ -66,7 +66,6 @@ pub async fn fetch_intl_sheet_versions(
                 .insert(chart_type, version.as_str().to_string());
         }
 
-        version_index = version_index.saturating_add(1);
         tokio::time::sleep(Duration::from_millis(250)).await;
     }
 
@@ -444,5 +443,15 @@ mod tests {
                 .all(|(song_identity, _)| song_identity.title != "Link"),
             "expected maimai PLUS fixture to skip manual override titles"
         );
+    }
+
+    #[test]
+    fn intl_fetch_targets_exclude_future_jp_only_versions() {
+        let versions = MaimaiVersion::iter()
+            .filter(|version| version.is_available_in_intl())
+            .collect::<Vec<_>>();
+
+        assert_eq!(versions.last().copied(), Some(MaimaiVersion::Circle));
+        assert!(!versions.contains(&MaimaiVersion::CirclePlus));
     }
 }

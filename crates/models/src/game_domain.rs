@@ -424,6 +424,10 @@ impl MaimaiVersion {
         self as u8
     }
 
+    pub const fn is_available_in_intl(self) -> bool {
+        !matches!(self, Self::CirclePlus)
+    }
+
     pub const fn as_str(self) -> &'static str {
         match self {
             Self::Maimai => "maimai",
@@ -780,6 +784,12 @@ mod tests {
                 Some(version)
             );
         }
+    }
+
+    #[test]
+    fn intl_availability_skips_future_jp_only_versions() {
+        assert!(MaimaiVersion::Circle.is_available_in_intl());
+        assert!(!MaimaiVersion::CirclePlus.is_available_in_intl());
     }
 
     #[test]
