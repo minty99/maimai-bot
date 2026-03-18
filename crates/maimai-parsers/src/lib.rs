@@ -1,3 +1,4 @@
+pub mod internal_level_page;
 pub mod player_data;
 pub mod playlog_detail;
 pub mod rating_target;
@@ -5,6 +6,7 @@ pub mod recent;
 pub mod score_list;
 pub mod song_detail;
 
+pub use internal_level_page::{ParsedInternalLevelEntry, parse_internal_level_page_html};
 pub use player_data::parse_player_data_html;
 pub use playlog_detail::parse_playlog_detail_html;
 pub use rating_target::parse_rating_target_music_html;
