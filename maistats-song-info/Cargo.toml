@@ -22,4 +22,3 @@ maimai-parsers = { path = "../crates/maimai-parsers" }
 models = { path = "../crates/models" }
 reqwest.workspace = true
 sha2.workspace = true
-urlencoding.workspace = true

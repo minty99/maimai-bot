@@ -139,7 +139,6 @@ pub struct SongDbConfig {
     pub jp_sega_id: String,
     pub jp_sega_password: String,
     pub user_agent: String,
-    pub google_api_key: String,
 }
 
 impl fmt::Debug for SongDbConfig {
@@ -150,7 +149,6 @@ impl fmt::Debug for SongDbConfig {
             .field("jp_sega_id", &"<redacted>")
             .field("jp_sega_password", &"<redacted>")
             .field("user_agent", &self.user_agent)
-            .field("google_api_key", &"<redacted>")
             .finish()
     }
 }
@@ -168,8 +166,6 @@ impl SongDbConfig {
         let jp_sega_password = std::env::var("MAIMAI_JP_SEGA_PASSWORD")
             .wrap_err("missing env var: MAIMAI_JP_SEGA_PASSWORD")?;
         let user_agent = std::env::var("USER_AGENT").wrap_err("missing env var: USER_AGENT")?;
-        let google_api_key =
-            std::env::var("GOOGLE_API_KEY").wrap_err("missing env var: GOOGLE_API_KEY")?;
 
         Ok(Self {
             intl_sega_id,
@@ -177,7 +173,6 @@ impl SongDbConfig {
             jp_sega_id,
             jp_sega_password,
             user_agent,
-            google_api_key,
         })
     }
 }
@@ -237,10 +232,14 @@ impl SongDatabase {
         .wrap_err("fetch INTL sheet versions")?;
 
         tracing::info!("Fetching internal levels...");
-        let internal_levels =
-            internal_levels::fetch_internal_levels(&client, &config.google_api_key, &songs)
-                .await
-                .wrap_err("fetch internal levels")?;
+        let internal_levels = internal_levels::fetch_internal_levels(
+            &config.intl_sega_id,
+            &config.intl_sega_password,
+            &songs,
+            &sheets,
+        )
+        .await
+        .wrap_err("fetch internal levels")?;
 
         tracing::info!("Fetching song aliases...");
         let aliases = aliases::fetch_song_aliases(&client)
