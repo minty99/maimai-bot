@@ -1,4 +1,5 @@
 use std::collections::BTreeMap;
+use std::future::Future;
 use std::path::Path;
 
 use eyre::{Result, WrapErr};
@@ -14,7 +15,7 @@ use models::{
     ParsedPlayRecord, ParsedPlayerProfile, ParsedPlaylogDetail, ParsedScoreEntry, ParsedSongDetail,
 };
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ExpectedPage {
     PlayerData,
     Recent,
@@ -23,19 +24,24 @@ pub enum ExpectedPage {
     MusicDetail { idx: String },
 }
 
-#[allow(async_fn_in_trait)]
 pub trait CollectorSource {
-    async fn ensure_session(&mut self) -> Result<()>;
+    fn ensure_session(&mut self) -> impl Future<Output = Result<()>>;
 
-    async fn fetch_player_data(&mut self) -> Result<ParsedPlayerProfile>;
+    fn fetch_player_data(&mut self) -> impl Future<Output = Result<ParsedPlayerProfile>>;
 
-    async fn fetch_recent_entries(&mut self) -> Result<Vec<ParsedPlayRecord>>;
+    fn fetch_recent_entries(&mut self) -> impl Future<Output = Result<Vec<ParsedPlayRecord>>>;
 
-    async fn fetch_score_entries(&mut self, diff: u8) -> Result<Vec<ParsedScoreEntry>>;
+    fn fetch_score_entries(
+        &mut self,
+        diff: u8,
+    ) -> impl Future<Output = Result<Vec<ParsedScoreEntry>>>;
 
-    async fn fetch_playlog_detail(&mut self, idx: &str) -> Result<ParsedPlaylogDetail>;
+    fn fetch_playlog_detail(
+        &mut self,
+        idx: &str,
+    ) -> impl Future<Output = Result<ParsedPlaylogDetail>>;
 
-    async fn fetch_song_detail(&mut self, idx: &str) -> Result<ParsedSongDetail>;
+    fn fetch_song_detail(&mut self, idx: &str) -> impl Future<Output = Result<ParsedSongDetail>>;
 }
 
 impl CollectorSource for MaimaiClient {

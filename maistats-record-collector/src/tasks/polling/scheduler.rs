@@ -6,7 +6,7 @@ use tracing::{error, info};
 use crate::state::AppState;
 use crate::tasks::polling::cycle::run_cycle;
 
-pub fn start_background_polling(app_state: AppState) {
+pub(crate) fn start_background_polling(app_state: AppState) {
     tokio::spawn(async move {
         let mut timer = interval(Duration::from_secs(600));
         timer.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
@@ -20,8 +20,8 @@ pub fn start_background_polling(app_state: AppState) {
                 Ok(report) => info!(
                     "Periodic poll finished: maintenance_skip={} seeded={} seeded_rows={} recent_present={}",
                     report.skipped_for_maintenance,
-                    report.seeded_scores.seeded,
-                    report.seeded_scores.rows_written,
+                    report.seeded,
+                    report.seeded_rows_written,
                     report.recent_outcome.is_some()
                 ),
                 Err(err) => error!("Periodic poll failed: {err:#}"),

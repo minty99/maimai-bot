@@ -1,4 +1,4 @@
 pub mod cycle;
-pub mod scheduler;
+pub(crate) mod scheduler;
 
-pub use scheduler::start_background_polling;
+pub(crate) use scheduler::start_background_polling;

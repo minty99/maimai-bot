@@ -22,22 +22,22 @@ enum ReloadSeedTargetError {
 }
 
 #[derive(Debug, Clone, Default)]
-pub struct SeedScoresOutcome {
-    pub seeded: bool,
-    pub rows_written: usize,
+pub(crate) struct SeedScoresOutcome {
+    pub(crate) seeded: bool,
+    pub(crate) rows_written: usize,
 }
 
 #[derive(Debug, Clone)]
-pub struct RefreshSongScoresTarget {
-    pub title: String,
-    pub genre: String,
-    pub artist: String,
+pub(crate) struct RefreshSongScoresTarget {
+    pub(crate) title: String,
+    pub(crate) genre: String,
+    pub(crate) artist: String,
 }
 
 #[derive(Debug, Clone, Default)]
-pub struct RefreshSongScoresOutcome {
-    pub detail_pages_refreshed: usize,
-    pub rows_written: usize,
+pub(crate) struct RefreshSongScoresOutcome {
+    pub(crate) detail_pages_refreshed: usize,
+    pub(crate) rows_written: usize,
 }
 
 #[derive(Debug, Clone)]

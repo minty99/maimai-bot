@@ -12,7 +12,7 @@ use crate::tasks::utils::source::CollectorSource;
 
 pub type PollingCycleReport = SyncCycleReport;
 
-pub async fn run_cycle(app_state: &AppState) -> Result<PollingCycleReport> {
+pub(crate) async fn run_cycle(app_state: &AppState) -> Result<PollingCycleReport> {
     let mut client = build_client(&app_state.config)?;
     run_cycle_with_source(&app_state.db_pool, &mut client).await
 }
@@ -58,7 +58,8 @@ pub async fn run_cycle_with_source(
 
     Ok(PollingCycleReport {
         skipped_for_maintenance: false,
-        seeded_scores,
+        seeded: seeded_scores.seeded,
+        seeded_rows_written: seeded_scores.rows_written,
         recent_outcome: Some(recent_outcome),
     })
 }

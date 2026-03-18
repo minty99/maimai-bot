@@ -409,8 +409,8 @@ async fn seed_small_startup_matches_expected_snapshots() -> eyre::Result<()> {
     let report = startup_sync_with_source(&pool, &mut source).await?;
 
     assert!(!report.skipped_for_maintenance);
-    assert!(report.seeded_scores.seeded);
-    assert_eq!(report.seeded_scores.rows_written, 9);
+    assert!(report.seeded);
+    assert_eq!(report.seeded_rows_written, 9);
     assert_recent_outcome(&report.recent_outcome, 3, 0, false);
 
     let expected_scores: Vec<ScoreSnapshot> =
@@ -437,7 +437,7 @@ async fn polling_update_small_updates_scores_and_playlogs() -> eyre::Result<()> 
     let report = run_cycle_with_source(&pool, &mut update_source).await?;
 
     assert!(!report.skipped_for_maintenance);
-    assert!(!report.seeded_scores.seeded);
+    assert!(!report.seeded);
     assert_recent_outcome(&report.recent_outcome, 2, 2, true);
 
     let expected_scores: Vec<ScoreSnapshot> =

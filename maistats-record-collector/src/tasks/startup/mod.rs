@@ -12,7 +12,7 @@ use crate::tasks::utils::source::CollectorSource;
 
 pub type StartupSyncReport = SyncCycleReport;
 
-pub async fn startup_sync(
+pub(crate) async fn startup_sync(
     db_pool: &SqlitePool,
     config: &RecordCollectorConfig,
 ) -> Result<StartupSyncReport> {
@@ -63,7 +63,8 @@ pub async fn startup_sync_with_source(
 
     Ok(StartupSyncReport {
         skipped_for_maintenance: false,
-        seeded_scores,
+        seeded: seeded_scores.seeded,
+        seeded_rows_written: seeded_scores.rows_written,
         recent_outcome: Some(recent_outcome),
     })
 }

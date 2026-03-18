@@ -4,9 +4,9 @@ use sqlx::SqlitePool;
 use std::path::PathBuf;
 
 #[derive(Clone)]
-pub struct AppState {
-    pub db_pool: SqlitePool,
-    pub config: RecordCollectorConfig,
+pub(crate) struct AppState {
+    pub(crate) db_pool: SqlitePool,
+    pub(crate) config: RecordCollectorConfig,
 }
 
 impl AppState {
