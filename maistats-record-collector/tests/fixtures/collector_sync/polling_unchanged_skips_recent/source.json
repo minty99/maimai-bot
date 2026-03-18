@@ -1,0 +1,8 @@
+{
+  "player_data": {
+    "user_name": "fixture-user",
+    "rating": 12345,
+    "current_version_play_count": 50,
+    "total_play_count": 200
+  }
+}
