@@ -61,6 +61,7 @@ async fn main() -> eyre::Result<()> {
         .options(FrameworkOptions {
             prefix_options: Default::default(),
             commands: vec![
+                commands::how_to_use(),
                 commands::register(),
                 commands::mai_score(),
                 commands::mai_song_info(),

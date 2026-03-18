@@ -19,6 +19,24 @@ use crate::embeds::{
 type Context<'a> = poise::Context<'a, BotData, Box<dyn std::error::Error + Send + Sync>>;
 type Error = Box<dyn std::error::Error + Send + Sync>;
 
+/// Show basic setup steps for maistats
+#[poise::command(slash_command, rename = "how-to-use")]
+pub(crate) async fn how_to_use(ctx: Context<'_>) -> Result<(), Error> {
+    ctx.send(
+        CreateReply::default().ephemeral(true).embed(
+            embed_base("How to use maistats").description(
+                "maistats helps you collect and manage your personal maimai records over time.\n\n\
+                Open `https://maistats.muhwan.dev` to see how to set up your own record collector.\n\
+                Once your collector is ready, connect it to this bot with `/register <url>`.\n\n\
+                After registering, you can use commands like `/mai-score`, `/mai-recent`, `/mai-song-info`, and `/mai-today` with your own data.",
+            ),
+        ),
+    )
+    .await?;
+
+    Ok(())
+}
+
 /// Register your record collector server
 #[poise::command(slash_command)]
 pub(crate) async fn register(
@@ -665,7 +683,7 @@ async fn registered_record_collector_client(
     else {
         ctx.send(CreateReply::default().ephemeral(true).embed(
             embed_base("Registration required").description(
-                "Please run `/register <url>` with your record collector server first.",
+                "Please run `/how-to-use` for setup instructions, then connect your record collector with `/register <url>`.",
             ),
         ))
         .await?;
