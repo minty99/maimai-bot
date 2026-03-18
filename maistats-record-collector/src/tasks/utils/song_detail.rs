@@ -4,7 +4,8 @@ use eyre::{Result, WrapErr};
 use reqwest::Url;
 
 use crate::http_client::MaimaiClient;
-use crate::tasks::utils::auth::{ExpectedPage, fetch_html_with_auth_recovery};
+use crate::tasks::utils::auth::fetch_html_with_auth_recovery;
+use crate::tasks::utils::source::ExpectedPage;
 use maimai_parsers::parse_song_detail_html;
 use models::ParsedSongDetail;
 

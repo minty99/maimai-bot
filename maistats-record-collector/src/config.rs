@@ -1,16 +1,16 @@
 use eyre::WrapErr;
 
 #[derive(Debug, Clone)]
-pub(crate) struct RecordCollectorConfig {
-    pub(crate) sega_id: String,
-    pub(crate) sega_password: String,
-    pub(crate) port: u16,
-    pub(crate) database_url: String,
-    pub(crate) data_dir: String,
+pub struct RecordCollectorConfig {
+    pub sega_id: String,
+    pub sega_password: String,
+    pub port: u16,
+    pub database_url: String,
+    pub data_dir: String,
 }
 
 impl RecordCollectorConfig {
-    pub(crate) fn from_env() -> eyre::Result<Self> {
+    pub fn from_env() -> eyre::Result<Self> {
         let sega_id = std::env::var("SEGA_ID").wrap_err("missing env var: SEGA_ID")?;
         let sega_password =
             std::env::var("SEGA_PASSWORD").wrap_err("missing env var: SEGA_PASSWORD")?;

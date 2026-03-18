@@ -1,12 +1,5 @@
-mod config;
-mod db;
-mod error;
-mod http_client;
-mod routes;
-mod state;
-mod tasks;
-
 use eyre::WrapErr;
+use maistats_record_collector::{config, db, routes, state, tasks};
 use std::net::SocketAddr;
 use tokio::net::TcpListener;
 use tracing_subscriber::EnvFilter;

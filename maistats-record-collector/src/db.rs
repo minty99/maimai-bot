@@ -7,9 +7,9 @@ use sqlx::{Pool, Sqlite};
 use crate::tasks::utils::player::{STATE_KEY_RATING, STATE_KEY_TOTAL_PLAY_COUNT};
 use models::{ChartType, ParsedPlayRecord, ParsedPlayerProfile, ParsedScoreEntry};
 
-pub(crate) type SqlitePool = Pool<Sqlite>;
+pub type SqlitePool = Pool<Sqlite>;
 
-pub(crate) async fn connect(database_url: &str) -> eyre::Result<SqlitePool> {
+pub async fn connect(database_url: &str) -> eyre::Result<SqlitePool> {
     let options = SqliteConnectOptions::from_str(database_url)
         .wrap_err("parse database url")?
         .create_if_missing(true)
@@ -24,7 +24,7 @@ pub(crate) async fn connect(database_url: &str) -> eyre::Result<SqlitePool> {
         .wrap_err("connect sqlite")
 }
 
-pub(crate) async fn migrate(pool: &SqlitePool) -> eyre::Result<()> {
+pub async fn migrate(pool: &SqlitePool) -> eyre::Result<()> {
     sqlx::migrate!("./migrations")
         .run(pool)
         .await

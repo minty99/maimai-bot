@@ -16,7 +16,7 @@ use tower_http::trace::{DefaultMakeSpan, DefaultOnResponse, TraceLayer};
 
 use crate::state::AppState;
 
-pub(crate) fn create_routes(state: AppState) -> Router {
+pub fn create_routes(state: AppState) -> Router {
     Router::new()
         .route("/health", get(health::health))
         .route("/health/ready", get(health::ready))
