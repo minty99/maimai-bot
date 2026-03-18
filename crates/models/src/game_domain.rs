@@ -130,6 +130,7 @@ fn parse_maimai_version(value: &str) -> Option<MaimaiVersion> {
         "prism" => Some(MaimaiVersion::Prism),
         "prismplus" => Some(MaimaiVersion::PrismPlus),
         "circle" => Some(MaimaiVersion::Circle),
+        "circleplus" => Some(MaimaiVersion::CirclePlus),
         _ => None,
     }
 }
@@ -415,6 +416,7 @@ pub enum MaimaiVersion {
     Prism = 23,
     PrismPlus = 24,
     Circle = 25,
+    CirclePlus = 26,
 }
 
 impl MaimaiVersion {
@@ -450,6 +452,7 @@ impl MaimaiVersion {
             Self::Prism => "PRiSM",
             Self::PrismPlus => "PRiSM PLUS",
             Self::Circle => "CiRCLE",
+            Self::CirclePlus => "CiRCLE PLUS",
         }
     }
 
@@ -816,6 +819,10 @@ mod tests {
         assert_eq!(
             "25".parse::<MaimaiVersion>().ok(),
             Some(MaimaiVersion::Circle)
+        );
+        assert_eq!(
+            "circle plus".parse::<MaimaiVersion>().ok(),
+            Some(MaimaiVersion::CirclePlus)
         );
         assert_eq!(
             "music_icon_sssp.png".parse::<ScoreRank>().ok(),
