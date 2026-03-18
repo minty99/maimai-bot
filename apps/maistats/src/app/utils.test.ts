@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { formatNumber, sortByOrder } from './utils';
+import { filterAvailableVersions, formatNumber, sortByOrder } from './utils';
 
 describe('formatNumber', () => {
   it('formats numbers with the provided locale', () => {
@@ -31,5 +31,21 @@ describe('sortByOrder', () => {
 
   it('uses locale-aware fallback ordering', () => {
     expect(sortByOrder(['z', 'ä'], new Map<string, number>(), 'sv')).toEqual(['z', 'ä']);
+  });
+});
+
+describe('filterAvailableVersions', () => {
+  it('drops empty and zero-song versions from API payloads', () => {
+    expect(
+      filterAvailableVersions([
+        { version_index: 24, version_name: 'PRiSM PLUS', song_count: 12 },
+        { version_index: 25, version_name: 'CiRCLE', song_count: 18 },
+        { version_index: 26, version_name: 'CiRCLE PLUS', song_count: 0 },
+        { version_index: 27, version_name: '   ', song_count: 3 },
+      ]),
+    ).toEqual([
+      { version_index: 24, version_name: 'PRiSM PLUS', song_count: 12 },
+      { version_index: 25, version_name: 'CiRCLE', song_count: 18 },
+    ]);
   });
 });
