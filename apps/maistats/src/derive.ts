@@ -68,7 +68,7 @@ function toUnixMillis(unixtime: number): number {
   return unixtime * 1000;
 }
 
-export function toDateLabel(unixtime: number | null): string | null {
+export function toDateLabel(unixtime: number | null, locale: string): string | null {
   if (unixtime === null) {
     return null;
   }
@@ -79,7 +79,7 @@ export function toDateLabel(unixtime: number | null): string | null {
     return null;
   }
 
-  return date.toLocaleString('ko-KR', {
+  return date.toLocaleString(locale, {
     year: 'numeric',
     month: '2-digit',
     day: '2-digit',
@@ -183,6 +183,7 @@ export function toRawRating(
 export function buildScoreRows(
   scores: ScoreApiResponse[],
   songInfoByIdentity: Map<string, SongInfoResponse>,
+  locale: string,
 ): ScoreRow[] {
   const scoreByKey = new Map<string, ScoreApiResponse>();
   for (const score of scores) {
@@ -244,7 +245,7 @@ export function buildScoreRows(
       version: matchedSheet?.version ?? null,
       imageName: songInfo?.image_name ?? null,
       latestPlayedAtUnix,
-      latestPlayedAtLabel: score?.last_played_at ?? toDateLabel(latestPlayedAtUnix),
+      latestPlayedAtLabel: score?.last_played_at ?? toDateLabel(latestPlayedAtUnix, locale),
       daysSinceLastPlayed: daysSince(latestPlayedAtUnix),
       playCount: score?.play_count ?? null,
     };
@@ -305,6 +306,7 @@ export function buildScoreRows(
 export function buildPlaylogRows(
   playlogs: PlayRecordApiResponse[],
   songInfoByIdentity: Map<string, SongInfoResponse>,
+  locale: string,
 ): PlaylogRow[] {
   return playlogs.map((log, index) => {
     const genre = log.genre ?? '';
@@ -332,7 +334,7 @@ export function buildPlaylogRows(
       internalLevel,
       isInternalLevelEstimated,
       playedAtUnix: log.played_at_unixtime,
-      playedAtLabel: log.played_at ?? toDateLabel(log.played_at_unixtime),
+      playedAtLabel: log.played_at ?? toDateLabel(log.played_at_unixtime, locale),
       track: log.track,
       achievementX10000: log.achievement_x10000,
       achievementPercent: toAchievementPercent(log.achievement_x10000),
@@ -371,7 +373,10 @@ export function buildScoreHistoryPoints(
       if (left.playedAtUnix !== right.playedAtUnix) {
         return left.playedAtUnix - right.playedAtUnix;
       }
-      return left.key.localeCompare(right.key, 'ko');
+      if (left.key === right.key) {
+        return 0;
+      }
+      return left.key < right.key ? -1 : 1;
     });
 
   const points: ScoreHistoryPoint[] = [];

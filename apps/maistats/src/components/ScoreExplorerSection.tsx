@@ -1,6 +1,7 @@
 import { useEffect, useRef, type Dispatch, type ReactNode, type SetStateAction } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
 
+import { useI18n } from '../app/i18n';
 import { toDateLabel, toIntegerRating } from '../derive';
 import type {
   ChartType,
@@ -128,6 +129,7 @@ export function ScoreExplorerSection({
   onSortBy,
   onResetFilters,
 }: ScoreExplorerSectionProps) {
+  const { locale, t } = useI18n();
   const tableWrapRef = useRef<HTMLDivElement | null>(null);
   const isSearchDirty = queryDraft.trim() !== appliedQuery.trim();
 
@@ -160,7 +162,7 @@ export function ScoreExplorerSection({
               <h2>Filters</h2>
             </div>
             <button type="button" className="filter-reset-button" onClick={onResetFilters}>
-              전체 초기화
+              {t('scores.resetAll')}
             </button>
           </div>
           <div className="filter-grid">
@@ -171,22 +173,22 @@ export function ScoreExplorerSection({
                 onApplyQuery();
               }}
             >
-              <span>검색 (곡명/alias/버전/레벨)</span>
+              <span>{t('scores.searchLabel')}</span>
               <div className="search-submit-row">
                 <input
                   type="search"
                   value={queryDraft}
                   onChange={(event) => setQueryDraft(event.target.value)}
-                  placeholder="예: VERTeX, 버텍스, PRiSM, 14+"
+                  placeholder={t('scores.searchPlaceholder')}
                 />
                 <button type="submit" disabled={!isSearchDirty}>
-                  검색
+                  {t('common.search')}
                 </button>
               </div>
             </form>
 
             <ToggleGroup
-              label="채보 유형"
+              label={t('scores.chartType')}
               options={chartTypes}
               selected={chartFilter}
               onToggle={(value) => setChartFilter((prev) => toggleArrayValue(prev, value))}
@@ -194,7 +196,7 @@ export function ScoreExplorerSection({
             />
 
             <ToggleGroup
-              label="난이도"
+              label={t('scores.difficulty')}
               options={difficulties}
               selected={difficultyFilter}
               onToggle={(value) => setDifficultyFilter((prev) => toggleArrayValue(prev, value))}
@@ -203,7 +205,7 @@ export function ScoreExplorerSection({
             />
 
             <div className="filter-block">
-              <div className="filter-label">레벨</div>
+              <div className="filter-label">{t('scores.level')}</div>
               <div className="range-pair">
                 <label>
                   <input
@@ -212,7 +214,7 @@ export function ScoreExplorerSection({
                     min={1}
                     max={15.5}
                     step={0.1}
-                    aria-label="레벨 최소"
+                    aria-label={t('scores.levelMin')}
                     onChange={(event) => onChangeInternalMin(Number(event.target.value))}
                   />
                 </label>
@@ -224,7 +226,7 @@ export function ScoreExplorerSection({
                     min={1}
                     max={15.5}
                     step={0.1}
-                    aria-label="레벨 최대"
+                    aria-label={t('scores.levelMax')}
                     onChange={(event) => onChangeInternalMax(Number(event.target.value))}
                   />
                 </label>
@@ -239,7 +241,7 @@ export function ScoreExplorerSection({
             </div>
 
             <div className="filter-block">
-              <div className="filter-label">스코어</div>
+              <div className="filter-label">{t('scores.score')}</div>
               <div className="range-pair">
                 <label>
                   <input
@@ -248,7 +250,7 @@ export function ScoreExplorerSection({
                     min={0}
                     max={101}
                     step={0.0001}
-                    aria-label="달성률 최소"
+                    aria-label={t('scores.achievementMin')}
                     onChange={(event) => onChangeAchievementMin(Number(event.target.value))}
                   />
                 </label>
@@ -260,7 +262,7 @@ export function ScoreExplorerSection({
                     min={0}
                     max={101}
                     step={0.0001}
-                    aria-label="달성률 최대"
+                    aria-label={t('scores.achievementMax')}
                     onChange={(event) => onChangeAchievementMax(Number(event.target.value))}
                   />
                 </label>
@@ -289,15 +291,15 @@ export function ScoreExplorerSection({
             />
 
             <div className="filter-block">
-              <div className="filter-label">버전</div>
+              <div className="filter-label">{t('scores.version')}</div>
               <label>
                 <select
                   value={versionSelection}
                   onChange={(event) => setVersionSelection(event.target.value)}
                 >
-                  <option value="ALL">ALL</option>
-                  <option value="NEW">NEW</option>
-                  <option value="OLD">OLD</option>
+                  <option value="ALL">{t('scores.versionAll')}</option>
+                  <option value="NEW">{t('scores.versionNew')}</option>
+                  <option value="OLD">{t('scores.versionOld')}</option>
                   {versionOptions.map((version) => (
                     <option key={version} value={version}>
                       {formatVersionLabel(version)}
@@ -308,7 +310,7 @@ export function ScoreExplorerSection({
             </div>
 
             <div className="filter-block">
-              <div className="filter-label">경과일</div>
+              <div className="filter-label">{t('scores.daysSince')}</div>
               <div className="range-pair">
                 <label>
                   <input
@@ -317,7 +319,7 @@ export function ScoreExplorerSection({
                     min={0}
                     max={5000}
                     step={1}
-                    aria-label="경과일 최소"
+                    aria-label={t('scores.daysMin')}
                     onChange={(event) => setDaysMin(Number(event.target.value))}
                   />
                 </label>
@@ -329,7 +331,7 @@ export function ScoreExplorerSection({
                     min={0}
                     max={5000}
                     step={1}
-                    aria-label="경과일 최대"
+                    aria-label={t('scores.daysMax')}
                     onChange={(event) => setDaysMax(Number(event.target.value))}
                   />
                 </label>
@@ -344,45 +346,45 @@ export function ScoreExplorerSection({
         <section className="panel">
           <div className="panel-heading">
             <div>
-              <h2>Charts</h2>
-              <p>점수 데이터와 차트 메타데이터를 함께 확인합니다. 회색 소수점은 추정 내부레벨입니다.</p>
+              <h2>{t('scores.chartsTitle')}</h2>
+              <p>{t('scores.chartsDescription')}</p>
             </div>
             <div className="panel-heading-actions">
-              <div className="view-mode-switch" role="group" aria-label="Charts layout">
+              <div className="view-mode-switch" role="group" aria-label={t('scores.layout')}>
                 <button
                   type="button"
                   className={showJackets ? 'active' : ''}
                   onClick={() => setShowJackets(true)}
                 >
-                  Jacket
+                  {t('common.jacket')}
                 </button>
                 <button
                   type="button"
                   className={!showJackets ? 'active' : ''}
                   onClick={() => setShowJackets(false)}
                 >
-                  Compact
+                  {t('common.compact')}
                 </button>
               </div>
               <span className="panel-count">{scoreCountLabel}</span>
             </div>
           </div>
           <div className="table-wrap" ref={tableWrapRef}>
-            {isLoading ? <div className="table-loading-state">Loading charts...</div> : null}
+            {isLoading ? <div className="table-loading-state">{t('common.loadingCharts')}</div> : null}
             <table className="score-table compact-table">
               <thead>
                 <tr>
-                  {showJackets ? <th className="jacket-col">Jacket</th> : null}
+                  {showJackets ? <th className="jacket-col">{t('common.jacket')}</th> : null}
                   <th className="sortable title-col">
                     <button type="button" className="th-sort-button" onClick={() => onSortBy('title')}>
-                      <span>Title</span>
+                      <span>{t('common.title')}</span>
                       <span className="sort-indicator">{sortIndicator(scoreSortKey === 'title', scoreSortDesc)}</span>
                     </button>
                   </th>
-                  <th className="chart-col">Chart</th>
+                  <th className="chart-col">{t('common.chart')}</th>
                   <th className="sortable level-col">
                     <button type="button" className="th-sort-button" onClick={() => onSortBy('internal')}>
-                      <span>Lv</span>
+                      <span>{t('common.levelShort')}</span>
                       <span className="sort-indicator">
                         {sortIndicator(scoreSortKey === 'internal', scoreSortDesc)}
                       </span>
@@ -390,7 +392,7 @@ export function ScoreExplorerSection({
                   </th>
                   <th className="sortable achievement-col">
                     <button type="button" className="th-sort-button" onClick={() => onSortBy('achievement')}>
-                      <span>Achv</span>
+                      <span>{t('common.achievementShort')}</span>
                       <span className="sort-indicator">
                         {sortIndicator(scoreSortKey === 'achievement', scoreSortDesc)}
                       </span>
@@ -398,13 +400,13 @@ export function ScoreExplorerSection({
                   </th>
                   <th className="sortable rating-col">
                     <button type="button" className="th-sort-button" onClick={() => onSortBy('rating')}>
-                      <span>Rating</span>
+                      <span>{t('common.rating')}</span>
                       <span className="sort-indicator">
                         {sortIndicator(scoreSortKey === 'rating', scoreSortDesc)}
                       </span>
                     </button>
                   </th>
-                  <th className="rank-col">Rank</th>
+                  <th className="rank-col">{t('common.rank')}</th>
                   <th className="sortable fc-col">
                     <button type="button" className="th-sort-button" onClick={() => onSortBy('fc')}>
                       <span>FC</span>
@@ -413,13 +415,13 @@ export function ScoreExplorerSection({
                   </th>
                   <th className="sortable sync-col">
                     <button type="button" className="th-sort-button" onClick={() => onSortBy('sync')}>
-                      <span>Sync</span>
+                      <span>{t('common.sync')}</span>
                       <span className="sort-indicator">{sortIndicator(scoreSortKey === 'sync', scoreSortDesc)}</span>
                     </button>
                   </th>
                   <th className="sortable dx-col">
                     <button type="button" className="th-sort-button" onClick={() => onSortBy('dxRatio')}>
-                      <span>DX</span>
+                      <span>{t('common.dx')}</span>
                       <span className="sort-indicator">
                         {sortIndicator(scoreSortKey === 'dxRatio', scoreSortDesc)}
                       </span>
@@ -427,7 +429,7 @@ export function ScoreExplorerSection({
                   </th>
                   <th className="sortable last-played-col">
                     <button type="button" className="th-sort-button" onClick={() => onSortBy('lastPlayed')}>
-                      <span>Last Played</span>
+                      <span>{t('common.lastPlayed')}</span>
                       <span className="sort-indicator">
                         {sortIndicator(scoreSortKey === 'lastPlayed', scoreSortDesc)}
                       </span>
@@ -435,7 +437,7 @@ export function ScoreExplorerSection({
                   </th>
                   <th className="sortable play-count-col">
                     <button type="button" className="th-sort-button" onClick={() => onSortBy('playCount')}>
-                      <span>Play count</span>
+                      <span>{t('common.playCount')}</span>
                       <span className="sort-indicator">
                         {sortIndicator(scoreSortKey === 'playCount', scoreSortDesc)}
                       </span>
@@ -443,7 +445,7 @@ export function ScoreExplorerSection({
                   </th>
                   <th className="sortable version-col">
                     <button type="button" className="th-sort-button" onClick={() => onSortBy('version')}>
-                      <span>버전</span>
+                      <span>{t('common.version')}</span>
                       <span className="sort-indicator">{sortIndicator(scoreSortKey === 'version', scoreSortDesc)}</span>
                     </button>
                   </th>
@@ -490,20 +492,20 @@ export function ScoreExplorerSection({
                           onOpenHistory={() => onOpenHistory(row)}
                         />
                       </td>
-                      <td className="rating-col">{formatNumber(toIntegerRating(row.rating))}</td>
+                      <td className="rating-col">{formatNumber(toIntegerRating(row.rating), locale)}</td>
                       <td className="rank-col">{row.rank ?? '-'}</td>
                       <td className="fc-col">{row.fc ?? '-'}</td>
                       <td className="sync-col">{row.sync ?? '-'}</td>
                       <td className="dx-col">
-                        {formatNumber(row.dxScore)} / {formatNumber(row.dxScoreMax)}
+                        {formatNumber(row.dxScore, locale)} / {formatNumber(row.dxScoreMax, locale)}
                       </td>
                       <td
                         className="last-played-col"
-                        title={row.daysSinceLastPlayed === null ? undefined : `${row.daysSinceLastPlayed}일 전`}
+                        title={row.daysSinceLastPlayed === null ? undefined : t('units.daysAgo', { count: row.daysSinceLastPlayed })}
                       >
-                        {row.latestPlayedAtLabel ?? toDateLabel(row.latestPlayedAtUnix) ?? '-'}
+                        {row.latestPlayedAtLabel ?? toDateLabel(row.latestPlayedAtUnix, locale) ?? '-'}
                       </td>
-                      <td className="play-count-col">{formatNumber(row.playCount)}</td>
+                      <td className="play-count-col">{formatNumber(row.playCount, locale)}</td>
                       <td className="version-col">{formatVersionLabel(row.version)}</td>
                     </tr>
                   );

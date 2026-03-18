@@ -54,6 +54,7 @@ import {
   buildScoreRows,
   toIntegerRating,
 } from './derive';
+import { useI18n, type TranslationKey, type TranslationVariables } from './app/i18n';
 import {
   buildFilteredPlaylogRows,
   buildFilteredScoreRows,
@@ -80,6 +81,9 @@ import type {
 
 type AppPage = 'home' | 'scores' | 'rating' | 'playlogs' | 'picker' | 'settings';
 type RatedScoreRow = ScoreRow & { rating: number; version: string };
+type LoadingErrorState =
+  | { kind: 'translated'; key: TranslationKey; variables?: TranslationVariables }
+  | { kind: 'message'; message: string };
 
 function readPageFromHash(hash: string): AppPage {
   if (hash === '#home') {
@@ -104,13 +108,17 @@ function readShowJacketsPreference(): boolean {
   return localStorage.getItem(TABLE_LAYOUT_STORAGE_KEY) !== 'compact';
 }
 
-function compareRatingPageRows(left: RatedScoreRow, right: RatedScoreRow): number {
+function compareRatingPageRows(
+  left: RatedScoreRow,
+  right: RatedScoreRow,
+  locale: string,
+): number {
   const ratingDiff = right.rating - left.rating;
   if (ratingDiff !== 0) {
     return ratingDiff;
   }
 
-  return left.title.localeCompare(right.title, 'ko');
+  return left.title.localeCompare(right.title, locale);
 }
 
 const MAIMAI_DAY_START_HOUR = 4;
@@ -229,16 +237,16 @@ function ChevronDownIcon() {
   );
 }
 
-const NAV_ITEMS: Array<{ page: AppPage; label: string; Icon: () => JSX.Element }> = [
-  { page: 'home', label: 'Home', Icon: HomeIcon },
-  { page: 'scores', label: 'Scores', Icon: ScoresIcon },
-  { page: 'rating', label: 'Rating', Icon: RatingIcon },
-  { page: 'playlogs', label: 'Playlogs', Icon: PlaylogsIcon },
-  { page: 'picker', label: 'Picker', Icon: PickerIcon },
-  { page: 'settings', label: 'Settings', Icon: SettingsIcon },
-];
-
 function App() {
+  const {
+    formatLanguageName,
+    formatNumber,
+    language,
+    languagePreference,
+    locale,
+    setLanguagePreference,
+    t,
+  } = useI18n();
   const mobileNavRef = useRef<HTMLElement | null>(null);
   const savedScoreFilters = useMemo(
     () => readStoredJson<StoredScoreFilters>(SCORE_FILTERS_STORAGE_KEY),
@@ -273,7 +281,7 @@ function App() {
     useState(recordCollectorUrl);
 
   const [isLoading, setIsLoading] = useState(false);
-  const [loadingError, setLoadingError] = useState<string | null>(null);
+  const [loadingError, setLoadingError] = useState<LoadingErrorState | null>(null);
 
   const [scoreRecords, setScoreRecords] = useState<ScoreApiResponse[]>([]);
   const [playlogRecords, setPlaylogRecords] = useState<PlayRecordApiResponse[]>([]);
@@ -386,8 +394,8 @@ function App() {
   const loadedExplorerKeyRef = useRef<string | null>(null);
 
   const scoreData = useMemo(
-    () => buildScoreRows(scoreRecords, songMetadata),
-    [scoreRecords, songMetadata],
+    () => buildScoreRows(scoreRecords, songMetadata, locale),
+    [locale, scoreRecords, songMetadata],
   );
   const selectedDetailRows = useMemo(
     () => buildSongDetailRows(scoreData, selectedDetailSongKey),
@@ -395,8 +403,8 @@ function App() {
   );
   const selectedDetailSong = selectedDetailRows[0] ?? null;
   const playlogData = useMemo(
-    () => buildPlaylogRows(playlogRecords, songMetadata),
-    [playlogRecords, songMetadata],
+    () => buildPlaylogRows(playlogRecords, songMetadata, locale),
+    [locale, playlogRecords, songMetadata],
   );
   const selectedHistoryRow = useMemo(
     () => scoreData.find((row) => row.key === selectedHistoryKey) ?? null,
@@ -421,7 +429,7 @@ function App() {
 
   const versionOptions = useMemo(() => {
     if (versionsResponse.length > 0) {
-      return sortByOrder(versionsResponse, VERSION_ORDER_MAP);
+      return sortByOrder(versionsResponse, VERSION_ORDER_MAP, locale);
     }
 
     return sortByOrder(
@@ -429,8 +437,9 @@ function App() {
         new Set(scoreData.map((row) => row.version).filter((value): value is string => Boolean(value))),
       ),
       VERSION_ORDER_MAP,
+      locale,
     );
-  }, [scoreData, versionsResponse]);
+  }, [locale, scoreData, versionsResponse]);
 
   const loadData = useCallback(async (options?: { force?: boolean; throwOnError?: boolean }) => {
     if (!songInfoUrl.trim() || !recordCollectorUrl.trim()) {
@@ -442,7 +451,7 @@ function App() {
       setPickerVersionOptions([]);
       setPlayerProfile(null);
       setSongMetadata(new Map<string, SongInfoResponse>());
-      setLoadingError('Scores와 Playlogs 페이지는 Song Info와 Record Collector URL이 모두 필요합니다.');
+      setLoadingError({ kind: 'translated', key: 'app.missingUrls' });
       return;
     }
 
@@ -491,7 +500,7 @@ function App() {
       }
       loadedExplorerKeyRef.current = null;
       const message = error instanceof Error ? error.message : String(error);
-      setLoadingError(message);
+      setLoadingError({ kind: 'message', message });
       setScoreRecords([]);
       setPlaylogRecords([]);
       setSongMetadata(new Map<string, SongInfoResponse>());
@@ -873,6 +882,7 @@ function App() {
     () =>
       buildFilteredScoreRows({
         scoreData,
+        locale,
         query,
         chartFilter,
         difficultyFilter,
@@ -899,6 +909,7 @@ function App() {
       fcFilter,
       internalMax,
       internalMin,
+      locale,
       query,
       scoreData,
       scoreSortDesc,
@@ -975,6 +986,7 @@ function App() {
     () =>
       buildFilteredPlaylogRows({
         playlogData,
+        locale,
         playlogQuery,
         playlogChartFilter,
         playlogDifficultyFilter,
@@ -995,6 +1007,7 @@ function App() {
       playlogData,
       playlogDifficultyFilter,
       playlogNewRecordOnly,
+      locale,
       playlogQuery,
       playlogSortDesc,
       playlogSortKey,
@@ -1013,11 +1026,11 @@ function App() {
     );
     const newRows = classifiedRows
       .filter((row) => latestSet.has(row.version))
-      .sort(compareRatingPageRows)
+      .sort((left, right) => compareRatingPageRows(left, right, locale))
       .slice(0, 15);
     const oldRows = classifiedRows
       .filter((row) => !latestSet.has(row.version))
-      .sort(compareRatingPageRows)
+      .sort((left, right) => compareRatingPageRows(left, right, locale))
       .slice(0, 35);
 
     const newTotal = newRows.reduce((sum, row) => sum + (toIntegerRating(row.rating) ?? 0), 0);
@@ -1030,7 +1043,7 @@ function App() {
       newRatingRows: newRows,
       oldRatingRows: oldRows,
     };
-  }, [scoreData, versionOptions]);
+  }, [locale, scoreData, versionOptions]);
 
   const handleApplySongInfoUrl = () => {
     const next = songInfoUrlDraft.trim();
@@ -1068,21 +1081,37 @@ function App() {
     setActivePage(page);
   }, [recordCollectorUrl, songInfoUrl]);
 
-  const scoreCountLabel = `${filteredScoreRows.length.toLocaleString()}/${scoreData.length.toLocaleString()}`;
-  const playlogCountLabel = `${filteredPlaylogRows.length.toLocaleString()}/${playlogData.length.toLocaleString()}`;
-  const activeNavItem = NAV_ITEMS.find((item) => item.page === activePage) ?? NAV_ITEMS[0];
+  const scoreCountLabel = `${formatNumber(filteredScoreRows.length)}/${formatNumber(scoreData.length)}`;
+  const playlogCountLabel = `${formatNumber(filteredPlaylogRows.length)}/${formatNumber(playlogData.length)}`;
+  const loadingErrorMessage = loadingError
+    ? loadingError.kind === 'translated'
+      ? t(loadingError.key, loadingError.variables)
+      : loadingError.message
+    : null;
+  const navItems = useMemo<Array<{ page: AppPage; label: string; Icon: () => JSX.Element }>>(
+    () => [
+      { page: 'home', label: t('nav.home'), Icon: HomeIcon },
+      { page: 'scores', label: t('nav.scores'), Icon: ScoresIcon },
+      { page: 'rating', label: t('nav.rating'), Icon: RatingIcon },
+      { page: 'playlogs', label: t('nav.playlogs'), Icon: PlaylogsIcon },
+      { page: 'picker', label: t('nav.picker'), Icon: PickerIcon },
+      { page: 'settings', label: t('nav.settings'), Icon: SettingsIcon },
+    ],
+    [t],
+  );
+  const activeNavItem = navItems.find((item) => item.page === activePage) ?? navItems[0];
   const ActiveNavIcon = activeNavItem.Icon;
-  const mobileNavItems = NAV_ITEMS;
+  const mobileNavItems = navItems;
   const totalPlayCount = playerProfile?.total_play_count;
   const playerSummary = playerProfile ? (
     <section className="app-player-summary">
-      <p className="app-player-summary-label">Connected player</p>
+      <p className="app-player-summary-label">{t('player.connected')}</p>
       <p className="app-player-summary-name">{playerProfile.user_name}</p>
       <p className="app-player-summary-count">
-        Total play count:{' '}
+        {t('player.totalPlayCount')}:{' '}
         <strong>
           {typeof totalPlayCount === 'number'
-            ? totalPlayCount.toLocaleString()
+            ? formatNumber(totalPlayCount)
             : '-'}
         </strong>
       </p>
@@ -1094,9 +1123,9 @@ function App() {
         <h1>maistats</h1>
       </div>
 
-      <nav className="app-nav app-nav-inline" aria-label="Primary">
+      <nav className="app-nav app-nav-inline" aria-label={t('nav.primary')}>
         <div className="app-nav-list">
-          {NAV_ITEMS.map(({ page, label, Icon }) => (
+          {navItems.map(({ page, label, Icon }) => (
             <button
               key={page}
               type="button"
@@ -1121,12 +1150,12 @@ function App() {
           <h1>maistats</h1>
         </div>
 
-        <nav ref={mobileNavRef} className="app-nav" aria-label="Primary">
+        <nav ref={mobileNavRef} className="app-nav" aria-label={t('nav.primary')}>
           <button
             type="button"
             className="app-nav-trigger"
             aria-expanded={isMobileNavOpen}
-            aria-label="페이지 목록 열기"
+            aria-label={t('nav.openPages')}
             onClick={() => setIsMobileNavOpen((current) => !current)}
           >
             <span className="app-nav-trigger-main">
@@ -1138,7 +1167,7 @@ function App() {
             </span>
           </button>
           <div className="app-nav-list app-nav-list-desktop">
-            {NAV_ITEMS.map(({ page, label, Icon }) => (
+            {navItems.map(({ page, label, Icon }) => (
               <button
                 key={page}
                 type="button"
@@ -1179,7 +1208,7 @@ function App() {
           />
         ) : activePage === 'scores' ? (
           <>
-            {loadingError ? <section className="error-banner">에러: {loadingError}</section> : null}
+            {loadingErrorMessage ? <section className="error-banner">{t('common.error')}: {loadingErrorMessage}</section> : null}
 
             <ScoreExplorerSection
               sidebarTopContent={desktopSidebarTopContent}
@@ -1236,7 +1265,7 @@ function App() {
           </>
         ) : activePage === 'playlogs' ? (
           <>
-            {loadingError ? <section className="error-banner">에러: {loadingError}</section> : null}
+            {loadingErrorMessage ? <section className="error-banner">{t('common.error')}: {loadingErrorMessage}</section> : null}
 
             <PlaylogExplorerSection
               sidebarTopContent={desktopSidebarTopContent}
@@ -1281,7 +1310,7 @@ function App() {
           </>
         ) : activePage === 'rating' ? (
           <>
-            {loadingError ? <section className="error-banner">에러: {loadingError}</section> : null}
+            {loadingErrorMessage ? <section className="error-banner">{t('common.error')}: {loadingErrorMessage}</section> : null}
             <RatingPage
               sidebarTopContent={desktopSidebarTopContent}
               songInfoUrl={songInfoUrl}
@@ -1304,6 +1333,9 @@ function App() {
         ) : (
           <SettingsPage
             sidebarTopContent={desktopSidebarTopContent}
+            languagePreference={languagePreference}
+            setLanguagePreference={setLanguagePreference}
+            languageLabel={formatLanguageName(language)}
             songInfoUrlDraft={songInfoUrlDraft}
             setSongInfoUrlDraft={setSongInfoUrlDraft}
             recordCollectorUrlDraft={recordCollectorUrlDraft}

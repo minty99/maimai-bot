@@ -1,7 +1,12 @@
 import { useCallback, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 
-import { checkRecordCollectorHealth } from '../api';
+import {
+  checkRecordCollectorHealth,
+  formatApiErrorMessage,
+  LocalizedApiError,
+} from '../api';
+import { useI18n } from '../app/i18n';
 
 const COMPOSE_YAML = `name: maistats-record-collector
 
@@ -35,6 +40,7 @@ export function HomePage({
   onConnect,
   onNavigateToScores,
 }: HomePageProps) {
+  const { t } = useI18n();
   const [urlDraft, setUrlDraft] = useState(recordCollectorUrl || '');
   const [isChecking, setIsChecking] = useState(false);
   const [checkError, setCheckError] = useState<string | null>(null);
@@ -60,14 +66,18 @@ export function HomePage({
       onConnect(url);
     } catch (error) {
       if (controller.signal.aborted) return;
-      const message = error instanceof Error ? error.message : String(error);
-      setCheckError(message);
+      const message = formatApiErrorMessage(error, t);
+      setCheckError(
+        error instanceof LocalizedApiError && !error.shouldWrap
+          ? message
+          : t('home.connect.failed', { message }),
+      );
     } finally {
       if (!controller.signal.aborted) {
         setIsChecking(false);
       }
     }
-  }, [urlDraft, onConnect]);
+  }, [onConnect, t, urlDraft]);
 
   return (
     <div className="explorer-layout">
@@ -77,18 +87,18 @@ export function HomePage({
         <section className="panel">
           <div className="panel-heading">
             <div>
-              <h2>Record Collector 연결</h2>
-              <p>Record Collector 서버 URL을 입력하고 연결을 확인합니다.</p>
+              <h2>{t('home.connect.title')}</h2>
+              <p>{t('home.connect.description')}</p>
             </div>
           </div>
 
           <div className="home-connect-row">
             <label className="home-url-field">
-              <span>서버 URL</span>
+              <span>{t('home.connect.serverUrl')}</span>
               <input
                 type="url"
                 value={urlDraft}
-                placeholder="https://your-server.example.com"
+                placeholder={t('home.connect.placeholder')}
                 onChange={(e) => setUrlDraft(e.target.value)}
                 onKeyDown={(e) => {
                   if (e.key === 'Enter') void handleConnect();
@@ -102,20 +112,18 @@ export function HomePage({
               onClick={() => void handleConnect()}
               disabled={isChecking || !urlDraft.trim()}
             >
-              {isChecking ? '연결 중...' : '연결'}
+              {isChecking ? t('common.connecting') : t('common.connect')}
             </button>
           </div>
 
           {checkError && (
-            <p className="home-status home-status-error">연결 실패: {checkError}</p>
+            <p className="home-status home-status-error">{checkError}</p>
           )}
           {connectedPlayer && (
             <div className="home-status home-status-success">
-              <span>
-                연결 성공! 플레이어: <strong>{connectedPlayer}</strong>
-              </span>
+              <span>{t('home.connect.success', { name: connectedPlayer })}</span>
               <button type="button" className="home-goto-btn" onClick={onNavigateToScores}>
-                Scores로 이동 →
+                {t('home.connect.goToScores')}
               </button>
             </div>
           )}
@@ -124,8 +132,8 @@ export function HomePage({
         <section className="panel">
           <div className="panel-heading">
             <div>
-              <h2>서버 실행 가이드</h2>
-              <p>Record Collector 서버가 없다면 아래 안내를 따라 직접 실행하세요.</p>
+              <h2>{t('home.guide.title')}</h2>
+              <p>{t('home.guide.description')}</p>
             </div>
           </div>
 
@@ -133,11 +141,15 @@ export function HomePage({
             <div className="home-step">
               <div className="home-step-num">1</div>
               <div className="home-step-body">
-                <strong>compose.yaml 파일 생성</strong>
+                <strong>{t('home.guide.step1Title')}</strong>
                 <p>
-                  서버를 실행할 폴더에 아래 내용으로 <code>compose.yaml</code> 파일을 만듭니다.{' '}
-                  <code>SEGA_ID</code>와 <code>SEGA_PASSWORD</code>에 maimaidx-eng.com 계정
-                  정보를 입력하세요.
+                  {t('home.guide.step1BodyA')}
+                  <code>compose.yaml</code>
+                  {t('home.guide.step1BodyB')}
+                  <code>SEGA_ID</code>
+                  {t('home.guide.step1BodyC')}
+                  <code>SEGA_PASSWORD</code>
+                  {t('home.guide.step1BodyD')}
                 </p>
                 <pre className="home-code">{COMPOSE_YAML}</pre>
               </div>
@@ -146,15 +158,17 @@ export function HomePage({
             <div className="home-step">
               <div className="home-step-num">2</div>
               <div className="home-step-body">
-                <strong>Docker Compose 실행</strong>
+                <strong>{t('home.guide.step2Title')}</strong>
                 <p>
-                  Docker가 설치된 환경에서 <code>compose.yaml</code>이 있는 폴더에서 아래
-                  명령어로 컨테이너를 시작합니다.
+                  {t('home.guide.step2BodyA')}
+                  <code>compose.yaml</code>
+                  {t('home.guide.step2BodyB')}
                 </p>
                 <pre className="home-code">docker compose up -d</pre>
                 <p>
-                  첫 실행 시 이미지 다운로드 후 maimaidx-eng.com 로그인이 진행됩니다. 서버가
-                  준비되면 <code>/health/ready</code> 엔드포인트가 200을 반환합니다.
+                  {t('home.guide.step2BodyC')}
+                  <code>/health/ready</code>
+                  {t('home.guide.step2BodyD')}
                 </p>
               </div>
             </div>
@@ -162,21 +176,19 @@ export function HomePage({
             <div className="home-step">
               <div className="home-step-num">3</div>
               <div className="home-step-body">
-                <strong>외부 접근 설정 (선택)</strong>
-                <p>
-                  외부에서 접근하려면 서버를 공개 IP 또는 도메인으로 노출하고 해당 주소를
-                  입력하세요. ngrok, Cloudflare Tunnel 등을 활용할 수 있습니다.
-                </p>
+                <strong>{t('home.guide.step3Title')}</strong>
+                <p>{t('home.guide.step3Body')}</p>
               </div>
             </div>
 
             <div className="home-step">
               <div className="home-step-num">4</div>
               <div className="home-step-body">
-                <strong>URL 연결</strong>
+                <strong>{t('home.guide.step4Title')}</strong>
                 <p>
-                  서버가 준비되면 위 입력창에 서버 URL을 입력하고 <strong>연결</strong> 버튼을
-                  클릭하세요. 연결에 성공하면 자동으로 Scores 페이지로 이동합니다.
+                  {t('home.guide.step4BodyA')}
+                  <strong>{t('common.connect')}</strong>
+                  {t('home.guide.step4BodyB')}
                 </p>
               </div>
             </div>
@@ -186,11 +198,11 @@ export function HomePage({
         <section className="panel">
           <div className="panel-heading">
             <div>
-              <h2>Discord Bot</h2>
+              <h2>{t('home.discord.title')}</h2>
               <p>
-                Discord 서버에 maistats 봇을 추가하면 <code>/mai-score</code>,{' '}
-                <code>/mai-recent</code> 명령어로 스코어와 최근 플레이 기록을 바로 조회할 수
-                있습니다.
+                {t('home.discord.description')}
+                <code>/mai-score</code>, <code>/mai-recent</code>
+                {t('home.discord.descriptionTail')}
               </p>
             </div>
           </div>
@@ -200,61 +212,61 @@ export function HomePage({
             rel="noreferrer"
             className="home-discord-btn"
           >
-            Discord Bot 추가하기
+            {t('home.discord.addButton')}
           </a>
         </section>
 
         <footer className="home-footer">
           <ul className="home-footer-credits">
             <li>
-              곡 제목의 alias는{' '}
+              {t('home.footer.aliases')}
               <a href="https://github.com/lomotos10/GCM-bot" target="_blank" rel="noreferrer">
                 GCM-bot
               </a>
-              으로부터 허가를 받아 가져왔습니다.
+              {t('home.footer.aliasesTail')}
             </li>
             <li>
-              곡들의 보면상수는{' '}
+              {t('home.footer.constants')}
               <a href="https://x.com/maiLv_Chihooooo" target="_blank" rel="noreferrer">
                 maimai譜面定数ちほー
               </a>
-              에서 가져왔습니다.
+              {t('home.footer.constantsTail')}
             </li>
             <li>
-              곡의 파싱은{' '}
+              {t('home.footer.parsing')}
               <a href="https://github.com/zetaraku/arcade-songs-fetch" target="_blank" rel="noreferrer">
                 arcade-songs-fetch
               </a>
-              를 참고했습니다.
+              {t('home.footer.parsingTail')}
             </li>
             <li>
-              maistats의 소스 코드는{' '}
+              {t('home.footer.source')}
               <a href="https://github.com/minty99/maistats" target="_blank" rel="noreferrer">
                 github.com/minty99/maistats
               </a>
-              에 공개되어 있습니다.
+              {t('home.footer.sourceTail')}
             </li>
             <li>
-              개발자:{' '}
+              {t('home.footer.developer')}{' '}
               <a href="https://github.com/minty99" target="_blank" rel="noreferrer">
                 github.com/minty99
               </a>
             </li>
           </ul>
           <p className="home-footer-copyright">
-            본 사이트는 개인 성과 기록 및 추적을 위해 만든{' '}
+            {t('home.footer.copyrightA')}
             <a href="https://maimai.sega.com/" target="_blank" rel="noreferrer">
               maimai DX
             </a>
-            의 팬 사이트이며, 사이트 내에 사용된 게임 관련 컨텐츠의 저작권은{' '}
+            {t('home.footer.copyrightB')}
             <a href="https://www.sega.com/" target="_blank" rel="noreferrer">
               SEGA
             </a>{' '}
-            및{' '}
+            {t('home.footer.copyrightC')}
             <a href="https://maimai.sega.com/song/new/#copy--list" target="_blank" rel="noreferrer">
-              각 소유자들
+              {t('home.footer.copyrightOwners')}
             </a>
-            에게 있습니다.
+            {t('home.footer.copyrightD')}
           </p>
         </footer>
       </div>

@@ -1,6 +1,7 @@
 import type { Dispatch, ReactNode, SetStateAction } from 'react';
 
 import type { PlaylogSortKey } from '../app/constants';
+import { useI18n } from '../app/i18n';
 import {
   formatAliasSummary,
   formatNumber,
@@ -101,6 +102,7 @@ export function PlaylogExplorerSection({
   playlogSortDesc,
   onSortBy,
 }: PlaylogExplorerSectionProps) {
+  const { formatNumber: formatLocalizedNumber, locale, t } = useI18n();
   const isSearchDirty = playlogQueryDraft.trim() !== appliedPlaylogQuery.trim();
 
   const handlePlaylogDayInputChange = (value: string) => {
@@ -116,8 +118,15 @@ export function PlaylogExplorerSection({
   const formatDayLabel = (dayKey: string) => dayKey.replace(/-/g, '/');
 
   const playlogDaySummary = isPlaylogDateFilterDisabled
-    ? `전체: ${selectedPlaylogDaySongCount.toLocaleString()}곡`
-    : `${selectedPlaylogDaySongCount.toLocaleString()}곡 · ${selectedPlaylogDayCreditCount === null ? '-' : selectedPlaylogDayCreditCount.toLocaleString()} 크레딧`;
+    ? t('playlogs.summaryAll', {
+      songCount: formatLocalizedNumber(selectedPlaylogDaySongCount),
+    })
+    : t('playlogs.summaryDay', {
+      songCount: formatLocalizedNumber(selectedPlaylogDaySongCount),
+      creditCount: selectedPlaylogDayCreditCount === null
+        ? '-'
+        : formatLocalizedNumber(selectedPlaylogDayCreditCount),
+    });
 
   return (
     <div className="explorer-layout">
@@ -137,16 +146,16 @@ export function PlaylogExplorerSection({
                 onApplyPlaylogQuery();
               }}
             >
-              <span>검색 (곡명/alias/시각)</span>
+              <span>{t('playlogs.searchLabel')}</span>
               <div className="search-submit-row">
                 <input
                   type="search"
                   value={playlogQueryDraft}
                   onChange={(event) => setPlaylogQueryDraft(event.target.value)}
-                  placeholder="예: 2026/02/25, BUDDiES, 배드애플"
+                  placeholder={t('playlogs.searchPlaceholder')}
                 />
                 <button type="submit" disabled={!isSearchDirty}>
-                  검색
+                  {t('common.search')}
                 </button>
               </div>
             </form>
@@ -158,10 +167,10 @@ export function PlaylogExplorerSection({
                   checked={isPlaylogDateFilterDisabled}
                   onChange={(event) => setIsPlaylogDateFilterDisabled(event.target.checked)}
                 />
-                <span>전체 플레이 기록 보기</span>
+                <span>{t('playlogs.showAll')}</span>
               </label>
               <label className="search-box">
-                <span>플레이 날짜 (maimai day 04:00 기준)</span>
+                <span>{t('playlogs.dayLabel')}</span>
                 <select
                   value={selectedPlaylogDayKey ?? ''}
                   onChange={(event) => handlePlaylogDayInputChange(event.target.value)}
@@ -169,7 +178,10 @@ export function PlaylogExplorerSection({
                 >
                   {playlogDayOptions.map((option) => (
                     <option key={option.key} value={option.key}>
-                      {formatDayLabel(option.key)} ({option.creditCount === null ? '-' : option.creditCount.toLocaleString()} credits)
+                      {t('playlogs.dayOption', {
+                        date: formatDayLabel(option.key),
+                        credits: option.creditCount === null ? '-' : formatLocalizedNumber(option.creditCount),
+                      })}
                     </option>
                   ))}
                 </select>
@@ -178,7 +190,7 @@ export function PlaylogExplorerSection({
             </div>
 
             <ToggleGroup
-              label="Chart Type"
+              label={t('scores.chartType')}
               options={chartTypes}
               selected={playlogChartFilter}
               onToggle={(value) => setPlaylogChartFilter((prev) => toggleArrayValue(prev, value))}
@@ -186,7 +198,7 @@ export function PlaylogExplorerSection({
             />
 
             <ToggleGroup
-              label="Difficulty"
+              label={t('scores.difficulty')}
               options={difficulties}
               selected={playlogDifficultyFilter}
               onToggle={(value) => setPlaylogDifficultyFilter((prev) => toggleArrayValue(prev, value))}
@@ -196,7 +208,7 @@ export function PlaylogExplorerSection({
 
             <div className="range-grid compact">
               <label>
-                <span>달성률 최소</span>
+                <span>{t('scores.achievementMin')}</span>
                 <input
                   type="number"
                   value={playlogAchievementMin}
@@ -207,7 +219,7 @@ export function PlaylogExplorerSection({
                 />
               </label>
               <label>
-                <span>달성률 최대</span>
+                <span>{t('scores.achievementMax')}</span>
                 <input
                   type="number"
                   value={playlogAchievementMax}
@@ -226,7 +238,7 @@ export function PlaylogExplorerSection({
                   checked={playlogBestOnly}
                   onChange={(event) => setPlaylogBestOnly(event.target.checked)}
                 />
-                <span>곡/채보별 최고 기록만 보기</span>
+                <span>{t('playlogs.bestOnly')}</span>
               </label>
               <label className="playlog-special-toggle">
                 <input
@@ -234,7 +246,7 @@ export function PlaylogExplorerSection({
                   checked={playlogNewRecordOnly}
                   onChange={(event) => setPlaylogNewRecordOnly(event.target.checked)}
                 />
-                <span>new record만 보기</span>
+                <span>{t('playlogs.newRecordOnly')}</span>
               </label>
             </div>
 
@@ -249,20 +261,20 @@ export function PlaylogExplorerSection({
               <h2>Playlogs</h2>
             </div>
             <div className="panel-heading-actions">
-              <div className="view-mode-switch" role="group" aria-label="Playlogs layout">
+              <div className="view-mode-switch" role="group" aria-label={t('playlogs.layout')}>
                 <button
                   type="button"
                   className={showJackets ? 'active' : ''}
                   onClick={() => setShowJackets(true)}
                 >
-                  Jacket
+                  {t('common.jacket')}
                 </button>
                 <button
                   type="button"
                   className={!showJackets ? 'active' : ''}
                   onClick={() => setShowJackets(false)}
                 >
-                  Compact
+                  {t('common.compact')}
                 </button>
               </div>
               <span className="panel-count">{playlogCountLabel}</span>
@@ -274,33 +286,33 @@ export function PlaylogExplorerSection({
                 <tr>
                   <th className="sortable credit-col">
                     <button type="button" className="th-sort-button" onClick={() => onSortBy('playCount')}>
-                      <span>Credit #</span>
+                      <span>{t('playlogs.creditNumber')}</span>
                       <span className="sort-indicator">
                         {sortIndicator(playlogSortKey === 'playCount', playlogSortDesc)}
                       </span>
                     </button>
                   </th>
-                  {showJackets ? <th className="jacket-col">Jacket</th> : null}
+                  {showJackets ? <th className="jacket-col">{t('common.jacket')}</th> : null}
                   <th className="sortable played-at-col">
                     <button type="button" className="th-sort-button" onClick={() => onSortBy('playedAt')}>
-                      <span>Played At</span>
+                      <span>{t('playlogs.playedAt')}</span>
                       <span className="sort-indicator">
                         {sortIndicator(playlogSortKey === 'playedAt', playlogSortDesc)}
                       </span>
                     </button>
                   </th>
-                  <th className="track-col">Track</th>
+                  <th className="track-col">{t('common.track')}</th>
                   <th className="sortable title-col">
                     <button type="button" className="th-sort-button" onClick={() => onSortBy('title')}>
-                      <span>Title</span>
+                      <span>{t('common.title')}</span>
                       <span className="sort-indicator">{sortIndicator(playlogSortKey === 'title', playlogSortDesc)}</span>
                     </button>
                   </th>
-                  <th className="chart-col">Chart</th>
-                  <th className="level-col">Lv</th>
+                  <th className="chart-col">{t('common.chart')}</th>
+                  <th className="level-col">{t('common.levelShort')}</th>
                   <th className="sortable achievement-col">
                     <button type="button" className="th-sort-button" onClick={() => onSortBy('achievement')}>
-                      <span>Achv</span>
+                      <span>{t('common.achievementShort')}</span>
                       <span className="sort-indicator">
                         {sortIndicator(playlogSortKey === 'achievement', playlogSortDesc)}
                       </span>
@@ -308,18 +320,18 @@ export function PlaylogExplorerSection({
                   </th>
                   <th className="sortable rating-col">
                     <button type="button" className="th-sort-button" onClick={() => onSortBy('rating')}>
-                      <span>Rating</span>
+                      <span>{t('common.rating')}</span>
                       <span className="sort-indicator">
                         {sortIndicator(playlogSortKey === 'rating', playlogSortDesc)}
                       </span>
                     </button>
                   </th>
-                  <th className="rank-col">Rank</th>
+                  <th className="rank-col">{t('common.rank')}</th>
                   <th className="fc-col">FC</th>
-                  <th className="sync-col">Sync</th>
+                  <th className="sync-col">{t('common.sync')}</th>
                   <th className="sortable dx-col">
                     <button type="button" className="th-sort-button" onClick={() => onSortBy('dxRatio')}>
-                      <span>DX</span>
+                      <span>{t('common.dx')}</span>
                       <span className="sort-indicator">
                         {sortIndicator(playlogSortKey === 'dxRatio', playlogSortDesc)}
                       </span>
@@ -336,7 +348,7 @@ export function PlaylogExplorerSection({
                         <Jacket songInfoUrl={songInfoUrl} imageName={row.imageName} title={row.title} />
                       </td>
                     ) : null}
-                    <td className="played-at-col">{row.playedAtLabel ?? toDateLabel(row.playedAtUnix) ?? '-'}</td>
+                    <td className="played-at-col">{row.playedAtLabel ?? toDateLabel(row.playedAtUnix, locale) ?? '-'}</td>
                     <td className="track-col">{row.track ?? '-'}</td>
                     <td className="title-col">
                       <div className="title-cell">
@@ -366,12 +378,12 @@ export function PlaylogExplorerSection({
                         onOpenHistory={canOpenHistory(row) ? () => onOpenHistory(row) : null}
                       />
                     </td>
-                    <td className="rating-col">{formatNumber(toIntegerRating(row.rating))}</td>
+                    <td className="rating-col">{formatNumber(toIntegerRating(row.rating), locale)}</td>
                     <td className="rank-col">{row.rank ?? '-'}</td>
                     <td className="fc-col">{row.fc ?? '-'}</td>
                     <td className="sync-col">{row.sync ?? '-'}</td>
                     <td className="dx-col">
-                      {formatNumber(row.dxScore)} / {formatNumber(row.dxScoreMax)}
+                      {formatNumber(row.dxScore, locale)} / {formatNumber(row.dxScoreMax, locale)}
                     </td>
                   </tr>
                 ))}

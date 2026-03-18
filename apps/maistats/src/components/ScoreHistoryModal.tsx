@@ -1,5 +1,6 @@
 import { useState } from 'react';
 
+import { useI18n } from '../app/i18n';
 import { formatPercent } from '../app/utils';
 import { ChartTypeLabel } from './ChartTypeLabel';
 import { DifficultyLabel } from './DifficultyLabel';
@@ -31,17 +32,17 @@ function buildLinearTicks(start: number, end: number, count: number): number[] {
   return Array.from({ length: count }, (_, index) => start + step * index);
 }
 
-function formatDateTick(unixtime: number, spanMs: number): string {
+function formatDateTick(unixtime: number, spanMs: number, locale: string): string {
   const date = new Date(toUnixMillis(unixtime));
-  return date.toLocaleDateString('ko-KR', {
+  return date.toLocaleDateString(locale, {
     year: spanMs > 1000 * 60 * 60 * 24 * 365 ? '2-digit' : undefined,
     month: '2-digit',
     day: '2-digit',
   });
 }
 
-function formatPointTime(unixtime: number): string {
-  return new Date(toUnixMillis(unixtime)).toLocaleString('ko-KR', {
+function formatPointTime(unixtime: number, locale: string): string {
+  return new Date(toUnixMillis(unixtime)).toLocaleString(locale, {
     year: 'numeric',
     month: '2-digit',
     day: '2-digit',
@@ -56,6 +57,7 @@ export function ScoreHistoryModal({
   songInfoUrl,
   onClose,
 }: ScoreHistoryModalProps) {
+  const { locale, t } = useI18n();
   const [hoveredPointKey, setHoveredPointKey] = useState<string | null>(null);
 
   if (!selectedHistoryRow) {
@@ -114,7 +116,7 @@ export function ScoreHistoryModal({
         className="modal-card panel history-modal"
         onClick={(event) => event.stopPropagation()}
       >
-        <h2>History</h2>
+        <h2>{t('history.title')}</h2>
         <div className="detail-content">
           <div className="detail-header">
             <div className="detail-song-summary">
@@ -131,17 +133,17 @@ export function ScoreHistoryModal({
                   <DifficultyLabel difficulty={selectedHistoryRow.difficulty} className="difficulty-badge" />
                 </div>
                 <p className="muted">
-                  playlogs 기준으로 최고 달성률이 갱신된 시점만 표시합니다.
+                  {t('history.description')}
                 </p>
               </div>
             </div>
             <button type="button" className="modal-close-button" onClick={onClose}>
-              닫기
+              {t('common.close')}
             </button>
           </div>
 
           {historyPoints.length === 0 ? (
-            <p className="muted">이 채보에 대한 최고기록 변동 이력을 playlogs에서 찾지 못했습니다.</p>
+            <p className="muted">{t('history.empty')}</p>
           ) : (
             <div
               className="history-chart-panel"
@@ -156,7 +158,7 @@ export function ScoreHistoryModal({
                   }}
                 >
                   <strong>{formatPercent(hoveredPoint.achievementPercent)}</strong>
-                  <span>{hoveredPoint.playedAtLabel ?? formatPointTime(hoveredPoint.playedAtUnix)}</span>
+                  <span>{hoveredPoint.playedAtLabel ?? formatPointTime(hoveredPoint.playedAtUnix, locale)}</span>
                 </div>
               ) : null}
 
@@ -165,7 +167,7 @@ export function ScoreHistoryModal({
                   viewBox={`0 0 ${CHART_WIDTH} ${CHART_HEIGHT}`}
                   className="history-chart"
                   role="img"
-                  aria-label={`${selectedHistoryRow.title} 최고 달성률 변화 그래프`}
+                  aria-label={t('history.graphLabel', { title: selectedHistoryRow.title })}
                 >
                   {yTicks.map((tick) => (
                     <g key={`y-${tick}`} className="history-grid">
@@ -199,7 +201,7 @@ export function ScoreHistoryModal({
                         y={CHART_MARGIN.top + innerHeight + 24}
                         textAnchor="middle"
                       >
-                        {formatDateTick(tick, xSpan)}
+                        {formatDateTick(tick, xSpan, locale)}
                       </text>
                     </g>
                   ))}
@@ -226,7 +228,7 @@ export function ScoreHistoryModal({
                     transform={`rotate(-90 26 ${CHART_MARGIN.top + innerHeight / 2})`}
                     textAnchor="middle"
                   >
-                    Achievement
+                    {t('history.axisAchievement')}
                   </text>
                   <text
                     className="history-axis-label"
@@ -234,7 +236,7 @@ export function ScoreHistoryModal({
                     y={CHART_HEIGHT - 18}
                     textAnchor="middle"
                   >
-                    Time
+                    {t('history.axisTime')}
                   </text>
 
                   {historyPoints.length > 1 ? (
@@ -253,7 +255,7 @@ export function ScoreHistoryModal({
                         cy={point.chartY}
                         r={POINT_RADIUS}
                         tabIndex={0}
-                        aria-label={`${point.playedAtLabel ?? formatPointTime(point.playedAtUnix)} ${formatPercent(point.achievementPercent)}`}
+                        aria-label={`${point.playedAtLabel ?? formatPointTime(point.playedAtUnix, locale)} ${formatPercent(point.achievementPercent)}`}
                         onMouseEnter={() => setHoveredPointKey(point.key)}
                         onFocus={() => setHoveredPointKey(point.key)}
                         onBlur={() => setHoveredPointKey((current) => (current === point.key ? null : current))}
