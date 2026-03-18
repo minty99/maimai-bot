@@ -22,14 +22,24 @@ fn expected_displayed_level(level_param: u8) -> &'static str {
     }
 }
 
+fn expected_entry_count(level_param: u8) -> usize {
+    match level_param {
+        17 => 228,
+        18 => 372,
+        19 => 500,
+        20 => 384,
+        21 => 213,
+        22 => 82,
+        23 => 3,
+        _ => unreachable!("fixture level param must be 17..=23"),
+    }
+}
+
 fn run_fixture_test(level_param: u8) {
     let html = std::fs::read_to_string(fixture_path(&format!("level{level_param}.html"))).unwrap();
     let entries = parse_internal_level_page_html(&html).unwrap();
 
-    assert!(
-        !entries.is_empty(),
-        "fixture level{level_param}.html should produce rows"
-    );
+    assert_eq!(entries.len(), expected_entry_count(level_param));
     assert!(
         entries
             .iter()

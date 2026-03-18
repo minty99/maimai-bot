@@ -20,7 +20,6 @@ pub(crate) struct InternalLevelRow {
     pub(crate) sheet_type: ChartType,
     pub(crate) difficulty: DifficultyCategory,
     pub(crate) internal_level: String,
-    pub(crate) source_version: i64,
 }
 
 #[derive(Debug, Clone)]
@@ -41,7 +40,7 @@ struct ParsedLevelPageEntry {
 struct AssignedLevelPageEntry {
     parsed: ParsedLevelPageEntry,
     bucket_index: usize,
-    inferred_internal_level: f32,
+    inferred_internal_level_tenths: u16,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -111,12 +110,20 @@ fn bucket_count_for_level(base_level: u8, is_plus: bool) -> usize {
     }
 }
 
-fn start_internal_for_level(base_level: u8, is_plus: bool) -> f32 {
+fn start_internal_tenths_for_level(base_level: u8, is_plus: bool) -> u16 {
     if is_plus {
-        f32::from(base_level) + 0.6
+        u16::from(base_level) * 10 + 6
     } else {
-        f32::from(base_level)
+        u16::from(base_level) * 10
     }
+}
+
+fn format_internal_level_tenths(internal_level_tenths: u16) -> String {
+    format!(
+        "{}.{}",
+        internal_level_tenths / 10,
+        internal_level_tenths % 10
+    )
 }
 
 fn supported_level_params() -> impl Iterator<Item = u8> {
@@ -276,9 +283,14 @@ async fn fetch_level_page_html_with_auth_recovery(
         return Ok(html);
     }
 
+    tracing::warn!(
+        "internal levels: level {} looked unauthenticated; re-logging in and retrying",
+        displayed_level
+    );
     intl::login(client, sega_id, sega_password)
         .await
         .wrap_err_with(|| format!("re-login after auth expiry for level {displayed_level}"))?;
+    tokio::time::sleep(Duration::from_millis(500)).await;
 
     let retry_response = client
         .get(INTL_LEVEL_SEARCH_URL)
@@ -324,7 +336,7 @@ fn assign_internal_levels(
     let (base_level, is_plus) = parse_displayed_level(&displayed_level)
         .ok_or_else(|| eyre::eyre!("unsupported displayed level: {displayed_level}"))?;
     let expected_bucket_count = bucket_count_for_level(base_level, is_plus);
-    let mut current_internal = start_internal_for_level(base_level, is_plus);
+    let mut current_internal_tenths = start_internal_tenths_for_level(base_level, is_plus);
     let mut observed_bucket_count = 1;
     let mut previous_genre_rank = None;
     let mut assigned = Vec::with_capacity(entries.len());
@@ -340,14 +352,14 @@ fn assign_internal_levels(
         })?;
 
         if previous_genre_rank.is_some_and(|previous| genre_rank < previous) {
-            current_internal = ((current_internal * 10.0).round() + 1.0) / 10.0;
+            current_internal_tenths += 1;
             observed_bucket_count += 1;
         }
         previous_genre_rank = Some(genre_rank);
 
         assigned.push(AssignedLevelPageEntry {
             bucket_index: observed_bucket_count - 1,
-            inferred_internal_level: current_internal,
+            inferred_internal_level_tenths: current_internal_tenths,
             parsed: entry,
         });
     }
@@ -418,8 +430,9 @@ pub(crate) async fn fetch_internal_levels(
                 song_identity: assigned_entry.parsed.resolved.song_identity,
                 sheet_type: assigned_entry.parsed.chart_type,
                 difficulty: assigned_entry.parsed.difficulty,
-                internal_level: format!("{:.1}", assigned_entry.inferred_internal_level),
-                source_version: i64::from(level_param),
+                internal_level: format_internal_level_tenths(
+                    assigned_entry.inferred_internal_level_tenths,
+                ),
             };
 
             if let Some(existing) = result.get(&key) {
@@ -517,8 +530,10 @@ mod tests {
         assert_eq!(bucket_count_for_level(7, false), 6);
         assert_eq!(bucket_count_for_level(7, true), 4);
         assert_eq!(bucket_count_for_level(15, false), 1);
-        assert_eq!(start_internal_for_level(7, false), 7.0);
-        assert_eq!(start_internal_for_level(7, true), 7.6);
+        assert_eq!(start_internal_tenths_for_level(7, false), 70);
+        assert_eq!(start_internal_tenths_for_level(7, true), 76);
+        assert_eq!(format_internal_level_tenths(70), "7.0");
+        assert_eq!(format_internal_level_tenths(76), "7.6");
     }
 
     #[test]
@@ -577,7 +592,7 @@ mod tests {
         let (assigned, check) = assign_internal_levels(entries, 17).expect("assign levels");
         let inferred = assigned
             .iter()
-            .map(|entry| format!("{:.1}", entry.inferred_internal_level))
+            .map(|entry| format_internal_level_tenths(entry.inferred_internal_level_tenths))
             .collect::<Vec<_>>();
         assert_eq!(inferred, vec!["12.0", "12.0", "12.1"]);
         assert_eq!(assigned[2].bucket_index, 1);
@@ -687,7 +702,7 @@ mod tests {
         for entry in assigned_entries {
             println!(
                 "{}\t{}\t{}\t{}\t{}",
-                format!("{:.1}", entry.inferred_internal_level),
+                format_internal_level_tenths(entry.inferred_internal_level_tenths),
                 entry.parsed.chart_type.as_str(),
                 entry.parsed.difficulty.as_str(),
                 entry.parsed.resolved.genre,
