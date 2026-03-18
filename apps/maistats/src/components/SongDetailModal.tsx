@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react';
 
+import { formatApiErrorMessage } from '../api';
+import { useI18n } from '../app/i18n';
 import { ChartTypeLabel } from './ChartTypeLabel';
 import { Jacket } from './Jacket';
 import { getDifficultyToneClass } from './DifficultyLabel';
@@ -35,6 +37,7 @@ export function SongDetailModal({
   onRefreshSongScores,
   onClose,
 }: SongDetailModalProps) {
+  const { locale, t } = useI18n();
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [refreshError, setRefreshError] = useState<string | null>(null);
 
@@ -95,7 +98,7 @@ export function SongDetailModal({
 
   const handleRefreshClick = async () => {
     if (selectedDetailGenre === null || selectedDetailArtist === null) {
-      setRefreshError('곡 식별 정보가 부족해서 새로고침할 수 없습니다.');
+      setRefreshError(t('songDetail.refreshUnavailable'));
       return;
     }
 
@@ -108,7 +111,7 @@ export function SongDetailModal({
         artist: selectedDetailArtist,
       });
     } catch (error) {
-      setRefreshError(error instanceof Error ? error.message : String(error));
+      setRefreshError(formatApiErrorMessage(error, t));
     } finally {
       setIsRefreshing(false);
     }
@@ -117,7 +120,7 @@ export function SongDetailModal({
   return (
     <div className="modal-backdrop" onClick={onClose}>
       <section className="modal-card panel" onClick={(event) => event.stopPropagation()}>
-        <h2>Song Detail</h2>
+        <h2>{t('songDetail.title')}</h2>
         <div className="detail-content">
           <div className="detail-header">
             <div className="detail-song-summary">
@@ -151,32 +154,32 @@ export function SongDetailModal({
                 onClick={handleRefreshClick}
                 disabled={!canRefresh || isRefreshing}
               >
-                {isRefreshing ? '갱신 중...' : 'Score 갱신'}
+                {isRefreshing ? t('songDetail.refreshing') : t('songDetail.refresh')}
               </button>
               <button type="button" className="modal-close-button" onClick={onClose}>
-                닫기
+                {t('common.close')}
               </button>
             </div>
           </div>
           {refreshError ? <p className="error-inline">{refreshError}</p> : null}
           {selectedDetailRows.length === 0 ? (
-            <p className="muted">조회 가능한 상세 데이터가 없습니다.</p>
+            <p className="muted">{t('songDetail.empty')}</p>
           ) : null}
           {selectedDetailRows.length > 0 ? (
             <div className="table-wrap">
               <table className="detail-table compact-table">
                 <thead>
                   <tr>
-                    <th>Chart</th>
-                    <th>Lv</th>
-                    <th>Achv</th>
-                    <th>Rank</th>
-                    <th>FC</th>
-                    <th>Sync</th>
-                    <th>DX</th>
-                    <th>Last Played</th>
-                    <th>Play Count</th>
-                    <th>Version</th>
+                    <th>{t('common.chart')}</th>
+                    <th>{t('common.levelShort')}</th>
+                    <th>{t('common.achievementShort')}</th>
+                    <th>{t('common.rank')}</th>
+                    <th>{t('common.fc')}</th>
+                    <th>{t('common.sync')}</th>
+                    <th>{t('common.dx')}</th>
+                    <th>{t('common.lastPlayed')}</th>
+                    <th>{t('common.playCount')}</th>
+                    <th>{t('common.version')}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -191,10 +194,10 @@ export function SongDetailModal({
                       <td>{row.fc ?? '-'}</td>
                       <td>{row.sync ?? '-'}</td>
                       <td>
-                        {formatNumber(row.dxScore)} / {formatNumber(row.dxScoreMax)}
+                        {formatNumber(row.dxScore, locale)} / {formatNumber(row.dxScoreMax, locale)}
                       </td>
                       <td>{row.lastPlayedAtLabel ?? '-'}</td>
-                      <td>{formatNumber(row.playCount)}</td>
+                      <td>{formatNumber(row.playCount, locale)}</td>
                       <td>{formatVersionLabel(row.version)}</td>
                     </tr>
                   ))}

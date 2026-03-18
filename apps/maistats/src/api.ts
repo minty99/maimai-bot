@@ -1,3 +1,4 @@
+import type { TranslationKey, TranslationVariables } from './app/i18n';
 import type {
   ApiErrorResponse,
   PlayRecordApiResponse,
@@ -8,6 +9,28 @@ import type {
   SongVersionsListResponse,
 } from './types';
 import { songIdentityKey } from './songIdentity';
+
+export class LocalizedApiError extends Error {
+  constructor(
+    readonly translationKey: TranslationKey,
+    readonly variables?: TranslationVariables,
+    readonly shouldWrap = false,
+  ) {
+    super(translationKey);
+    this.name = 'LocalizedApiError';
+  }
+}
+
+export function formatApiErrorMessage(
+  error: unknown,
+  t: (key: TranslationKey, variables?: TranslationVariables) => string,
+): string {
+  if (error instanceof LocalizedApiError) {
+    return t(error.translationKey, error.variables);
+  }
+
+  return error instanceof Error ? error.message : String(error);
+}
 
 export interface ExplorerPayload {
   ratedScores: ScoreApiResponse[];
@@ -174,12 +197,12 @@ export async function checkRecordCollectorHealth(
 ): Promise<PlayerProfile> {
   const base = normalizeBaseUrl(baseUrl);
   if (!base) {
-    throw new Error('URL을 입력해주세요.');
+    throw new LocalizedApiError('api.enterUrl');
   }
 
   const healthResp = await fetch(`${base}/health/ready`, { signal });
   if (!healthResp.ok) {
-    throw new Error(`서버에 연결할 수 없습니다. (HTTP ${healthResp.status})`);
+    throw new LocalizedApiError('api.connectionFailed', { status: healthResp.status }, true);
   }
 
   return getJson<PlayerProfile>(`${base}/api/player`, signal);
@@ -203,7 +226,7 @@ export async function refreshSongScores(
 ): Promise<RefreshSongScoresResponse> {
   const base = normalizeBaseUrl(baseUrl);
   if (!base) {
-    throw new Error('Record Collector URL이 비어 있습니다.');
+    throw new LocalizedApiError('api.recordCollectorRequired');
   }
 
   return postJson<RefreshSongScoresPayload, RefreshSongScoresResponse>(

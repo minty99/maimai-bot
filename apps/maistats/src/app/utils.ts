@@ -14,11 +14,15 @@ export function formatRatio(value: number | null): string {
   return `${(value * 100).toFixed(2)}%`;
 }
 
-export function formatNumber(value: number | null): string {
+export function formatNumber(value: number | null, locale: string): string;
+export function formatNumber(value: number | null, locale?: string): string {
   if (value === null) {
     return '-';
   }
-  return value.toLocaleString();
+  if (locale === undefined) {
+    throw new Error('formatNumber requires an explicit locale');
+  }
+  return value.toLocaleString(locale);
 }
 
 export function includesText(haystack: string, query: string): boolean {
@@ -41,7 +45,11 @@ export function compareNullableNumber(a: number | null, b: number | null): numbe
   return a - b;
 }
 
-export function sortByOrder<T extends string>(values: T[], orderMap: Map<string, number>): T[] {
+export function sortByOrder<T extends string>(
+  values: T[],
+  orderMap: Map<string, number>,
+  locale: string,
+): T[] {
   return [...values].sort((left, right) => {
     const leftOrder = orderMap.get(left);
     const rightOrder = orderMap.get(right);
@@ -54,7 +62,7 @@ export function sortByOrder<T extends string>(values: T[], orderMap: Map<string,
     if (rightOrder !== undefined) {
       return 1;
     }
-    return left.localeCompare(right, 'ko');
+    return left.localeCompare(right, locale);
   });
 }
 

@@ -17,13 +17,9 @@ import {
   ALL_FILTER_PRESET_ID,
   NA_FILTER_OPTION_ID,
 } from "./scoreFilterPresets";
-import type {
-  PlaylogRow,
-  ScoreRank,
-  ScoreRow,
-} from "../types";
+import type { PlaylogRow, ScoreRank, ScoreRow } from "../types";
 
-export function computeScoreRankOptions(scoreData: ScoreRow[]): ScoreRank[] {
+export function computeScoreRankOptions(scoreData: ScoreRow[], locale: string): ScoreRank[] {
   const values = Array.from(
     new Set(
       scoreData
@@ -31,11 +27,12 @@ export function computeScoreRankOptions(scoreData: ScoreRow[]): ScoreRank[] {
         .filter((rank): rank is ScoreRank => rank !== null),
     ),
   );
-  return sortByOrder(values, SCORE_RANK_ORDER_MAP);
+  return sortByOrder(values, SCORE_RANK_ORDER_MAP, locale);
 }
 
 interface BuildFilteredScoreRowsParams {
   scoreData: ScoreRow[];
+  locale: string;
   query: string;
   chartFilter: ScoreRow["chartType"][];
   difficultyFilter: ScoreRow["difficulty"][];
@@ -55,6 +52,7 @@ interface BuildFilteredScoreRowsParams {
 
 export function buildFilteredScoreRows({
   scoreData,
+  locale,
   query,
   chartFilter,
   difficultyFilter,
@@ -165,7 +163,7 @@ export function buildFilteredScoreRows({
     let result = 0;
     switch (scoreSortKey) {
       case "title":
-        result = left.title.localeCompare(right.title, "ko");
+        result = left.title.localeCompare(right.title, locale);
         break;
       case "achievement":
         result = compareNullableNumber(
@@ -219,6 +217,7 @@ export function buildFilteredScoreRows({
 
 interface BuildFilteredPlaylogRowsParams {
   playlogData: PlaylogRow[];
+  locale: string;
   playlogQuery: string;
   playlogChartFilter: PlaylogRow["chartType"][];
   playlogDifficultyFilter: Array<NonNullable<PlaylogRow["difficulty"]>>;
@@ -251,7 +250,7 @@ function isBetterPlaylogCandidate(left: PlaylogRow, right: PlaylogRow): boolean 
     return left.playedAtUnix > right.playedAtUnix;
   }
 
-  return left.key.localeCompare(right.key, "ko") > 0;
+  return left.key > right.key;
 }
 
 function pickBestPlaylogRows(rows: PlaylogRow[]): PlaylogRow[] {
@@ -270,6 +269,7 @@ function pickBestPlaylogRows(rows: PlaylogRow[]): PlaylogRow[] {
 
 export function buildFilteredPlaylogRows({
   playlogData,
+  locale,
   playlogQuery,
   playlogChartFilter,
   playlogDifficultyFilter,
@@ -353,7 +353,7 @@ export function buildFilteredPlaylogRows({
         result = compareNullableNumber(left.creditId, right.creditId);
         break;
       case "title":
-        result = left.title.localeCompare(right.title, "ko");
+        result = left.title.localeCompare(right.title, locale);
         break;
     }
 

@@ -1,10 +1,18 @@
 import { useCallback, useRef, useState } from 'react';
 import type { Dispatch, ReactNode, SetStateAction } from 'react';
 
-import { checkRecordCollectorHealth } from '../api';
+import {
+  checkRecordCollectorHealth,
+  formatApiErrorMessage,
+  LocalizedApiError,
+} from '../api';
+import { useI18n, type LanguagePreference } from '../app/i18n';
 
 interface SettingsPageProps {
   sidebarTopContent?: ReactNode;
+  languagePreference: LanguagePreference;
+  setLanguagePreference: (value: LanguagePreference) => void;
+  languageLabel: string;
   songInfoUrlDraft: string;
   setSongInfoUrlDraft: Dispatch<SetStateAction<string>>;
   recordCollectorUrlDraft: string;
@@ -15,6 +23,9 @@ interface SettingsPageProps {
 
 export function SettingsPage({
   sidebarTopContent,
+  languagePreference,
+  setLanguagePreference,
+  languageLabel,
   songInfoUrlDraft,
   setSongInfoUrlDraft,
   recordCollectorUrlDraft,
@@ -22,6 +33,7 @@ export function SettingsPage({
   onApplySongInfoUrl,
   onApplyRecordCollectorUrl,
 }: SettingsPageProps) {
+  const { t } = useI18n();
   const [isRcChecking, setIsRcChecking] = useState(false);
   const [rcCheckError, setRcCheckError] = useState<string | null>(null);
   const [rcConnectedPlayer, setRcConnectedPlayer] = useState<string | null>(null);
@@ -46,14 +58,18 @@ export function SettingsPage({
       onApplyRecordCollectorUrl(url);
     } catch (error) {
       if (controller.signal.aborted) return;
-      const message = error instanceof Error ? error.message : String(error);
-      setRcCheckError(message);
+      const message = formatApiErrorMessage(error, t);
+      setRcCheckError(
+        error instanceof LocalizedApiError && !error.shouldWrap
+          ? message
+          : t('settings.recordCollector.failed', { message }),
+      );
     } finally {
       if (!controller.signal.aborted) {
         setIsRcChecking(false);
       }
     }
-  }, [recordCollectorUrlDraft, onApplyRecordCollectorUrl]);
+  }, [onApplyRecordCollectorUrl, recordCollectorUrlDraft, t]);
 
   return (
     <div className="explorer-layout settings-layout">
@@ -63,10 +79,37 @@ export function SettingsPage({
         <section className="panel settings-panel">
           <div className="panel-heading">
             <div>
-              <h2>Connections</h2>
-              <p>Song Info와 Record Collector 연결 정보를 관리합니다.</p>
+              <h2>{t('settings.title')}</h2>
+              <p>{t('settings.description')}</p>
             </div>
           </div>
+
+          <div className="settings-field-group">
+            <div className="panel-heading compact">
+              <div>
+                <h3>{t('settings.language.title')}</h3>
+                <p>{t('settings.language.description')}</p>
+              </div>
+            </div>
+            <label className="home-url-field">
+              <span>{t('settings.language.label')}</span>
+              <select
+                value={languagePreference}
+                onChange={(event) => setLanguagePreference(event.target.value as LanguagePreference)}
+              >
+                <option value="system">{t('settings.language.optionSystem')}</option>
+                <option value="ko">{t('settings.language.optionKo')}</option>
+                <option value="en">{t('settings.language.optionEn')}</option>
+              </select>
+            </label>
+            <p className="settings-meta">
+              {languagePreference === 'system'
+                ? t('settings.language.helperSystem', { language: languageLabel })
+                : t('settings.language.helperManual', { language: languageLabel })}
+            </p>
+          </div>
+
+          <hr className="settings-divider" />
 
           <div className="settings-field-group">
             <div className="home-connect-row">
@@ -83,11 +126,11 @@ export function SettingsPage({
                 onClick={onApplySongInfoUrl}
                 disabled={!songInfoUrlDraft.trim()}
               >
-                적용
+                {t('common.apply')}
               </button>
             </div>
             <p className="settings-warning">
-              ⚠ 디버깅 목적이 아니라면 변경하지 마세요.
+              {t('settings.songInfoWarning')}
             </p>
           </div>
 
@@ -117,17 +160,15 @@ export function SettingsPage({
                 onClick={() => void handleConnectRc()}
                 disabled={isRcChecking || !recordCollectorUrlDraft.trim()}
               >
-                {isRcChecking ? '연결 중...' : '연결'}
+                {isRcChecking ? t('common.connecting') : t('common.connect')}
               </button>
             </div>
             {rcCheckError && (
-              <p className="home-status home-status-error">연결 실패: {rcCheckError}</p>
+              <p className="home-status home-status-error">{rcCheckError}</p>
             )}
             {rcConnectedPlayer && (
               <div className="home-status home-status-success">
-                <span>
-                  연결 성공! 플레이어: <strong>{rcConnectedPlayer}</strong>
-                </span>
+                <span>{t('settings.recordCollector.success', { name: rcConnectedPlayer })}</span>
               </div>
             )}
           </div>

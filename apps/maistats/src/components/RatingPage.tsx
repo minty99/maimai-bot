@@ -1,5 +1,6 @@
 import type { KeyboardEvent, ReactNode } from 'react';
 
+import { useI18n } from '../app/i18n';
 import { toIntegerRating } from '../derive';
 import { formatNumber, formatPercent, formatVersionLabel } from '../app/utils';
 import type { ScoreRow } from '../types';
@@ -25,10 +26,10 @@ function formatRatingAvg(total: number, count: number): string {
   return (total / count).toFixed(2);
 }
 
-function formatRatingProjection(total: number, count: number): string {
+function formatRatingProjection(total: number, count: number, locale: string): string {
   if (count === 0) return '-';
   const avg = total / count;
-  return Math.round(avg * 50).toLocaleString();
+  return Math.round(avg * 50).toLocaleString(locale);
 }
 
 function handleCardKeyDown(event: KeyboardEvent<HTMLElement>, onOpenSongDetail: () => void) {
@@ -53,6 +54,7 @@ function RatingCardSection({
   songInfoUrl: string;
   onOpenSongDetail: (target: SongDetailTarget) => void;
 }) {
+  const { locale, t } = useI18n();
   return (
     <section className="panel">
       <div className="panel-heading">
@@ -60,7 +62,7 @@ function RatingCardSection({
           <h2>{title}</h2>
           <p>{description}</p>
         </div>
-        <span className="panel-count">{rows.length.toLocaleString()}곡</span>
+        <span className="panel-count">{t('units.songs', { count: rows.length.toLocaleString(locale) })}</span>
       </div>
       <div className="rating-card-grid">
         {rows.map((row, index) => {
@@ -72,7 +74,7 @@ function RatingCardSection({
               className={`rating-song-card ${getDifficultyToneClass(row.difficulty)}`}
               role="button"
               tabIndex={0}
-              aria-label={`${row.title} Song Detail 열기`}
+              aria-label={t('rating.openSongDetail', { title: row.title })}
               onClick={handleOpenDetail}
               onKeyDown={(event) => handleCardKeyDown(event, handleOpenDetail)}
             >
@@ -95,7 +97,7 @@ function RatingCardSection({
                   <DifficultyLabel difficulty={row.difficulty} short className="rating-difficulty-chip" />
                 </div>
                 <div className="rating-song-rating-chip">
-                  <strong>{formatNumber(toIntegerRating(row.rating))}</strong>
+                  <strong>{formatNumber(toIntegerRating(row.rating), locale)}</strong>
                 </div>
               </div>
               <div className="rating-song-info">
@@ -138,6 +140,7 @@ export function RatingPage({
   oldRows,
   onOpenSongDetail,
 }: RatingPageProps) {
+  const { locale, t } = useI18n();
   return (
     <div className="explorer-layout">
       <aside className="sidebar-column">
@@ -146,24 +149,36 @@ export function RatingPage({
           <div className="panel-heading compact">
             <div>
               <h2>RATING</h2>
-              <p>NEW 상위 15곡과 OLD 상위 35곡의 레이팅 합계입니다. 보면상수가 알려지지 않은 곡의 경우 계산값이 잘못될 수 있습니다.</p>
+              <p>{t('rating.description')}</p>
             </div>
           </div>
           <div className="rating-stat-grid">
             <div className="rating-stat-card">
-              <span>Current Rating</span>
-              <strong>{formatNumber(ratingTotal)}</strong>
-              <small className="rating-stat-sub">avg {formatRatingAvg(ratingTotal, newRows.length + oldRows.length)}</small>
+              <span>{t('rating.current')}</span>
+              <strong>{formatNumber(ratingTotal, locale)}</strong>
+              <small className="rating-stat-sub">
+                {t('rating.avg', { value: formatRatingAvg(ratingTotal, newRows.length + oldRows.length) })}
+              </small>
             </div>
             <div className="rating-stat-card">
-              <span>NEW TOP 15</span>
-              <strong>{formatNumber(newRatingTotal)}</strong>
-              <small className="rating-stat-sub">avg {formatRatingAvg(newRatingTotal, newRows.length)}, ~{formatRatingProjection(newRatingTotal, newRows.length)}</small>
+              <span>{t('rating.newTop15')}</span>
+              <strong>{formatNumber(newRatingTotal, locale)}</strong>
+              <small className="rating-stat-sub">
+                {t('rating.avgProjection', {
+                  avg: formatRatingAvg(newRatingTotal, newRows.length),
+                  projection: formatRatingProjection(newRatingTotal, newRows.length, locale),
+                })}
+              </small>
             </div>
             <div className="rating-stat-card">
-              <span>OLD TOP 35</span>
-              <strong>{formatNumber(oldRatingTotal)}</strong>
-              <small className="rating-stat-sub">avg {formatRatingAvg(oldRatingTotal, oldRows.length)}, ~{formatRatingProjection(oldRatingTotal, oldRows.length)}</small>
+              <span>{t('rating.oldTop35')}</span>
+              <strong>{formatNumber(oldRatingTotal, locale)}</strong>
+              <small className="rating-stat-sub">
+                {t('rating.avgProjection', {
+                  avg: formatRatingAvg(oldRatingTotal, oldRows.length),
+                  projection: formatRatingProjection(oldRatingTotal, oldRows.length, locale),
+                })}
+              </small>
             </div>
           </div>
         </section>
@@ -172,14 +187,14 @@ export function RatingPage({
       <div className="table-column rating-table-column">
         <RatingCardSection
           title="NEW"
-          description="NEW 분류 상위 15곡. 카드를 클릭하면 Song Detail을 엽니다."
+          description={t('rating.newDescription')}
           rows={newRows}
           songInfoUrl={songInfoUrl}
           onOpenSongDetail={onOpenSongDetail}
         />
         <RatingCardSection
           title="OLD"
-          description="OLD 분류 상위 35곡. 카드를 클릭하면 Song Detail을 엽니다."
+          description={t('rating.oldDescription')}
           rows={oldRows}
           songInfoUrl={songInfoUrl}
           onOpenSongDetail={onOpenSongDetail}

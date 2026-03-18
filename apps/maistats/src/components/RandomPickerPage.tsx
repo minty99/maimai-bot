@@ -12,6 +12,7 @@ import {
   RANDOM_PICKER_MIN_LEVEL,
   VERSION_ORDER_MAP,
 } from '../app/constants';
+import { useI18n, type TranslationKey } from '../app/i18n';
 import {
   coerceArray,
   coerceNumber,
@@ -61,6 +62,16 @@ interface NumericRangeFilterCardProps {
   maxInputStep?: number;
 }
 
+class PickerMessageError extends Error {
+  constructor(
+    message: string,
+    readonly empty = false,
+  ) {
+    super(message);
+    this.name = 'PickerMessageError';
+  }
+}
+
 const DIFFICULTY_COLORS: Record<DifficultyCategory, string> = {
   BASIC: '#4f9d69',
   ADVANCED: '#dba631',
@@ -93,12 +104,16 @@ function formatAchievement(achievementX10000: number | null): string {
   return formatPercent(achievementX10000 / 10000, 4);
 }
 
-function renderDifficultySummary(indices: number[], includeLabel = true): ReactNode {
+function renderDifficultySummary(
+  indices: number[],
+  allLabel: string,
+  includeLabel = true,
+): ReactNode {
   if (indices.length === DIFFICULTIES.length) {
     return (
       <span className={includeLabel ? 'picker-summary-inline' : undefined}>
         {includeLabel ? <span>DIFF</span> : null}
-        <span className="difficulty-summary-all">ALL</span>
+        <span className="difficulty-summary-all">{allLabel}</span>
       </span>
     );
   }
@@ -122,9 +137,9 @@ function renderDifficultySummary(indices: number[], includeLabel = true): ReactN
   );
 }
 
-function buildChartSummary(chartTypes: ChartType[]): string {
+function buildChartSummary(chartTypes: ChartType[], allLabel: string): string {
   if (chartTypes.length === CHART_TYPES.length) {
-    return 'TYPE ALL';
+    return `TYPE ${allLabel}`;
   }
   return chartTypes.join('/');
 }
@@ -132,20 +147,27 @@ function buildChartSummary(chartTypes: ChartType[]): string {
 function buildVersionSummary(
   includeVersionIndices: number[] | null,
   versionOptions: SongVersionResponse[],
+  allLabel: string,
+  versionsSelectedLabel: (count: string) => string,
+  locale: string,
 ): string {
   if (includeVersionIndices === null) {
-    return 'VER ALL';
+    return `VER ${allLabel}`;
   }
 
   const selectedCount = includeVersionIndices === null ? versionOptions.length : includeVersionIndices.length;
-  return `${selectedCount.toLocaleString()} versions selected`;
+  return versionsSelectedLabel(selectedCount.toLocaleString(locale));
 }
 
-function buildCompactVersionSummary(includeVersionIndices: number[] | null): string {
+function buildCompactVersionSummary(
+  includeVersionIndices: number[] | null,
+  allLabel: string,
+  locale: string,
+): string {
   if (includeVersionIndices === null) {
-    return 'VER ALL';
+    return `VER ${allLabel}`;
   }
-  return `VER ${includeVersionIndices.length.toLocaleString()}`;
+  return `VER ${includeVersionIndices.length.toLocaleString(locale)}`;
 }
 
 
@@ -192,11 +214,11 @@ function NumericRangeFilterCard({
   );
 }
 
-function getPickerResultMessage(error: Error): { empty: boolean; message: string } {
-  if (error.message.includes('조건에 맞는 곡이 없습니다')) {
+function getPickerResultMessage(error: Error, t: (key: TranslationKey) => string): { empty: boolean; message: string } {
+  if (error instanceof PickerMessageError) {
     return {
-      empty: true,
-      message: '조건에 맞는 곡이 없습니다. 범위를 넓히거나 필터를 완화해보세요.',
+      empty: error.empty,
+      message: error.empty ? t('picker.noSongsHelp') : error.message,
     };
   }
 
@@ -223,6 +245,7 @@ function SelectionModal({
   onSelectNone?: () => void;
   onClose: () => void;
 }) {
+  const { t } = useI18n();
   return (
     <div className="modal-backdrop" onClick={onClose}>
       <section
@@ -231,17 +254,15 @@ function SelectionModal({
       >
         <div className="detail-header">
           <h2>{title}</h2>
-          <button type="button" className="modal-close-button" onClick={onClose}>
-            닫기
-          </button>
+          <button type="button" className="modal-close-button" onClick={onClose}>{t('common.close')}</button>
         </div>
         <div className="picker-filter-toolbar">
           <button type="button" onClick={onSelectAll}>
-            전체 선택
+            {t('picker.selectAll')}
           </button>
           {onSelectNone ? (
             <button type="button" onClick={onSelectNone}>
-              전체 해제
+              {t('picker.clearAll')}
             </button>
           ) : null}
         </div>
@@ -303,6 +324,7 @@ function FiltersMenu({
   onDaysMaxChange: (value: number) => void;
   onClose: () => void;
 }) {
+  const { t } = useI18n();
   return (
     <div className="modal-backdrop" onClick={onClose}>
       <section
@@ -310,9 +332,9 @@ function FiltersMenu({
         onClick={(event) => event.stopPropagation()}
       >
         <div className="detail-header">
-          <h2>Filter Settings</h2>
+          <h2>{t('picker.filterSettings')}</h2>
           <button type="button" className="modal-close-button" onClick={onClose}>
-            닫기
+            {t('common.close')}
           </button>
         </div>
         <div className="picker-filter-sections">
@@ -368,8 +390,8 @@ function FiltersMenu({
           <section className="picker-filter-section">
             <div className="filter-label">Ver</div>
             <button type="button" className="picker-version-launcher" onClick={onOpenVersions}>
-              <strong>{isVersionLoading ? 'Loading versions...' : versionSummary}</strong>
-              <span>Choose versions</span>
+              <strong>{isVersionLoading ? t('common.loadingVersions') : versionSummary}</strong>
+              <span>{t('picker.chooseVersions')}</span>
             </button>
             {versionError ? <p className="picker-filter-error">{versionError}</p> : null}
           </section>
@@ -385,7 +407,7 @@ function FiltersMenu({
           />
 
           <NumericRangeFilterCard
-            label="Last played (days)"
+            label={t('picker.lastPlayedDays')}
             minValue={daysMin}
             maxValue={daysMax}
             onMinChange={onDaysMinChange}
@@ -404,6 +426,7 @@ export function RandomPickerPage({
   songMetadata,
   versionOptions,
 }: RandomPickerPageProps) {
+  const { formatNumber: formatLocalizedNumber, locale, t } = useI18n();
   const storedFilters = useMemo(
     () => readStoredJson<StoredRandomPickerFilters>(RANDOM_PICKER_FILTERS_STORAGE_KEY),
     [],
@@ -624,7 +647,7 @@ export function RandomPickerPage({
 
     try {
       if (!songInfoUrl.trim()) {
-        throw new Error('Song Info URL이 비어 있습니다.');
+        throw new PickerMessageError(t('picker.songInfoRequired'));
       }
 
       const chartTypeSet = new Set(chartTypes);
@@ -703,7 +726,7 @@ export function RandomPickerPage({
       }
 
       if (candidates.length === 0) {
-        throw new Error('조건에 맞는 곡이 없습니다');
+        throw new PickerMessageError(t('picker.noSongs'), true);
       }
 
       const selected = candidates[Math.floor(Math.random() * candidates.length)];
@@ -721,7 +744,7 @@ export function RandomPickerPage({
         return;
       }
       const nextError = error instanceof Error ? error : new Error(String(error));
-      const result = getPickerResultMessage(nextError);
+      const result = getPickerResultMessage(nextError, t);
       setPickerEmpty(result.empty);
       setPickerError(result.empty ? null : result.message);
     } finally {
@@ -745,27 +768,36 @@ export function RandomPickerPage({
     sortedVersionOptions,
   ]);
 
-  const chartSummary = useMemo(() => buildChartSummary(chartTypes), [chartTypes]);
+  const chartSummary = useMemo(
+    () => buildChartSummary(chartTypes, t('common.all')),
+    [chartTypes, t],
+  );
   const difficultySummaryNode = useMemo(
-    () => renderDifficultySummary(difficultyIndices),
-    [difficultyIndices],
+    () => renderDifficultySummary(difficultyIndices, t('common.all')),
+    [difficultyIndices, t],
   );
   const versionSummary = useMemo(
-    () => buildVersionSummary(includeVersionIndices, sortedVersionOptions),
-    [includeVersionIndices, sortedVersionOptions],
+    () => buildVersionSummary(
+      includeVersionIndices,
+      sortedVersionOptions,
+      t('common.all'),
+      (count) => t('picker.versionsSelected', { count }),
+      locale,
+    ),
+    [includeVersionIndices, locale, sortedVersionOptions, t],
   );
   const compactVersionSummary = useMemo(
-    () => buildCompactVersionSummary(includeVersionIndices),
-    [includeVersionIndices],
+    () => buildCompactVersionSummary(includeVersionIndices, t('common.all'), locale),
+    [includeVersionIndices, locale, t],
   );
   const versionModalOptions = useMemo<FilterOption[]>(
     () =>
       sortedVersionOptions.map((option) => ({
         value: String(option.version_index),
         label: formatVersionLabel(option.version_name),
-        subtitle: `${option.song_count.toLocaleString()} songs`,
+        subtitle: t('units.songs', { count: option.song_count.toLocaleString(locale) }),
       })),
-    [sortedVersionOptions],
+    [locale, sortedVersionOptions, t],
   );
   const selectedVersionValues = useMemo(() => {
     if (includeVersionIndices === null) {
@@ -805,19 +837,19 @@ export function RandomPickerPage({
 
   const resultView = (() => {
     if (isPicking) {
-      return renderStateCard('선곡 중...');
+      return renderStateCard(t('picker.picking'));
     }
 
     if (pickerError) {
-      return renderStateCard('랜덤 선곡 실패', 'error');
+      return renderStateCard(t('picker.pickFailed'), 'error');
     }
 
     if (pickerEmpty) {
-      return renderStateCard('조건에 맞는 곡이 없습니다');
+      return renderStateCard(t('picker.noSongs'));
     }
 
     if (!pickedSong) {
-      return renderStateCard('RANDOM');
+      return renderStateCard(t('picker.random'));
     }
 
     const difficultyColor = DIFFICULTY_COLORS[pickedSong.difficulty];
@@ -829,19 +861,22 @@ export function RandomPickerPage({
       pickedSong.playCount !== null;
     const achievementLabel = hasPersonal
       ? formatAchievement(pickedSong.achievementX10000)
-      : 'No Data';
+      : t('picker.noData');
     const rankLabel = hasPersonal
-      ? (pickedSong.rank ?? 'UNPLAYED')
-      : 'UNPLAYED';
+      ? (pickedSong.rank ?? t('picker.unplayed'))
+      : t('picker.unplayed');
     const fcLabel = hasPersonal
-      ? (pickedSong.fc ?? 'FC -')
-      : 'FC -';
+      ? (pickedSong.fc ?? t('picker.fcEmpty'))
+      : t('picker.fcEmpty');
     const syncLabel = hasPersonal
-      ? (pickedSong.sync ?? 'SYNC -')
-      : 'SYNC -';
+      ? (pickedSong.sync ?? t('picker.syncEmpty'))
+      : t('picker.syncEmpty');
     const metaLabel = hasPersonal
-      ? `${pickedSong.lastPlayedAt ? `Last played: ${pickedSong.lastPlayedAt}` : 'Last played: No Data'}  •  ${pickedSong.playCount !== null ? `Play count: ${pickedSong.playCount}` : 'Play count: No Data'}`
-      : 'Last played: No Data  •  Play count: No Data';
+      ? t('picker.metaWithData', {
+        lastPlayed: pickedSong.lastPlayedAt ?? t('picker.noData'),
+        playCount: pickedSong.playCount !== null ? formatLocalizedNumber(pickedSong.playCount) : t('picker.noData'),
+      })
+      : t('picker.metaNoData');
 
     return (
       <article className="picker-song-card" style={{ ['--picker-accent' as string]: difficultyColor }}>
@@ -871,10 +906,10 @@ export function RandomPickerPage({
 
           {pickedSong.filteredSongCount !== null && pickedSong.levelSongCount !== null ? (
             <p className="picker-pool-line">
-              Picked from {formatNumber(pickedSong.filteredSongCount)} songs
+              {t('picker.pickedFrom', { count: formatNumber(pickedSong.filteredSongCount, locale) })}
             </p>
           ) : (
-            <p className="picker-pool-line">Picked from No Data songs</p>
+            <p className="picker-pool-line">{t('picker.pickedFromNoData')}</p>
           )}
 
           <div className={hasPersonal ? 'picker-achievement-row' : 'picker-achievement-row is-empty'}>
@@ -922,7 +957,7 @@ export function RandomPickerPage({
     if (activeModal === 'versions') {
       return (
         <SelectionModal
-          title="Versions"
+          title={t('common.version')}
           options={versionModalOptions}
           selectedValues={selectedVersionValues}
           onToggle={(value) => toggleVersion(Number(value))}
@@ -937,14 +972,14 @@ export function RandomPickerPage({
   })();
 
   const pickerStatusLabel = isPicking
-    ? 'Picking'
+    ? t('picker.statusPicking')
     : pickerError
-      ? 'Error'
+      ? t('picker.statusError')
       : pickerEmpty
-        ? 'Empty'
+        ? t('picker.statusEmpty')
         : pickedSong
-          ? 'Picked'
-          : 'Ready';
+          ? t('picker.statusPicked')
+          : t('picker.statusReady');
 
   return (
     <>
@@ -954,14 +989,14 @@ export function RandomPickerPage({
           <section className="panel picker-control-panel">
             <div className="panel-heading">
               <div>
-                <h2>Picker Controls</h2>
+                <h2>{t('picker.controlTitle')}</h2>
               </div>
               <button
                 type="button"
                 className="picker-filter-launcher"
                 onClick={() => setActiveModal('filters')}
               >
-                Filters
+                {t('picker.filters')}
               </button>
             </div>
 
@@ -1012,14 +1047,14 @@ export function RandomPickerPage({
           </section>
 
           <button type="button" className="picker-random-button" onClick={() => void handlePickRandom()}>
-            {isPicking ? 'PICKING...' : 'RANDOM'}
+            {isPicking ? t('picker.picking').toUpperCase() : t('picker.random')}
           </button>
         </div>
 
         <section className="panel picker-result-panel">
           <div className="panel-heading">
             <div>
-              <h2>Selection</h2>
+              <h2>{t('picker.selection')}</h2>
             </div>
             <span className="panel-count">{pickerStatusLabel}</span>
           </div>

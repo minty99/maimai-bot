@@ -10,6 +10,7 @@
   "scripts": {
     "dev:maistats": "npm run dev --workspace apps/maistats",
     "build:maistats": "npm run build --workspace apps/maistats",
-    "check:maistats": "npm run build --workspace apps/maistats"
+    "check:maistats": "npm run build --workspace apps/maistats",
+    "test:maistats": "npm run test --workspace apps/maistats"
   }
 }
