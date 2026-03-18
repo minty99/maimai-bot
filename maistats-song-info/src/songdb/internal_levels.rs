@@ -1,40 +1,18 @@
-#![allow(dead_code)]
+use std::collections::{HashMap, HashSet};
+use std::time::Duration;
 
 use eyre::WrapErr;
-use models::{ChartType, DifficultyCategory};
+use maimai_auth::intl;
+use maimai_parsers::parse_internal_level_page_html;
+use models::{ChartType, DifficultyCategory, SongGenre};
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
-use std::collections::{HashMap, HashSet};
-use std::sync::LazyLock;
-use tokio::time::{Duration, sleep};
 
-use super::{SongIdentity, SongRow, normalize_song_title_value};
+use super::{SheetRow, SongIdentity, SongRow, normalize_song_title_value};
 
-#[derive(Debug, Clone, Deserialize)]
-struct ExtractSpec {
-    sheet_name: String,
-    data_indexes: Vec<usize>,
-    data_offsets: [usize; 4],
-}
-
-#[derive(Debug, Clone, Deserialize)]
-struct SpreadsheetSpec {
-    source_version: i64,
-    spreadsheet_id: String,
-    extracts: Vec<ExtractSpec>,
-}
-
-#[derive(Debug, Deserialize)]
-struct TitleMappings {
-    rename: HashMap<String, String>,
-    skip: Vec<String>,
-}
-
-#[derive(Debug, Deserialize)]
-struct ValuesResponse {
-    #[serde(default)]
-    values: Vec<Vec<Value>>,
-}
+const INTL_LEVEL_SEARCH_URL: &str =
+    "https://maimaidx-eng.com/maimai-mobile/record/musicLevel/search/";
+const MIN_SUPPORTED_BASE_LEVEL: u8 = 7;
+const MAX_SUPPORTED_BASE_LEVEL: u8 = 15;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub(crate) struct InternalLevelRow {
@@ -42,568 +20,456 @@ pub(crate) struct InternalLevelRow {
     pub(crate) sheet_type: ChartType,
     pub(crate) difficulty: DifficultyCategory,
     pub(crate) internal_level: String,
-    pub(crate) source_version: i64,
 }
 
-static SPREADSHEETS: LazyLock<Vec<SpreadsheetSpec>> = LazyLock::new(|| {
-    serde_json::from_str(include_str!("data/spreadsheets.json"))
-        .expect("failed to parse embedded spreadsheets.json")
-});
-
-static TITLE_MAPPINGS: LazyLock<TitleMappings> = LazyLock::new(|| {
-    serde_json::from_str(include_str!("data/title_mappings.json"))
-        .expect("failed to parse embedded title_mappings.json")
-});
-
-// Frozen historical versions live in-repo so we don't depend on mutable sheet data
-// once a version is no longer current.
-static FROZEN_INTERNAL_LEVEL_ROWS: LazyLock<HashMap<i64, Vec<InternalLevelRow>>> =
-    LazyLock::new(|| {
-        [
-            (6, include_str!("data/internal_level/v6.json")),
-            (7, include_str!("data/internal_level/v7.json")),
-            (8, include_str!("data/internal_level/v8.json")),
-            (9, include_str!("data/internal_level/v9.json")),
-            (10, include_str!("data/internal_level/v10.json")),
-            (11, include_str!("data/internal_level/v11.json")),
-            (12, include_str!("data/internal_level/v12.json")),
-        ]
-        .into_iter()
-        .map(|(version, json)| {
-            let rows = serde_json::from_str(json).unwrap_or_else(|err| {
-                panic!("failed to parse frozen internal level v{version}: {err}")
-            });
-            (version, rows)
-        })
-        .collect()
-    });
-
-struct InternalLevelTitleResolver {
-    song_identity_by_title: HashMap<String, SongIdentity>,
-    skipped_titles: HashSet<String>,
-    rename_titles: HashMap<String, String>,
+#[derive(Debug, Clone)]
+struct LookupEntry {
+    song_identity: SongIdentity,
+    genre: SongGenre,
 }
 
-#[derive(Debug)]
-enum TitleResolution {
-    Matched(SongIdentity),
-    Skipped,
-    Unmatched(String),
+#[derive(Debug, Clone)]
+struct ParsedLevelPageEntry {
+    title: String,
+    chart_type: ChartType,
+    difficulty: DifficultyCategory,
+    resolved: LookupEntry,
 }
 
-#[derive(Debug)]
-enum RowKeyMappingFailure {
-    MissingTitle,
-    SkippedTitle(String),
-    UnmatchedTitle(String),
-    InvalidSheetType { title: String, sheet_type: String },
-    InvalidDifficulty { title: String, difficulty: String },
+#[derive(Debug, Clone)]
+struct AssignedLevelPageEntry {
+    parsed: ParsedLevelPageEntry,
+    bucket_index: usize,
+    inferred_internal_level_tenths: u16,
 }
 
-impl InternalLevelTitleResolver {
-    fn new(songs: &[SongRow]) -> Self {
-        let mappings = &*TITLE_MAPPINGS;
-        let mut candidates_by_title: HashMap<String, Vec<SongIdentity>> = HashMap::new();
-
-        for song in songs {
-            candidates_by_title
-                .entry(normalize_song_title_value(&song.identity.title))
-                .or_default()
-                .push(song.identity.clone());
-        }
-
-        let song_identity_by_title = candidates_by_title
-            .into_iter()
-            .filter_map(
-                |(title, song_identities)| match song_identities.as_slice() {
-                    [song_identity] => Some((title, song_identity.clone())),
-                    _ => None,
-                },
-            )
-            .collect();
-
-        Self {
-            song_identity_by_title,
-            skipped_titles: mappings
-                .skip
-                .iter()
-                .map(|title| normalize_song_title_value(title))
-                .collect(),
-            rename_titles: mappings
-                .rename
-                .iter()
-                .map(|(title, renamed)| {
-                    (
-                        normalize_song_title_value(title),
-                        normalize_song_title_value(renamed),
-                    )
-                })
-                .collect(),
-        }
-    }
-
-    fn resolve_title(&self, title: &str) -> TitleResolution {
-        let title = normalize_song_title_value(title);
-        if self.skipped_titles.contains(&title) {
-            return TitleResolution::Skipped;
-        }
-
-        let title = self.rename_titles.get(&title).cloned().unwrap_or(title);
-        match self.song_identity_by_title.get(&title) {
-            Some(song_identity) => TitleResolution::Matched(song_identity.clone()),
-            None => TitleResolution::Unmatched(title),
-        }
-    }
-}
-
-fn max_column_for_extract(extract: &ExtractSpec) -> usize {
-    let max_data_index = extract.data_indexes.iter().copied().max().unwrap_or(0);
-    let max_offset = *extract.data_offsets.iter().max().unwrap_or(&0);
-    max_data_index + max_offset
-}
-
-async fn fetch_sheet_values(
-    client: &reqwest::Client,
-    spreadsheet_id: &str,
-    sheet_name: &str,
-    max_col_idx: usize,
-    api_key: &str,
-) -> eyre::Result<Vec<Vec<Value>>> {
-    const MAX_RETRIES: u32 = 3;
-    let end_col = col_idx_to_a1(max_col_idx);
-    let range = format!("{sheet_name}!A:{end_col}");
-    let encoded_range = urlencoding::encode(&range);
-    let url = format!(
-        "https://sheets.googleapis.com/v4/spreadsheets/{spreadsheet_id}/values/{encoded_range}"
-    );
-
-    for attempt in 0..MAX_RETRIES {
-        match client
-            .get(&url)
-            .query(&[("key", api_key), ("valueRenderOption", "UNFORMATTED_VALUE")])
-            .send()
-            .await
-        {
-            Ok(resp) => match resp.error_for_status() {
-                Ok(resp) => match resp.json::<ValuesResponse>().await {
-                    Ok(parsed) => return Ok(parsed.values),
-                    Err(e) => {
-                        if attempt < MAX_RETRIES - 1 {
-                            let delay_ms = 500 * 2_u64.pow(attempt);
-                            tracing::warn!(
-                                "Failed to parse sheet '{}': {}. Retrying in {}ms (attempt {}/{})",
-                                sheet_name,
-                                e,
-                                delay_ms,
-                                attempt + 1,
-                                MAX_RETRIES
-                            );
-                            sleep(Duration::from_millis(delay_ms)).await;
-                            continue;
-                        }
-                        return Err(e).wrap_err("parse sheets values json");
-                    }
-                },
-                Err(e) => {
-                    if attempt < MAX_RETRIES - 1 {
-                        let delay_ms = 500 * 2_u64.pow(attempt);
-                        tracing::warn!(
-                            "Sheet '{}' request failed with status: {}. Retrying in {}ms (attempt {}/{})",
-                            sheet_name,
-                            e,
-                            delay_ms,
-                            attempt + 1,
-                            MAX_RETRIES
-                        );
-                        sleep(Duration::from_millis(delay_ms)).await;
-                        continue;
-                    }
-                    return Err(e).wrap_err("sheets values status");
-                }
-            },
-            Err(e) => {
-                if attempt < MAX_RETRIES - 1 {
-                    let delay_ms = 500 * 2_u64.pow(attempt);
-                    tracing::warn!(
-                        "Connection error for sheet '{}': {}. Retrying in {}ms (attempt {}/{})",
-                        sheet_name,
-                        e,
-                        delay_ms,
-                        attempt + 1,
-                        MAX_RETRIES
-                    );
-                    sleep(Duration::from_millis(delay_ms)).await;
-                    continue;
-                }
-                return Err(e).wrap_err("GET sheets values");
-            }
-        }
-    }
-    unreachable!()
-}
-
-fn extract_records_from_values(
-    values: &[Vec<Value>],
-    spec: &ExtractSpec,
-    source_version: i64,
-    resolver: &InternalLevelTitleResolver,
-) -> Vec<InternalLevelRow> {
-    let mut out = Vec::new();
-
-    for &data_index in &spec.data_indexes {
-        let title_idx = data_index + spec.data_offsets[0];
-        let type_idx = data_index + spec.data_offsets[1];
-        let diff_idx = data_index + spec.data_offsets[2];
-        let internal_idx = data_index + spec.data_offsets[3];
-
-        for row in values {
-            let internal = row.get(internal_idx).and_then(parse_number);
-            let Some(internal) = internal.filter(|v| *v > 0.0) else {
-                continue;
-            };
-
-            let title = row.get(title_idx).and_then(parse_string);
-            let raw_type = row.get(type_idx).and_then(parse_string);
-            let raw_diff = row.get(diff_idx).and_then(parse_string);
-
-            let mapped_row = map_row_keys(
-                title.as_deref(),
-                raw_type.as_deref(),
-                raw_diff.as_deref(),
-                resolver,
-            );
-            let Ok((song_identity, sheet_type, difficulty)) = mapped_row else {
-                log_unmatched_internal_level_row(
-                    spec,
-                    source_version,
-                    title.as_deref(),
-                    raw_type.as_deref(),
-                    raw_diff.as_deref(),
-                    internal,
-                    mapped_row.expect_err("already checked error case"),
-                );
-                continue;
-            };
-
-            out.push(InternalLevelRow {
-                song_identity,
-                sheet_type,
-                difficulty,
-                internal_level: format!("{internal:.1}"),
-                source_version,
-            });
-        }
-    }
-
-    out
-}
-
-fn map_row_keys(
-    title: Option<&str>,
-    sheet_type: Option<&str>,
-    difficulty: Option<&str>,
-    resolver: &InternalLevelTitleResolver,
-) -> Result<(SongIdentity, ChartType, DifficultyCategory), RowKeyMappingFailure> {
-    let title = title.ok_or(RowKeyMappingFailure::MissingTitle)?.trim();
-
-    let song_identity = match resolver.resolve_title(title) {
-        TitleResolution::Matched(song_identity) => song_identity,
-        TitleResolution::Skipped => {
-            return Err(RowKeyMappingFailure::SkippedTitle(title.to_string()));
-        }
-        TitleResolution::Unmatched(normalized_title) => {
-            return Err(RowKeyMappingFailure::UnmatchedTitle(normalized_title));
-        }
-    };
-
-    let raw_sheet_type = sheet_type
-        .map(str::trim)
-        .filter(|value| !value.is_empty())
-        .ok_or_else(|| RowKeyMappingFailure::InvalidSheetType {
-            title: title.to_string(),
-            sheet_type: String::new(),
-        })?;
-    let sheet_type = match raw_sheet_type {
-        "STD" => ChartType::Std,
-        "DX" => ChartType::Dx,
-        _ => {
-            return Err(RowKeyMappingFailure::InvalidSheetType {
-                title: title.to_string(),
-                sheet_type: raw_sheet_type.to_string(),
-            });
-        }
-    };
-
-    let raw_difficulty = difficulty
-        .map(str::trim)
-        .filter(|value| !value.is_empty())
-        .ok_or_else(|| RowKeyMappingFailure::InvalidDifficulty {
-            title: title.to_string(),
-            difficulty: String::new(),
-        })?;
-    let difficulty = raw_difficulty.parse::<DifficultyCategory>().map_err(|_| {
-        RowKeyMappingFailure::InvalidDifficulty {
-            title: title.to_string(),
-            difficulty: raw_difficulty.to_string(),
-        }
-    })?;
-
-    Ok((song_identity, sheet_type, difficulty))
-}
-
-fn log_unmatched_internal_level_row(
-    spec: &ExtractSpec,
-    source_version: i64,
-    title: Option<&str>,
-    sheet_type: Option<&str>,
-    difficulty: Option<&str>,
-    internal_level: f64,
-    failure: RowKeyMappingFailure,
-) {
-    match failure {
-        RowKeyMappingFailure::MissingTitle => tracing::debug!(
-            "Skipped internal level row without title: v{} / {} (type='{}', difficulty='{}', internal_level={:.1})",
-            source_version,
-            spec.sheet_name,
-            sheet_type.unwrap_or(""),
-            difficulty.unwrap_or(""),
-            internal_level,
-        ),
-        RowKeyMappingFailure::SkippedTitle(normalized_title) => tracing::debug!(
-            "Skipped internal level row due to configured skipped title: v{} / {} (title='{}', normalized_title='{}', type='{}', difficulty='{}', internal_level={:.1})",
-            source_version,
-            spec.sheet_name,
-            title.unwrap_or(""),
-            normalized_title,
-            sheet_type.unwrap_or(""),
-            difficulty.unwrap_or(""),
-            internal_level,
-        ),
-        RowKeyMappingFailure::UnmatchedTitle(normalized_title) => tracing::debug!(
-            "Unmatched internal level row title: v{} / {} (title='{}', normalized_title='{}', type='{}', difficulty='{}', internal_level={:.1})",
-            source_version,
-            spec.sheet_name,
-            title.unwrap_or(""),
-            normalized_title,
-            sheet_type.unwrap_or(""),
-            difficulty.unwrap_or(""),
-            internal_level,
-        ),
-        RowKeyMappingFailure::InvalidSheetType {
-            title,
-            sheet_type: invalid_sheet_type,
-        } => tracing::debug!(
-            "Invalid internal level row chart type: v{} / {} (title='{}', type='{}', difficulty='{}', internal_level={:.1})",
-            source_version,
-            spec.sheet_name,
-            title,
-            invalid_sheet_type,
-            difficulty.unwrap_or(""),
-            internal_level,
-        ),
-        RowKeyMappingFailure::InvalidDifficulty {
-            title,
-            difficulty: invalid_difficulty,
-        } => tracing::debug!(
-            "Invalid internal level row difficulty: v{} / {} (title='{}', type='{}', difficulty='{}', internal_level={:.1})",
-            source_version,
-            spec.sheet_name,
-            title,
-            sheet_type.unwrap_or(""),
-            invalid_difficulty,
-            internal_level,
-        ),
-    }
-}
-
-fn parse_string(v: &Value) -> Option<String> {
-    match v {
-        Value::String(s) => Some(s.clone()),
-        Value::Number(n) => Some(n.to_string()),
-        _ => None,
-    }
-}
-
-fn parse_number(v: &Value) -> Option<f64> {
-    match v {
-        Value::Number(n) => n.as_f64(),
-        Value::String(s) => s.trim().parse::<f64>().ok(),
-        _ => None,
-    }
-}
-
-fn col_idx_to_a1(mut idx: usize) -> String {
-    let mut out = Vec::new();
-    loop {
-        let rem = idx % 26;
-        out.push((b'A' + rem as u8) as char);
-        if idx < 26 {
-            break;
-        }
-        idx = (idx / 26) - 1;
-    }
-    out.iter().rev().collect()
-}
-
-async fn fetch_rows_for_spreadsheet(
-    client: &reqwest::Client,
-    spreadsheet: &SpreadsheetSpec,
-    google_api_key: &str,
-    resolver: &InternalLevelTitleResolver,
-) -> eyre::Result<(Vec<InternalLevelRow>, usize, Vec<String>)> {
-    let mut rows = Vec::new();
-    let mut total_sheets = 0;
-    let mut failed_sheets = Vec::new();
-
-    for extract in &spreadsheet.extracts {
-        total_sheets += 1;
-        let sheet_identifier = format!("v{} / {}", spreadsheet.source_version, extract.sheet_name);
-
-        match fetch_sheet_values(
-            client,
-            &spreadsheet.spreadsheet_id,
-            &extract.sheet_name,
-            max_column_for_extract(extract),
-            google_api_key,
-        )
-        .await
-        {
-            Ok(values) => {
-                rows.extend(extract_records_from_values(
-                    &values,
-                    extract,
-                    spreadsheet.source_version,
-                    resolver,
-                ));
-            }
-            Err(e) => {
-                tracing::error!("Failed to fetch sheet '{}': {:#}", sheet_identifier, e);
-                failed_sheets.push(sheet_identifier);
-            }
-        }
-
-        sleep(Duration::from_secs(1)).await;
-    }
-
-    Ok((rows, total_sheets, failed_sheets))
-}
-
-fn load_frozen_rows(version: i64) -> Option<Vec<InternalLevelRow>> {
-    FROZEN_INTERNAL_LEVEL_ROWS.get(&version).cloned()
+#[derive(Debug, Clone, Copy)]
+struct AssignmentCheck {
+    expected_bucket_count: usize,
+    observed_bucket_count: usize,
 }
 
 pub(crate) type InternalLevelKey = (SongIdentity, ChartType, DifficultyCategory);
+type LookupKey = (String, ChartType, DifficultyCategory, String);
 
-pub(crate) async fn fetch_internal_levels(
-    client: &reqwest::Client,
-    google_api_key: &str,
+fn parse_displayed_level(displayed_level: &str) -> Option<(u8, bool)> {
+    let displayed_level = displayed_level.trim();
+    if displayed_level.is_empty() {
+        return None;
+    }
+
+    let (number, is_plus) = match displayed_level.strip_suffix('+') {
+        Some(number) => (number, true),
+        None => (displayed_level, false),
+    };
+
+    let base_level = number.parse::<u8>().ok()?;
+    if !(MIN_SUPPORTED_BASE_LEVEL..=MAX_SUPPORTED_BASE_LEVEL).contains(&base_level) {
+        return None;
+    }
+    if is_plus && base_level >= MAX_SUPPORTED_BASE_LEVEL {
+        return None;
+    }
+
+    Some((base_level, is_plus))
+}
+
+fn displayed_level_for_param(level_param: u8) -> eyre::Result<String> {
+    if !(MIN_SUPPORTED_BASE_LEVEL..=23).contains(&level_param) {
+        return Err(eyre::eyre!("unsupported level param: {level_param}"));
+    }
+
+    let offset = level_param - MIN_SUPPORTED_BASE_LEVEL;
+    let base_level = MIN_SUPPORTED_BASE_LEVEL + offset / 2;
+    let is_plus = offset % 2 == 1;
+    if base_level > MAX_SUPPORTED_BASE_LEVEL || (base_level == MAX_SUPPORTED_BASE_LEVEL && is_plus)
+    {
+        return Err(eyre::eyre!("unsupported level param: {level_param}"));
+    }
+
+    if is_plus {
+        Ok(format!("{base_level}+"))
+    } else {
+        Ok(base_level.to_string())
+    }
+}
+
+fn level_param_for_displayed_level(displayed_level: &str) -> Option<u8> {
+    let (base_level, is_plus) = parse_displayed_level(displayed_level)?;
+    let offset = (base_level - MIN_SUPPORTED_BASE_LEVEL) * 2 + u8::from(is_plus);
+    Some(MIN_SUPPORTED_BASE_LEVEL + offset)
+}
+
+fn bucket_count_for_level(base_level: u8, is_plus: bool) -> usize {
+    if is_plus {
+        4
+    } else if base_level == MAX_SUPPORTED_BASE_LEVEL {
+        1
+    } else {
+        6
+    }
+}
+
+fn start_internal_tenths_for_level(base_level: u8, is_plus: bool) -> u16 {
+    if is_plus {
+        u16::from(base_level) * 10 + 6
+    } else {
+        u16::from(base_level) * 10
+    }
+}
+
+fn format_internal_level_tenths(internal_level_tenths: u16) -> String {
+    format!(
+        "{}.{}",
+        internal_level_tenths / 10,
+        internal_level_tenths % 10
+    )
+}
+
+fn supported_level_params() -> impl Iterator<Item = u8> {
+    MIN_SUPPORTED_BASE_LEVEL..=23
+}
+
+fn genre_rank(genre: &SongGenre) -> Option<usize> {
+    match genre {
+        SongGenre::PopsAnime => Some(0),
+        SongGenre::NiconicoVocaloid => Some(1),
+        SongGenre::TouhouProject => Some(2),
+        SongGenre::GameVariety => Some(3),
+        SongGenre::Maimai => Some(4),
+        SongGenre::OngekiChunithm => Some(5),
+        SongGenre::Utage => None,
+    }
+}
+
+fn build_lookup(
     songs: &[SongRow],
-) -> eyre::Result<HashMap<InternalLevelKey, InternalLevelRow>> {
-    let resolver = InternalLevelTitleResolver::new(songs);
-
-    let spreadsheets = &*SPREADSHEETS;
-
-    let latest_version = spreadsheets
+    sheets: &[SheetRow],
+) -> eyre::Result<HashMap<LookupKey, LookupEntry>> {
+    let song_by_identity = songs
         .iter()
-        .map(|s| s.source_version)
-        .max()
-        .unwrap_or(0);
+        .map(|song| (song.identity.clone(), song))
+        .collect::<HashMap<_, _>>();
 
-    let mut all_rows = Vec::new();
-    let mut total_sheets = 0;
-    let mut failed_sheets = Vec::new();
+    let mut lookup: HashMap<LookupKey, LookupEntry> = HashMap::new();
+    for sheet in sheets.iter().filter(|sheet| sheet.source.is_official()) {
+        let Some((base_level, is_plus)) = parse_displayed_level(&sheet.level) else {
+            continue;
+        };
+        let Some(song) = song_by_identity.get(&sheet.song_identity) else {
+            continue;
+        };
+        let Some(_) = genre_rank(&song.identity.genre) else {
+            continue;
+        };
 
-    for spreadsheet in spreadsheets {
-        let version = spreadsheet.source_version;
-        let is_latest = version == latest_version;
+        let displayed_level = if is_plus {
+            format!("{base_level}+")
+        } else {
+            base_level.to_string()
+        };
+        let key = (
+            normalize_song_title_value(&sheet.song_identity.title),
+            sheet.sheet_type,
+            sheet.difficulty,
+            displayed_level,
+        );
+        let entry = LookupEntry {
+            song_identity: sheet.song_identity.clone(),
+            genre: song.identity.genre.clone(),
+        };
 
-        if !is_latest {
-            let frozen_rows = load_frozen_rows(version).ok_or_else(|| {
-                eyre::eyre!("missing embedded frozen internal levels for v{version}")
-            })?;
-            tracing::info!(
-                "v{}: loaded {} rows from embedded frozen data",
-                version,
-                frozen_rows.len()
+        if let Some(existing) = lookup.get(&key) {
+            tracing::warn!(
+                "internal levels: duplicate official lookup key for title='{}', chart_type='{}', difficulty='{}', level='{}'; keeping '{}' and ignoring '{}'",
+                key.0,
+                key.1.as_str(),
+                key.2.as_str(),
+                key.3,
+                existing.song_identity.title,
+                sheet.song_identity.title
             );
-            all_rows.extend(frozen_rows);
             continue;
         }
 
-        tracing::info!("v{}: fetching from Google Sheets (latest version)", version);
-
-        let (rows, sheet_count, failures) =
-            fetch_rows_for_spreadsheet(client, spreadsheet, google_api_key, &resolver).await?;
-
-        total_sheets += sheet_count;
-        failed_sheets.extend(failures);
-
-        all_rows.extend(rows);
+        lookup.insert(key, entry);
     }
 
-    let mut result = HashMap::new();
-    for row in all_rows {
-        let key: InternalLevelKey = (row.song_identity.clone(), row.sheet_type, row.difficulty);
-        result
-            .entry(key)
-            .and_modify(|existing: &mut InternalLevelRow| {
-                if row.source_version > existing.source_version {
-                    *existing = row.clone();
+    Ok(lookup)
+}
+
+fn collect_manual_override_titles(sheets: &[SheetRow]) -> HashSet<String> {
+    sheets
+        .iter()
+        .filter(|sheet| matches!(sheet.source, super::SheetSource::ManualOverride { .. }))
+        .map(|sheet| normalize_song_title_value(&sheet.song_identity.title))
+        .collect()
+}
+
+fn resolve_level_page_entries(
+    html: &str,
+    lookup: &HashMap<LookupKey, LookupEntry>,
+    ignored_titles: &HashSet<String>,
+) -> eyre::Result<Vec<ParsedLevelPageEntry>> {
+    let parsed_entries = parse_internal_level_page_html(html)?;
+    let mut entries = Vec::with_capacity(parsed_entries.len());
+
+    for entry in parsed_entries {
+        let title = entry.title;
+        let displayed_level = entry.displayed_level;
+        let chart_type = entry.chart_type;
+        let difficulty = entry.difficulty;
+
+        let key = (
+            normalize_song_title_value(&title),
+            chart_type,
+            difficulty,
+            displayed_level.clone(),
+        );
+        if ignored_titles.contains(&key.0) {
+            tracing::info!(
+                "internal levels: skipping manual override title='{}' chart_type='{}' difficulty='{}' level='{}'",
+                key.0,
+                chart_type.as_str(),
+                difficulty.as_str(),
+                displayed_level
+            );
+            continue;
+        }
+        let resolved = lookup.get(&key).cloned().ok_or_else(|| {
+            eyre::eyre!(
+                "no song candidate for level page row: title='{}', chart_type='{}', difficulty='{}', level='{}'",
+                key.0,
+                chart_type.as_str(),
+                difficulty.as_str(),
+                displayed_level
+            )
+        })?;
+
+        entries.push(ParsedLevelPageEntry {
+            title,
+            chart_type,
+            difficulty,
+            resolved,
+        });
+    }
+
+    Ok(entries)
+}
+
+async fn fetch_level_page_html_with_auth_recovery(
+    client: &reqwest::Client,
+    sega_id: &str,
+    sega_password: &str,
+    level_param: u8,
+) -> eyre::Result<String> {
+    let displayed_level = displayed_level_for_param(level_param)?;
+    let response = client
+        .get(INTL_LEVEL_SEARCH_URL)
+        .query(&[("level", level_param.to_string())])
+        .send()
+        .await
+        .wrap_err_with(|| format!("fetch INTL level page {displayed_level}"))?
+        .error_for_status()
+        .wrap_err_with(|| format!("INTL level page status {displayed_level}"))?;
+
+    let final_url = response.url().clone();
+    let html = response
+        .text()
+        .await
+        .wrap_err_with(|| format!("read INTL level page html {displayed_level}"))?;
+
+    if !intl::looks_like_login_or_expired(&final_url, &html) {
+        return Ok(html);
+    }
+
+    tracing::warn!(
+        "internal levels: level {} looked unauthenticated; re-logging in and retrying",
+        displayed_level
+    );
+    intl::login(client, sega_id, sega_password)
+        .await
+        .wrap_err_with(|| format!("re-login after auth expiry for level {displayed_level}"))?;
+    tokio::time::sleep(Duration::from_millis(500)).await;
+
+    let retry_response = client
+        .get(INTL_LEVEL_SEARCH_URL)
+        .query(&[("level", level_param.to_string())])
+        .send()
+        .await
+        .wrap_err_with(|| format!("retry fetch INTL level page {displayed_level}"))?
+        .error_for_status()
+        .wrap_err_with(|| format!("retry INTL level page status {displayed_level}"))?;
+
+    let retry_final_url = retry_response.url().clone();
+    let retry_html = retry_response
+        .text()
+        .await
+        .wrap_err_with(|| format!("read retry INTL level page html {displayed_level}"))?;
+
+    if intl::looks_like_login_or_expired(&retry_final_url, &retry_html) {
+        return Err(eyre::eyre!(
+            "INTL level page still looks unauthenticated or unavailable after re-login for {}: {}",
+            displayed_level,
+            retry_final_url
+        ));
+    }
+
+    Ok(retry_html)
+}
+
+fn assign_internal_levels(
+    entries: Vec<ParsedLevelPageEntry>,
+    level_param: u8,
+) -> eyre::Result<(Vec<AssignedLevelPageEntry>, AssignmentCheck)> {
+    if entries.is_empty() {
+        return Ok((
+            Vec::new(),
+            AssignmentCheck {
+                expected_bucket_count: 0,
+                observed_bucket_count: 0,
+            },
+        ));
+    }
+
+    let displayed_level = displayed_level_for_param(level_param)?;
+    let (base_level, is_plus) = parse_displayed_level(&displayed_level)
+        .ok_or_else(|| eyre::eyre!("unsupported displayed level: {displayed_level}"))?;
+    let expected_bucket_count = bucket_count_for_level(base_level, is_plus);
+    let mut current_internal_tenths = start_internal_tenths_for_level(base_level, is_plus);
+    let mut observed_bucket_count = 1;
+    let mut previous_genre_rank = None;
+    let mut assigned = Vec::with_capacity(entries.len());
+
+    for entry in entries {
+        let genre_rank = genre_rank(&entry.resolved.genre).ok_or_else(|| {
+            eyre::eyre!(
+                "level {} row '{}' has unsupported genre '{}'",
+                displayed_level,
+                entry.title,
+                entry.resolved.genre
+            )
+        })?;
+
+        if previous_genre_rank.is_some_and(|previous| genre_rank < previous) {
+            current_internal_tenths += 1;
+            observed_bucket_count += 1;
+        }
+        previous_genre_rank = Some(genre_rank);
+
+        assigned.push(AssignedLevelPageEntry {
+            bucket_index: observed_bucket_count - 1,
+            inferred_internal_level_tenths: current_internal_tenths,
+            parsed: entry,
+        });
+    }
+
+    Ok((
+        assigned,
+        AssignmentCheck {
+            expected_bucket_count,
+            observed_bucket_count,
+        },
+    ))
+}
+
+pub(crate) async fn fetch_internal_levels(
+    sega_id: &str,
+    sega_password: &str,
+    songs: &[SongRow],
+    sheets: &[SheetRow],
+) -> eyre::Result<HashMap<InternalLevelKey, InternalLevelRow>> {
+    let client = reqwest::Client::builder()
+        .default_headers(intl::default_mobile_headers()?)
+        .redirect(reqwest::redirect::Policy::limited(10))
+        .cookie_store(true)
+        .build()
+        .wrap_err("build INTL internal level client")?;
+
+    intl::ensure_logged_in(&client, sega_id, sega_password)
+        .await
+        .wrap_err("ensure INTL login for internal levels")?;
+
+    let lookup = build_lookup(songs, sheets)?;
+    let ignored_titles = collect_manual_override_titles(sheets);
+    let mut result: HashMap<InternalLevelKey, InternalLevelRow> = HashMap::new();
+    let level_params = supported_level_params().collect::<Vec<_>>();
+
+    for (index, level_param) in level_params.iter().copied().enumerate() {
+        let displayed_level = displayed_level_for_param(level_param)?;
+        let html =
+            fetch_level_page_html_with_auth_recovery(&client, sega_id, sega_password, level_param)
+                .await?;
+        let parsed_entries = resolve_level_page_entries(&html, &lookup, &ignored_titles)
+            .wrap_err_with(|| format!("parse INTL level page {displayed_level}"))?;
+        let (assigned_entries, check) = assign_internal_levels(parsed_entries, level_param)
+            .wrap_err_with(|| format!("assign INTL level page {displayed_level}"))?;
+
+        if check.expected_bucket_count != check.observed_bucket_count {
+            tracing::warn!(
+                "internal levels: level {} expected {} buckets but observed {}",
+                displayed_level,
+                check.expected_bucket_count,
+                check.observed_bucket_count
+            );
+        } else {
+            tracing::info!(
+                "internal levels: level {} produced {} buckets",
+                displayed_level,
+                check.observed_bucket_count
+            );
+        }
+
+        for assigned_entry in assigned_entries {
+            let key = (
+                assigned_entry.parsed.resolved.song_identity.clone(),
+                assigned_entry.parsed.chart_type,
+                assigned_entry.parsed.difficulty,
+            );
+            let new_row = InternalLevelRow {
+                song_identity: assigned_entry.parsed.resolved.song_identity,
+                sheet_type: assigned_entry.parsed.chart_type,
+                difficulty: assigned_entry.parsed.difficulty,
+                internal_level: format_internal_level_tenths(
+                    assigned_entry.inferred_internal_level_tenths,
+                ),
+            };
+
+            if let Some(existing) = result.get(&key) {
+                if existing.internal_level != new_row.internal_level {
+                    return Err(eyre::eyre!(
+                        "conflicting inferred internal levels for '{}' / {} / {}: {} vs {}",
+                        new_row.song_identity.title,
+                        new_row.sheet_type.as_str(),
+                        new_row.difficulty.as_str(),
+                        existing.internal_level,
+                        new_row.internal_level
+                    ));
                 }
-            })
-            .or_insert(row);
+                continue;
+            }
+
+            result.insert(key, new_row);
+        }
+
+        if index + 1 != level_params.len() {
+            tokio::time::sleep(Duration::from_millis(500)).await;
+        }
     }
 
-    if total_sheets > 0 {
-        let success_count = total_sheets - failed_sheets.len();
-        tracing::info!(
-            "Internal levels: fetched {} / {} sheets successfully (cached versions skipped)",
-            success_count,
-            total_sheets
-        );
-    }
-
-    if !failed_sheets.is_empty() {
-        tracing::warn!(
-            "Failed to fetch {} sheets: {}",
-            failed_sheets.len(),
-            failed_sheets.join(", ")
-        );
-    }
-
-    tracing::info!("Internal levels: {} unique entries total", result.len());
-
+    tracing::info!("Internal levels: {} inferred entries total", result.len());
     Ok(result)
 }
 
 #[cfg(test)]
 mod tests {
-    use super::super::{load_manual_override_rows, load_official_rows_from_json};
+    use std::collections::{BTreeSet, HashSet};
+
     use super::*;
-    use models::SongGenre;
-    use std::sync::Once;
-    use tracing_subscriber::EnvFilter;
 
-    const OFFICIAL_JP_SONGS_JSON: &str =
-        include_str!("../examples/maimai/official/maimai_songs.json");
-    static TEST_TRACING: Once = Once::new();
-
-    fn init_test_tracing() {
-        TEST_TRACING.call_once(|| {
-            tracing_subscriber::fmt()
-                .with_env_filter(
-                    EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("warn")),
-                )
-                .with_test_writer()
-                .without_time()
-                .try_init()
-                .ok();
-        });
-    }
-
-    fn resolver_for_tests() -> InternalLevelTitleResolver {
-        InternalLevelTitleResolver::new(&[SongRow {
-            identity: SongIdentity::new("Some Song", SongGenre::Maimai, ""),
+    fn test_song(title: &str, genre: SongGenre) -> SongRow {
+        SongRow {
+            identity: SongIdentity::new(title, genre, ""),
             image_name: "cover.png".to_string(),
             image_url: "https://example.com/cover.png".to_string(),
             release_date: None,
@@ -611,316 +477,237 @@ mod tests {
             is_new: false,
             is_locked: false,
             comment: None,
-        }])
+        }
     }
 
-    fn fixture_resolver() -> InternalLevelTitleResolver {
-        let (mut songs, _) =
-            load_official_rows_from_json(OFFICIAL_JP_SONGS_JSON).expect("load official JP rows");
-        let manual_override_rows = load_manual_override_rows().expect("load manual override rows");
-        songs.extend(manual_override_rows.songs);
-        InternalLevelTitleResolver::new(&songs)
+    fn test_sheet(
+        title: &str,
+        genre: SongGenre,
+        difficulty: DifficultyCategory,
+        level: &str,
+    ) -> SheetRow {
+        SheetRow {
+            song_identity: SongIdentity::new(title, genre, ""),
+            sheet_type: ChartType::Dx,
+            difficulty,
+            level: level.to_string(),
+            source: super::super::SheetSource::Official,
+        }
+    }
+
+    fn html_for_rows(rows: &[(&str, &str, &str, &str)]) -> String {
+        let mut html = String::from("<html><body>");
+        for (difficulty, chart, level, title) in rows {
+            html.push_str(&format!(
+                r#"<div class="music_{}_score_back">
+                    <img src="https://maimaidx-eng.com/maimai-mobile/img/music_{}.png" class="music_kind_icon" />
+                    <div class="music_lv_block">{}</div>
+                    <div class="music_name_block">{}</div>
+                </div>"#,
+                difficulty, chart, level, title
+            ));
+        }
+        html.push_str("</body></html>");
+        html
     }
 
     #[test]
-    fn col_idx_to_a1_works() {
-        assert_eq!(col_idx_to_a1(0), "A");
-        assert_eq!(col_idx_to_a1(25), "Z");
-        assert_eq!(col_idx_to_a1(26), "AA");
-        assert_eq!(col_idx_to_a1(27), "AB");
-        assert_eq!(col_idx_to_a1(51), "AZ");
-        assert_eq!(col_idx_to_a1(52), "BA");
+    fn computed_level_rules_cover_7_to_15() {
+        assert_eq!(displayed_level_for_param(7).unwrap(), "7");
+        assert_eq!(displayed_level_for_param(8).unwrap(), "7+");
+        assert_eq!(displayed_level_for_param(17).unwrap(), "12");
+        assert_eq!(displayed_level_for_param(18).unwrap(), "12+");
+        assert_eq!(displayed_level_for_param(23).unwrap(), "15");
+        assert!(displayed_level_for_param(24).is_err());
+
+        assert_eq!(level_param_for_displayed_level("7"), Some(7));
+        assert_eq!(level_param_for_displayed_level("7+"), Some(8));
+        assert_eq!(level_param_for_displayed_level("12"), Some(17));
+        assert_eq!(level_param_for_displayed_level("12+"), Some(18));
+        assert_eq!(level_param_for_displayed_level("15"), Some(23));
+        assert_eq!(parse_displayed_level("7"), Some((7, false)));
+        assert_eq!(parse_displayed_level("7+"), Some((7, true)));
+        assert_eq!(bucket_count_for_level(7, false), 6);
+        assert_eq!(bucket_count_for_level(7, true), 4);
+        assert_eq!(bucket_count_for_level(15, false), 1);
+        assert_eq!(start_internal_tenths_for_level(7, false), 70);
+        assert_eq!(start_internal_tenths_for_level(7, true), 76);
+        assert_eq!(format_internal_level_tenths(70), "7.0");
+        assert_eq!(format_internal_level_tenths(76), "7.6");
     }
 
     #[test]
-    fn extract_records_from_values_parses_numeric_internal_level() {
-        let spec = ExtractSpec {
-            sheet_name: "dummy".to_string(),
-            data_indexes: vec![0],
-            data_offsets: [0, 1, 2, 3],
-        };
+    fn resolve_level_page_entries_reads_title_chart_and_difficulty() {
+        let songs = vec![test_song("Song A", SongGenre::PopsAnime)];
+        let sheets = vec![test_sheet(
+            "Song A",
+            SongGenre::PopsAnime,
+            DifficultyCategory::Expert,
+            "12",
+        )];
+        let lookup = build_lookup(&songs, &sheets).expect("build lookup");
+        let html = html_for_rows(&[("expert", "dx", "12", "Song A")]);
+        let ignored_titles = HashSet::new();
 
-        let values = vec![vec![
-            Value::String("Some Song".to_string()),
-            Value::String("STD".to_string()),
-            Value::String("MAS".to_string()),
-            Value::Number(serde_json::Number::from_f64(13.7).unwrap()),
-        ]];
-
-        let rows = extract_records_from_values(&values, &spec, 13, &resolver_for_tests());
+        let rows = resolve_level_page_entries(&html, &lookup, &ignored_titles).expect("parse rows");
         assert_eq!(rows.len(), 1);
-        assert_eq!(
-            rows[0].song_identity,
-            SongIdentity::new("Some Song", SongGenre::Maimai, "")
-        );
-        assert_eq!(rows[0].sheet_type, ChartType::Std);
-        assert_eq!(rows[0].difficulty, DifficultyCategory::Master);
-        assert_eq!(rows[0].internal_level, "13.7");
-        assert_eq!(rows[0].source_version, 13);
+        assert_eq!(rows[0].title, "Song A");
+        assert_eq!(rows[0].chart_type, ChartType::Dx);
+        assert_eq!(rows[0].difficulty, DifficultyCategory::Expert);
+        assert_eq!(rows[0].resolved.song_identity.title, "Song A");
     }
 
     #[test]
-    fn embedded_frozen_versions_cover_all_non_latest_spreadsheets() {
-        let latest_version = SPREADSHEETS
-            .iter()
-            .map(|spreadsheet| spreadsheet.source_version)
-            .max()
-            .expect("at least one spreadsheet");
-        let expected_versions = SPREADSHEETS
-            .iter()
-            .map(|spreadsheet| spreadsheet.source_version)
-            .filter(|version| *version != latest_version)
-            .collect::<HashSet<_>>();
-        let embedded_versions = FROZEN_INTERNAL_LEVEL_ROWS
-            .keys()
-            .copied()
-            .collect::<HashSet<_>>();
-
-        assert_eq!(embedded_versions, expected_versions);
-        assert!(
-            load_frozen_rows(latest_version).is_none(),
-            "latest version should stay runtime-fetched"
-        );
-    }
-
-    #[test]
-    fn extract_records_from_values_allows_empty_title_song() {
-        let spec = ExtractSpec {
-            sheet_name: "dummy".to_string(),
-            data_indexes: vec![0],
-            data_offsets: [0, 1, 2, 3],
-        };
-        let resolver = InternalLevelTitleResolver::new(&[SongRow {
-            identity: SongIdentity::new("", SongGenre::PopsAnime, "x0o0x_"),
-            image_name: "cover.png".to_string(),
-            image_url: "https://example.com/cover.png".to_string(),
-            release_date: None,
-            sort_order: None,
-            is_new: false,
-            is_locked: false,
-            comment: None,
-        }]);
-
-        let values = vec![vec![
-            Value::String(String::new()),
-            Value::String("DX".to_string()),
-            Value::String("MAS".to_string()),
-            Value::Number(serde_json::Number::from_f64(12.5).unwrap()),
-        ]];
-
-        let rows = extract_records_from_values(&values, &spec, 6, &resolver);
-        assert_eq!(rows.len(), 1);
-        assert_eq!(rows[0].song_identity.title, "");
-        assert_eq!(rows[0].sheet_type, ChartType::Dx);
-        assert_eq!(rows[0].difficulty, DifficultyCategory::Master);
-    }
-
-    #[test]
-    fn parse_string_converts_numbers_to_strings() {
-        assert_eq!(
-            parse_string(&Value::Number(serde_json::Number::from(13))),
-            Some("13".to_string())
-        );
-        assert_eq!(
-            parse_string(&Value::String("STD".to_string())),
-            Some("STD".to_string())
-        );
-    }
-
-    #[test]
-    fn resolver_applies_punctuation_title_mappings() {
-        let songs = vec![
-            SongRow {
-                identity: SongIdentity::new(
-                    "Love's Theme of BADASS ～バッド・アス 愛のテーマ～",
-                    SongGenre::GameVariety,
-                    "",
-                ),
-                image_name: "love.png".to_string(),
-                image_url: "https://example.com/love.png".to_string(),
-                release_date: None,
-                sort_order: None,
-                is_new: false,
-                is_locked: false,
-                comment: None,
+    fn assign_internal_levels_increments_on_genre_wrap() {
+        let entries = vec![
+            ParsedLevelPageEntry {
+                title: "A".to_string(),
+                chart_type: ChartType::Dx,
+                difficulty: DifficultyCategory::Master,
+                resolved: LookupEntry {
+                    song_identity: SongIdentity::new("A", SongGenre::PopsAnime, ""),
+                    genre: SongGenre::PopsAnime,
+                },
             },
-            SongRow {
-                identity: SongIdentity::new("Party 4U ”holy nite mix”", SongGenre::GameVariety, ""),
-                image_name: "party.png".to_string(),
-                image_url: "https://example.com/party.png".to_string(),
-                release_date: None,
-                sort_order: None,
-                is_new: false,
-                is_locked: false,
-                comment: None,
+            ParsedLevelPageEntry {
+                title: "B".to_string(),
+                chart_type: ChartType::Dx,
+                difficulty: DifficultyCategory::Master,
+                resolved: LookupEntry {
+                    song_identity: SongIdentity::new("B", SongGenre::NiconicoVocaloid, ""),
+                    genre: SongGenre::NiconicoVocaloid,
+                },
             },
-            SongRow {
-                identity: SongIdentity::new("Boys O’Clock", SongGenre::Maimai, ""),
-                image_name: "boys.png".to_string(),
-                image_url: "https://example.com/boys.png".to_string(),
-                release_date: None,
-                sort_order: None,
-                is_new: false,
-                is_locked: false,
-                comment: None,
-            },
-            SongRow {
-                identity: SongIdentity::new("Tic Tac DREAMIN’", SongGenre::OngekiChunithm, ""),
-                image_name: "tic.png".to_string(),
-                image_url: "https://example.com/tic.png".to_string(),
-                release_date: None,
-                sort_order: None,
-                is_new: false,
-                is_locked: false,
-                comment: None,
-            },
-            SongRow {
-                identity: SongIdentity::new("L'épilogue", SongGenre::Maimai, ""),
-                image_name: "lepilogue.png".to_string(),
-                image_url: "https://example.com/lepilogue.png".to_string(),
-                release_date: None,
-                sort_order: None,
-                is_new: false,
-                is_locked: false,
-                comment: None,
+            ParsedLevelPageEntry {
+                title: "C".to_string(),
+                chart_type: ChartType::Dx,
+                difficulty: DifficultyCategory::Master,
+                resolved: LookupEntry {
+                    song_identity: SongIdentity::new("C", SongGenre::PopsAnime, ""),
+                    genre: SongGenre::PopsAnime,
+                },
             },
         ];
-        let resolver = InternalLevelTitleResolver::new(&songs);
 
-        assert!(matches!(
-            resolver.resolve_title("Love’s Theme of BADASS ～バッド・アス 愛のテーマ～"),
-            TitleResolution::Matched(_)
-        ));
-        assert!(matches!(
-            resolver.resolve_title("Party 4U \"holy nite mix\""),
-            TitleResolution::Matched(_)
-        ));
-        assert!(matches!(
-            resolver.resolve_title("Boys O'Clock"),
-            TitleResolution::Matched(_)
-        ));
-        assert!(matches!(
-            resolver.resolve_title("Tic Tac DREAMIN'"),
-            TitleResolution::Matched(_)
-        ));
-        assert!(matches!(
-            resolver.resolve_title("L'epilogue"),
-            TitleResolution::Matched(_)
-        ));
-    }
-
-    async fn fetch_rows_for_version(source_version: i64) -> Vec<InternalLevelRow> {
-        init_test_tracing();
-        dotenvy::dotenv().ok();
-        let api_key = std::env::var("GOOGLE_API_KEY").expect("GOOGLE_API_KEY required");
-        let spreadsheet = SPREADSHEETS
+        let (assigned, check) = assign_internal_levels(entries, 17).expect("assign levels");
+        let inferred = assigned
             .iter()
-            .find(|spreadsheet| spreadsheet.source_version == source_version)
-            .unwrap_or_else(|| panic!("missing spreadsheet for source_version {source_version}"));
-        let client = reqwest::Client::new();
-        let resolver = fixture_resolver();
-        let mut all_rows = Vec::new();
+            .map(|entry| format_internal_level_tenths(entry.inferred_internal_level_tenths))
+            .collect::<Vec<_>>();
+        assert_eq!(inferred, vec!["12.0", "12.0", "12.1"]);
+        assert_eq!(assigned[2].bucket_index, 1);
+        assert_eq!(check.expected_bucket_count, 6);
+        assert_eq!(check.observed_bucket_count, 2);
+    }
 
-        for extract in &spreadsheet.extracts {
-            let values = fetch_sheet_values(
-                &client,
-                &spreadsheet.spreadsheet_id,
-                &extract.sheet_name,
-                max_column_for_extract(extract),
-                &api_key,
-            )
-            .await
-            .unwrap_or_else(|err| {
-                panic!(
-                    "fetch_sheet_values failed for v{} / {}: {err:#}",
-                    spreadsheet.source_version, extract.sheet_name
-                )
-            });
+    #[test]
+    fn build_lookup_keeps_first_duplicate_official_key() {
+        let songs = vec![
+            test_song("Dup", SongGenre::PopsAnime),
+            test_song("Dup", SongGenre::Maimai),
+        ];
+        let sheets = vec![
+            test_sheet(
+                "Dup",
+                SongGenre::PopsAnime,
+                DifficultyCategory::Expert,
+                "12",
+            ),
+            test_sheet("Dup", SongGenre::Maimai, DifficultyCategory::Expert, "12"),
+        ];
 
-            let rows = extract_records_from_values(
-                &values,
-                extract,
-                spreadsheet.source_version,
-                &resolver,
-            );
+        let lookup = build_lookup(&songs, &sheets).expect("duplicate key should warn only");
+        assert_eq!(lookup.len(), 1);
+    }
 
-            eprintln!(
-                "v{} / {}: {} raw rows, {} parsed records",
-                spreadsheet.source_version,
-                extract.sheet_name,
-                values.len(),
-                rows.len()
-            );
-            if rows.is_empty() {
-                eprintln!(
-                    "v{} / {}: parsed zero records",
-                    spreadsheet.source_version, extract.sheet_name
-                );
-            }
-            all_rows.extend(rows);
-        }
+    #[test]
+    fn resolve_level_page_entries_skips_manual_override_title() {
+        let songs = vec![test_song("Song A", SongGenre::PopsAnime)];
+        let sheets = vec![test_sheet(
+            "Song A",
+            SongGenre::PopsAnime,
+            DifficultyCategory::Expert,
+            "12",
+        )];
+        let lookup = build_lookup(&songs, &sheets).expect("build lookup");
+        let ignored_titles = HashSet::from([normalize_song_title_value("Override Song")]);
+        let html = html_for_rows(&[
+            ("expert", "dx", "12", "Override Song"),
+            ("expert", "dx", "12", "Song A"),
+        ]);
 
-        eprintln!(
-            "v{} total parsed records: {}",
-            spreadsheet.source_version,
-            all_rows.len()
+        let rows = resolve_level_page_entries(&html, &lookup, &ignored_titles).expect("parse rows");
+        assert_eq!(rows.len(), 1);
+        assert_eq!(rows[0].title, "Song A");
+    }
+
+    #[test]
+    #[ignore = "manual debug test; set MAISTATS_INTERNAL_LEVEL_HTML_PATH to run against a downloaded page"]
+    fn infer_internal_levels_from_html_path() {
+        let html_path = std::env::var("MAISTATS_INTERNAL_LEVEL_HTML_PATH")
+            .expect("set MAISTATS_INTERNAL_LEVEL_HTML_PATH to the downloaded HTML file path");
+        let html = std::fs::read_to_string(&html_path).expect("read html fixture");
+        let parsed_entries = parse_internal_level_page_html(&html).expect("parse level page html");
+        assert!(
+            !parsed_entries.is_empty(),
+            "expected at least one parsed level page entry"
         );
-        all_rows
-    }
 
-    #[tokio::test]
-    #[ignore]
-    async fn fetch_version_6_sheets() {
-        let rows = fetch_rows_for_version(6).await;
-        assert!(!rows.is_empty(), "expected parsed records for version 6");
-    }
+        let displayed_levels = parsed_entries
+            .iter()
+            .map(|entry| entry.displayed_level.clone())
+            .collect::<BTreeSet<_>>();
+        assert_eq!(
+            displayed_levels.len(),
+            1,
+            "expected a single displayed level per page"
+        );
+        let displayed_level = displayed_levels
+            .into_iter()
+            .next()
+            .expect("single displayed level");
+        let level_param = level_param_for_displayed_level(&displayed_level)
+            .expect("derive level param from displayed level");
 
-    #[tokio::test]
-    #[ignore]
-    async fn fetch_version_7_sheets() {
-        let rows = fetch_rows_for_version(7).await;
-        assert!(!rows.is_empty(), "expected parsed records for version 7");
-    }
+        let manual_override_rows =
+            super::super::load_manual_override_rows().expect("load manual override rows");
+        let client = reqwest::Client::builder()
+            .build()
+            .expect("build reqwest client for manual internal level test");
+        let raw_songs = tokio::runtime::Runtime::new()
+            .expect("build tokio runtime for manual internal level test")
+            .block_on(super::super::fetch_maimai_songs(&client))
+            .expect("fetch official songs json");
+        let raw_songs = super::super::filter_official_songs_by_title(
+            raw_songs,
+            &manual_override_rows.overridden_titles,
+        )
+        .expect("filter overridden titles");
+        let (mut songs, mut sheets) =
+            super::super::build_official_rows(raw_songs).expect("build official rows");
+        songs.extend(manual_override_rows.songs);
+        sheets.extend(manual_override_rows.sheets);
 
-    #[tokio::test]
-    #[ignore]
-    async fn fetch_version_8_sheets() {
-        let rows = fetch_rows_for_version(8).await;
-        assert!(!rows.is_empty(), "expected parsed records for version 8");
-    }
+        let lookup = build_lookup(&songs, &sheets).expect("build lookup");
+        let ignored_titles = collect_manual_override_titles(&sheets);
+        let resolved_entries = resolve_level_page_entries(&html, &lookup, &ignored_titles)
+            .expect("resolve level page entries");
+        let (assigned_entries, check) =
+            assign_internal_levels(resolved_entries, level_param).expect("assign internal levels");
 
-    #[tokio::test]
-    #[ignore]
-    async fn fetch_version_9_sheets() {
-        let rows = fetch_rows_for_version(9).await;
-        assert!(!rows.is_empty(), "expected parsed records for version 9");
-    }
-
-    #[tokio::test]
-    #[ignore]
-    async fn fetch_version_10_sheets() {
-        let rows = fetch_rows_for_version(10).await;
-        assert!(!rows.is_empty(), "expected parsed records for version 10");
-    }
-
-    #[tokio::test]
-    #[ignore]
-    async fn fetch_version_11_sheets() {
-        let rows = fetch_rows_for_version(11).await;
-        assert!(!rows.is_empty(), "expected parsed records for version 11");
-    }
-
-    #[tokio::test]
-    #[ignore]
-    async fn fetch_version_12_sheets() {
-        let rows = fetch_rows_for_version(12).await;
-        assert!(!rows.is_empty(), "expected parsed records for version 12");
-    }
-
-    #[tokio::test]
-    #[ignore]
-    async fn fetch_version_13_sheets() {
-        let rows = fetch_rows_for_version(13).await;
-        assert!(!rows.is_empty(), "expected parsed records for version 13");
+        println!(
+            "html_path={html_path} displayed_level={} level_param={} expected_buckets={} observed_buckets={}",
+            displayed_level, level_param, check.expected_bucket_count, check.observed_bucket_count
+        );
+        for entry in assigned_entries {
+            println!(
+                "{}\t{}\t{}\t{}\t{}",
+                format_internal_level_tenths(entry.inferred_internal_level_tenths),
+                entry.parsed.chart_type.as_str(),
+                entry.parsed.difficulty.as_str(),
+                entry.parsed.resolved.genre,
+                entry.parsed.title
+            );
+        }
     }
 }
