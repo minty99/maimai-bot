@@ -1073,16 +1073,16 @@ function App() {
   const activeNavItem = NAV_ITEMS.find((item) => item.page === activePage) ?? NAV_ITEMS[0];
   const ActiveNavIcon = activeNavItem.Icon;
   const mobileNavItems = NAV_ITEMS;
-  const currentVersionPlayCount = playerProfile?.current_version_play_count;
+  const totalPlayCount = playerProfile?.total_play_count;
   const playerSummary = playerProfile ? (
     <section className="app-player-summary">
       <p className="app-player-summary-label">Connected player</p>
       <p className="app-player-summary-name">{playerProfile.user_name}</p>
       <p className="app-player-summary-count">
-        Play count:{' '}
+        Total play count:{' '}
         <strong>
-          {typeof currentVersionPlayCount === 'number'
-            ? currentVersionPlayCount.toLocaleString()
+          {typeof totalPlayCount === 'number'
+            ? totalPlayCount.toLocaleString()
             : '-'}
         </strong>
       </p>

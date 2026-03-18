@@ -152,6 +152,7 @@ export interface PlayerProfile {
   user_name: string;
   rating: number;
   current_version_play_count: number;
+  total_play_count: number;
 }
 
 export async function fetchPlayerProfile(
