@@ -1,6 +1,6 @@
-use models::{ChartType, DifficultyCategory, ScoreRank};
+use models::{ChartType, DifficultyCategory, FcStatus, ScoreRank, SyncStatus};
 use poise::serenity_prelude as serenity;
-use serenity::builder::CreateEmbed;
+use serenity::builder::{CreateEmbed, CreateEmbedFooter};
 
 const EMBED_COLOR: u32 = 0x51BCF3;
 const EMBED_COLOR_MAINTENANCE: u32 = 0xFFA500;
@@ -47,6 +47,8 @@ pub(crate) struct RecentRecordView {
     pub(crate) achievement_percent: Option<f64>,
     pub(crate) achievement_new_record: bool,
     pub(crate) rank: Option<ScoreRank>,
+    pub(crate) fc: Option<FcStatus>,
+    pub(crate) sync: Option<SyncStatus>,
 }
 
 pub(crate) fn format_level_with_internal(level: &str, internal_level: Option<f32>) -> String {
@@ -59,11 +61,40 @@ pub(crate) fn format_level_with_internal(level: &str, internal_level: Option<f32
     }
 }
 
-fn format_rating_points_suffix(rating_points: Option<u32>) -> String {
-    match rating_points {
-        Some(v) => format!(" • {v}pt"),
-        None => String::new(),
-    }
+fn format_recent_title(record: &RecentRecordView) -> String {
+    let diff = record
+        .diff_category
+        .map(|d| d.as_str())
+        .unwrap_or("Unknown");
+    let level = record
+        .internal_level
+        .map(|v| format!("{v:.1}"))
+        .or_else(|| record.level.clone())
+        .unwrap_or_else(|| "N/A".to_string());
+
+    format!(
+        "{} [{} {} {}]",
+        record.title, record.chart_type, diff, level
+    )
+}
+
+fn format_recent_detail_lines(record: &RecentRecordView) -> String {
+    let achievement = format_percent_f64(record.achievement_percent);
+    let rank = record.rank.map(|r| r.as_str()).unwrap_or("-");
+    let fc = record.fc.map(|v| v.as_str()).unwrap_or("-");
+    let sync = record.sync.map(|v| v.as_str()).unwrap_or("-");
+
+    format!("{achievement} • {rank} • {fc} • {sync}")
+}
+
+fn format_recent_footer(record: &RecentRecordView) -> CreateEmbedFooter {
+    let rating = record
+        .rating_points
+        .map(|v| v.to_string())
+        .unwrap_or_else(|| "-".to_string());
+    let played_at = record.played_at.as_deref().unwrap_or("-");
+
+    CreateEmbedFooter::new(format!("Rating: {rating} • Played: {played_at}"))
 }
 
 fn format_percent_f64(value: Option<f64>) -> String {
@@ -102,25 +133,14 @@ pub(crate) fn build_mai_recent_embeds(
     }
 
     embeds.extend(records.iter().map(|record| {
-        let track = format_track_label(record.track);
-        let achv = format_percent_f64(record.achievement_percent);
-        let rank = record.rank.map(|r| r.as_str()).unwrap_or("N/A");
-        let diff = record
-            .diff_category
-            .map(|d| d.as_str())
-            .unwrap_or("Unknown");
-        let level = record.level.as_deref().unwrap_or("N/A");
-        let level = format_level_with_internal(level, record.internal_level);
-        let rating = format_rating_points_suffix(record.rating_points);
-        let mut desc = format!(
-            "**{}**\n[{}] {diff} {level} — {achv} • {rank}{rating}",
-            record.title, record.chart_type
-        );
+        let mut desc = format_recent_detail_lines(record);
         if record.achievement_new_record {
-            desc.push_str("\n[NEW RECORD]");
+            desc.push_str("\n**NEW RECORD**");
         }
 
-        let mut embed = embed_base(&track).description(desc);
+        let mut embed = embed_base(&format_recent_title(record))
+            .description(desc)
+            .footer(format_recent_footer(record));
         if let Some(image_name) = record.image_name.as_deref() {
             embed = embed.thumbnail(format!("attachment://{image_name}"));
         }
@@ -145,10 +165,4 @@ pub(crate) fn build_mai_today_embed(
         .field("Tracks", tracks.to_string(), true)
         .field("New records", new_records.to_string(), true);
     e
-}
-
-fn format_track_label(track: Option<i64>) -> String {
-    track
-        .map(|t| format!("TRACK {t:02}"))
-        .unwrap_or_else(|| "TRACK ??".to_string())
 }
