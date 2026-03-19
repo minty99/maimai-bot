@@ -1131,24 +1131,24 @@ function App() {
   const ActiveNavIcon = activeNavItem.Icon;
   const mobileNavItems = navItems;
   const totalPlayCount = playerProfile?.total_play_count;
-  const playerSummary = playerProfile ? (
-    <section className="app-player-summary">
-      <p className="app-player-summary-label">{t('player.connected')}</p>
-      <p className="app-player-summary-name">{playerProfile.user_name}</p>
-      <p className="app-player-summary-count">
-        {t('player.totalPlayCount')}:{' '}
-        <strong>
-          {typeof totalPlayCount === 'number'
-            ? formatNumber(totalPlayCount)
-            : '-'}
-        </strong>
-      </p>
-    </section>
+  const playerInlineSummary = playerProfile ? (
+    <p className="app-player-summary" title={`${playerProfile.user_name} @ ${typeof totalPlayCount === 'number' ? formatNumber(totalPlayCount) : '-'}`}>
+      <span className="app-player-summary-name">{playerProfile.user_name}</span>
+      <span className="app-player-summary-separator">@</span>
+      <span className="app-player-summary-count">
+        {typeof totalPlayCount === 'number'
+          ? formatNumber(totalPlayCount)
+          : '-'}
+      </span>
+    </p>
   ) : null;
   const desktopSidebarTopContent = (
     <section className="panel app-sidebar-inline">
-      <div className="brand-copy">
-        <h1>maistats</h1>
+      <div className="app-sidebar-header">
+        <div className="brand-copy">
+          <h1>maistats</h1>
+        </div>
+        {playerInlineSummary}
       </div>
 
       <nav className="app-nav app-nav-inline" aria-label={t('nav.primary')}>
@@ -1167,15 +1167,17 @@ function App() {
           ))}
         </div>
       </nav>
-      {playerSummary}
     </section>
   );
 
   return (
     <div className="app-shell">
       <aside className="app-sidebar panel">
-        <div className="brand-copy">
-          <h1>maistats</h1>
+        <div className="app-sidebar-header">
+          <div className="brand-copy">
+            <h1>maistats</h1>
+          </div>
+          {playerInlineSummary}
         </div>
 
         <nav ref={mobileNavRef} className="app-nav" aria-label={t('nav.primary')}>
@@ -1223,7 +1225,6 @@ function App() {
             ))}
           </div>
         </nav>
-        {playerSummary}
       </aside>
 
       <main className="app-main">
