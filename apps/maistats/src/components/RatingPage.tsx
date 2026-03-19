@@ -43,26 +43,25 @@ function handleCardKeyDown(event: KeyboardEvent<HTMLElement>, onOpenSongDetail: 
 
 function RatingCardSection({
   title,
-  description,
+  summary,
   rows,
   songInfoUrl,
   onOpenSongDetail,
 }: {
   title: string;
-  description: string;
+  summary: string;
   rows: ScoreRow[];
   songInfoUrl: string;
   onOpenSongDetail: (target: SongDetailTarget) => void;
 }) {
   const { locale, t } = useI18n();
   return (
-    <section className="panel">
+    <section className="panel rating-section-panel">
       <div className="panel-heading">
         <div>
           <h2>{title}</h2>
-          <p>{description}</p>
         </div>
-        <span className="panel-count">{t('units.songs', { count: rows.length.toLocaleString(locale) })}</span>
+        <span className="panel-count">{summary}</span>
       </div>
       <div className="rating-card-grid">
         {rows.map((row, index) => {
@@ -141,6 +140,9 @@ export function RatingPage({
   onOpenSongDetail,
 }: RatingPageProps) {
   const { locale, t } = useI18n();
+  const newSummary = `avg ${formatRatingAvg(newRatingTotal, newRows.length)} (~${formatRatingProjection(newRatingTotal, newRows.length, locale)})`;
+  const oldSummary = `avg ${formatRatingAvg(oldRatingTotal, oldRows.length)} (~${formatRatingProjection(oldRatingTotal, oldRows.length, locale)})`;
+
   return (
     <div className="explorer-layout">
       <aside className="sidebar-column">
@@ -149,7 +151,6 @@ export function RatingPage({
           <div className="panel-heading compact">
             <div>
               <h2>RATING</h2>
-              <p>{t('rating.description')}</p>
             </div>
           </div>
           <div className="rating-stat-grid">
@@ -160,26 +161,6 @@ export function RatingPage({
                 {t('rating.avg', { value: formatRatingAvg(ratingTotal, newRows.length + oldRows.length) })}
               </small>
             </div>
-            <div className="rating-stat-card">
-              <span>{t('rating.newTop15')}</span>
-              <strong>{formatNumber(newRatingTotal, locale)}</strong>
-              <small className="rating-stat-sub">
-                {t('rating.avgProjection', {
-                  avg: formatRatingAvg(newRatingTotal, newRows.length),
-                  projection: formatRatingProjection(newRatingTotal, newRows.length, locale),
-                })}
-              </small>
-            </div>
-            <div className="rating-stat-card">
-              <span>{t('rating.oldTop35')}</span>
-              <strong>{formatNumber(oldRatingTotal, locale)}</strong>
-              <small className="rating-stat-sub">
-                {t('rating.avgProjection', {
-                  avg: formatRatingAvg(oldRatingTotal, oldRows.length),
-                  projection: formatRatingProjection(oldRatingTotal, oldRows.length, locale),
-                })}
-              </small>
-            </div>
           </div>
         </section>
       </aside>
@@ -187,14 +168,14 @@ export function RatingPage({
       <div className="table-column rating-table-column">
         <RatingCardSection
           title="NEW"
-          description={t('rating.newDescription')}
+          summary={newSummary}
           rows={newRows}
           songInfoUrl={songInfoUrl}
           onOpenSongDetail={onOpenSongDetail}
         />
         <RatingCardSection
           title="OLD"
-          description={t('rating.oldDescription')}
+          summary={oldSummary}
           rows={oldRows}
           songInfoUrl={songInfoUrl}
           onOpenSongDetail={onOpenSongDetail}

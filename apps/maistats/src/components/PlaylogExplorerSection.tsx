@@ -255,7 +255,7 @@ export function PlaylogExplorerSection({
       </aside>
 
       <div className="table-column">
-        <section className="panel">
+        <section className="panel explorer-table-panel">
           <div className="panel-heading">
             <div>
               <h2>Playlogs</h2>

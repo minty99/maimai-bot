@@ -16,6 +16,7 @@ import {
   SCORE_FILTERS_STORAGE_KEY,
   SONG_INFO_STORAGE_KEY,
   TABLE_LAYOUT_STORAGE_KEY,
+  THEME_STORAGE_KEY,
   ScoreSortKey,
   VERSION_ORDER_MAP,
 } from './app/constants';
@@ -82,6 +83,7 @@ import logoUrl from './assets/logo.png';
 
 type AppPage = 'home' | 'scores' | 'rating' | 'playlogs' | 'picker' | 'settings';
 type RatedScoreRow = ScoreRow & { rating: number; version: string };
+type ThemePreference = 'system' | 'light' | 'dark';
 type LoadingErrorState =
   | { kind: 'translated'; key: TranslationKey; variables?: TranslationVariables }
   | { kind: 'message'; message: string };
@@ -268,6 +270,21 @@ function App() {
     return readPageFromHash(window.location.hash);
   });
   const [isMobileNavOpen, setIsMobileNavOpen] = useState(false);
+
+  const [themePreference, setThemePreferenceState] = useState<ThemePreference>(() => {
+    const stored = localStorage.getItem(THEME_STORAGE_KEY)?.trim();
+    if (stored === 'light' || stored === 'dark') return stored;
+    return 'system';
+  });
+
+  useEffect(() => {
+    localStorage.setItem(THEME_STORAGE_KEY, themePreference);
+    if (themePreference === 'system') {
+      document.documentElement.removeAttribute('data-theme');
+    } else {
+      document.documentElement.setAttribute('data-theme', themePreference);
+    }
+  }, [themePreference]);
 
   const [songInfoUrl, setSongInfoUrl] = useState<string>(() =>
     readStoredValue(SONG_INFO_STORAGE_KEY, DEFAULT_SONG_INFO_URL),
@@ -1114,24 +1131,24 @@ function App() {
   const ActiveNavIcon = activeNavItem.Icon;
   const mobileNavItems = navItems;
   const totalPlayCount = playerProfile?.total_play_count;
-  const playerSummary = playerProfile ? (
-    <section className="app-player-summary">
-      <p className="app-player-summary-label">{t('player.connected')}</p>
-      <p className="app-player-summary-name">{playerProfile.user_name}</p>
-      <p className="app-player-summary-count">
-        {t('player.totalPlayCount')}:{' '}
-        <strong>
-          {typeof totalPlayCount === 'number'
-            ? formatNumber(totalPlayCount)
-            : '-'}
-        </strong>
-      </p>
-    </section>
+  const playerInlineSummary = playerProfile ? (
+    <p className="app-player-summary" title={`${playerProfile.user_name} @ ${typeof totalPlayCount === 'number' ? formatNumber(totalPlayCount) : '-'}`}>
+      <span className="app-player-summary-name">{playerProfile.user_name}</span>
+      <span className="app-player-summary-separator">@</span>
+      <span className="app-player-summary-count">
+        {typeof totalPlayCount === 'number'
+          ? formatNumber(totalPlayCount)
+          : '-'}
+      </span>
+    </p>
   ) : null;
   const desktopSidebarTopContent = (
     <section className="panel app-sidebar-inline">
-      <div className="brand-copy">
-        <h1>maistats</h1>
+      <div className="app-sidebar-header">
+        <div className="brand-copy">
+          <h1>maistats</h1>
+        </div>
+        {playerInlineSummary}
       </div>
 
       <nav className="app-nav app-nav-inline" aria-label={t('nav.primary')}>
@@ -1150,15 +1167,17 @@ function App() {
           ))}
         </div>
       </nav>
-      {playerSummary}
     </section>
   );
 
   return (
     <div className="app-shell">
       <aside className="app-sidebar panel">
-        <div className="brand-copy">
-          <h1>maistats</h1>
+        <div className="app-sidebar-header">
+          <div className="brand-copy">
+            <h1>maistats</h1>
+          </div>
+          {playerInlineSummary}
         </div>
 
         <nav ref={mobileNavRef} className="app-nav" aria-label={t('nav.primary')}>
@@ -1206,7 +1225,6 @@ function App() {
             ))}
           </div>
         </nav>
-        {playerSummary}
       </aside>
 
       <main className="app-main">
@@ -1347,6 +1365,8 @@ function App() {
             languagePreference={languagePreference}
             setLanguagePreference={setLanguagePreference}
             languageLabel={formatLanguageName(language)}
+            themePreference={themePreference}
+            setThemePreference={setThemePreferenceState}
             songInfoUrlDraft={songInfoUrlDraft}
             setSongInfoUrlDraft={setSongInfoUrlDraft}
             recordCollectorUrlDraft={recordCollectorUrlDraft}
