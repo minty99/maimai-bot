@@ -3,7 +3,8 @@
 :root {
   color-scheme: dark;
   --desktop-sidebar-width: 320px;
-  --rating-card-max-width: 300px;
+  --rating-card-min-width: 125px;
+  --rating-card-max-width: 250px;
 
   --bg: #0b0b0f;
   --panel: #111116;
@@ -946,19 +947,28 @@ select:focus-visible {
 .rating-table-column {
   display: grid;
   gap: 14px;
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 540px), 1fr));
   align-items: start;
 }
 
 .rating-section-panel {
   align-self: start;
+  min-width: 0;
 }
 
 .rating-card-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 180px), var(--rating-card-max-width)));
+  grid-template-columns: repeat(
+    auto-fit,
+    minmax(
+      clamp(
+        var(--rating-card-min-width),
+        calc((100% - 20px) / 3),
+        var(--rating-card-max-width)
+      ),
+      1fr
+    )
+  );
   gap: 10px;
-  justify-content: start;
 }
 
 .rating-song-card {
@@ -974,6 +984,8 @@ select:focus-visible {
   overflow: hidden;
   cursor: pointer;
   transition: border-color 120ms ease, transform 120ms ease;
+  min-width: 0;
+  width: 100%;
 }
 
 .rating-song-card:hover,
