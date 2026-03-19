@@ -56,7 +56,7 @@ function RatingCardSection({
 }) {
   const { locale, t } = useI18n();
   return (
-    <section className="panel">
+    <section className="panel rating-section-panel">
       <div className="panel-heading">
         <div>
           <h2>{title}</h2>
