@@ -2608,7 +2608,7 @@ tbody tr:last-child td {
   background: var(--bg);
   border: 1px solid var(--line-strong);
   border-radius: 2px;
-  font-family: inherit;
+  font-family: 'SFMono-Regular', SFMono-Regular, ui-monospace, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;
   font-size: 0.78rem;
   line-height: 1.6;
   overflow-x: auto;
