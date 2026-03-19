@@ -50,7 +50,7 @@ struct AssignmentCheck {
 }
 
 pub(crate) type InternalLevelKey = (SongIdentity, ChartType, DifficultyCategory);
-type LookupKey = (String, ChartType, DifficultyCategory, String);
+type LookupKey = (String, ChartType, DifficultyCategory);
 
 fn parse_displayed_level(displayed_level: &str) -> Option<(u8, bool)> {
     let displayed_level = displayed_level.trim();
@@ -153,7 +153,7 @@ fn build_lookup(
 
     let mut lookup: HashMap<LookupKey, LookupEntry> = HashMap::new();
     for sheet in sheets.iter().filter(|sheet| sheet.source.is_official()) {
-        let Some((base_level, is_plus)) = parse_displayed_level(&sheet.level) else {
+        let Some((_base_level, _is_plus)) = parse_displayed_level(&sheet.level) else {
             continue;
         };
         let Some(song) = song_by_identity.get(&sheet.song_identity) else {
@@ -163,16 +163,10 @@ fn build_lookup(
             continue;
         };
 
-        let displayed_level = if is_plus {
-            format!("{base_level}+")
-        } else {
-            base_level.to_string()
-        };
         let key = (
             normalize_song_title_value(&sheet.song_identity.title),
             sheet.sheet_type,
             sheet.difficulty,
-            displayed_level,
         );
         let entry = LookupEntry {
             song_identity: sheet.song_identity.clone(),
@@ -180,16 +174,14 @@ fn build_lookup(
         };
 
         if let Some(existing) = lookup.get(&key) {
-            tracing::warn!(
-                "internal levels: duplicate official lookup key for title='{}', chart_type='{}', difficulty='{}', level='{}'; keeping '{}' and ignoring '{}'",
+            eyre::bail!(
+                "internal levels: duplicate official lookup key for title='{}', chart_type='{}', difficulty='{}': '{}' vs '{}'; add manual override to disambiguate",
                 key.0,
                 key.1.as_str(),
                 key.2.as_str(),
-                key.3,
                 existing.song_identity.title,
                 sheet.song_identity.title
             );
-            continue;
         }
 
         lookup.insert(key, entry);
@@ -220,12 +212,7 @@ fn resolve_level_page_entries(
         let chart_type = entry.chart_type;
         let difficulty = entry.difficulty;
 
-        let key = (
-            normalize_song_title_value(&title),
-            chart_type,
-            difficulty,
-            displayed_level.clone(),
-        );
+        let key = (normalize_song_title_value(&title), chart_type, difficulty);
         if ignored_titles.contains(&key.0) {
             tracing::info!(
                 "internal levels: skipping manual override title='{}' chart_type='{}' difficulty='{}' level='{}'",
@@ -406,19 +393,18 @@ pub(crate) async fn fetch_internal_levels(
             .wrap_err_with(|| format!("assign INTL level page {displayed_level}"))?;
 
         if check.expected_bucket_count != check.observed_bucket_count {
-            tracing::warn!(
+            eyre::bail!(
                 "internal levels: level {} expected {} buckets but observed {}",
                 displayed_level,
                 check.expected_bucket_count,
                 check.observed_bucket_count
             );
-        } else {
-            tracing::info!(
-                "internal levels: level {} produced {} buckets",
-                displayed_level,
-                check.observed_bucket_count
-            );
         }
+        tracing::info!(
+            "internal levels: level {} produced {} buckets",
+            displayed_level,
+            check.observed_bucket_count
+        );
 
         for assigned_entry in assigned_entries {
             let key = (
@@ -601,7 +587,7 @@ mod tests {
     }
 
     #[test]
-    fn build_lookup_keeps_first_duplicate_official_key() {
+    fn build_lookup_errors_on_duplicate_official_key() {
         let songs = vec![
             test_song("Dup", SongGenre::PopsAnime),
             test_song("Dup", SongGenre::Maimai),
@@ -616,8 +602,8 @@ mod tests {
             test_sheet("Dup", SongGenre::Maimai, DifficultyCategory::Expert, "12"),
         ];
 
-        let lookup = build_lookup(&songs, &sheets).expect("duplicate key should warn only");
-        assert_eq!(lookup.len(), 1);
+        let err = build_lookup(&songs, &sheets).expect_err("duplicate key should error");
+        assert!(err.to_string().contains("duplicate official lookup key"));
     }
 
     #[test]
@@ -639,6 +625,25 @@ mod tests {
         let rows = resolve_level_page_entries(&html, &lookup, &ignored_titles).expect("parse rows");
         assert_eq!(rows.len(), 1);
         assert_eq!(rows[0].title, "Song A");
+    }
+
+    #[test]
+    fn resolve_level_page_entries_ignores_official_level_mismatch() {
+        let songs = vec![test_song("ハオ", SongGenre::NiconicoVocaloid)];
+        let sheets = vec![test_sheet(
+            "ハオ",
+            SongGenre::NiconicoVocaloid,
+            DifficultyCategory::Expert,
+            "9+",
+        )];
+        let lookup = build_lookup(&songs, &sheets).expect("build lookup");
+        let ignored_titles = HashSet::new();
+        let html = html_for_rows(&[("expert", "dx", "10", "ハオ")]);
+
+        let rows = resolve_level_page_entries(&html, &lookup, &ignored_titles).expect("parse rows");
+        assert_eq!(rows.len(), 1);
+        assert_eq!(rows[0].title, "ハオ");
+        assert_eq!(rows[0].resolved.song_identity.title, "ハオ");
     }
 
     #[test]
