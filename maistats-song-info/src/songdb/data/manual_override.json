@@ -218,6 +218,45 @@
           "region": { "jp": true, "intl": true }
         }
       ]
+    },
+    {
+      "title": "Galaxy Blaster",
+      "genre": "オンゲキ＆CHUNITHM",
+      "artist": "ああああ",
+      "image_url": "https://maimaidx.jp/maimai-mobile/img/Music/eb065aac3a8e4c07.png",
+      "sheets": [
+        {
+          "type": "DX",
+          "difficulty": "BASIC",
+          "level": "5",
+          "version": "CiRCLE",
+          "region": { "jp": true, "intl": true }
+        },
+        {
+          "type": "DX",
+          "difficulty": "ADVANCED",
+          "level": "7+",
+          "version": "CiRCLE",
+          "internal_level": 7.8,
+          "region": { "jp": true, "intl": true }
+        },
+        {
+          "type": "DX",
+          "difficulty": "EXPERT",
+          "level": "11",
+          "version": "CiRCLE",
+          "internal_level": 11.5,
+          "region": { "jp": true, "intl": true }
+        },
+        {
+          "type": "DX",
+          "difficulty": "MASTER",
+          "level": "14",
+          "version": "CiRCLE",
+          "internal_level": 14.3,
+          "region": { "jp": true, "intl": true }
+        }
+      ]
     }
   ]
 }
