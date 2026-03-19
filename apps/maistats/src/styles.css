@@ -370,6 +370,11 @@ input[type="radio"] {
   min-width: 0;
 }
 
+.table-column {
+  display: grid;
+  min-height: 0;
+}
+
 .sidebar-column {
   display: grid;
   gap: 14px;
@@ -1239,6 +1244,18 @@ select:focus-visible {
   max-height: 70vh;
   -webkit-overflow-scrolling: touch;
   background: var(--panel);
+}
+
+.explorer-table-panel {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  min-height: calc(100vh - 28px);
+}
+
+.explorer-table-panel .table-wrap {
+  min-height: 0;
+  height: 100%;
+  max-height: none;
 }
 
 .table-loading-state {
@@ -2611,6 +2628,14 @@ tbody tr:last-child td {
 
   .rating-table-column {
     grid-template-columns: 1fr;
+  }
+
+  .explorer-table-panel {
+    min-height: auto;
+  }
+
+  .explorer-table-panel .table-wrap {
+    height: auto;
   }
 
   .sidebar-column .panel {
