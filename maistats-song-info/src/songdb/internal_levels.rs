@@ -174,15 +174,14 @@ fn build_lookup(
         };
 
         if let Some(existing) = lookup.get(&key) {
-            tracing::warn!(
-                "internal levels: duplicate official lookup key for title='{}', chart_type='{}', difficulty='{}'; keeping '{}' and ignoring '{}'",
+            eyre::bail!(
+                "internal levels: duplicate official lookup key for title='{}', chart_type='{}', difficulty='{}': '{}' vs '{}'; add manual override to disambiguate",
                 key.0,
                 key.1.as_str(),
                 key.2.as_str(),
                 existing.song_identity.title,
                 sheet.song_identity.title
             );
-            continue;
         }
 
         lookup.insert(key, entry);
@@ -394,19 +393,18 @@ pub(crate) async fn fetch_internal_levels(
             .wrap_err_with(|| format!("assign INTL level page {displayed_level}"))?;
 
         if check.expected_bucket_count != check.observed_bucket_count {
-            tracing::warn!(
+            eyre::bail!(
                 "internal levels: level {} expected {} buckets but observed {}",
                 displayed_level,
                 check.expected_bucket_count,
                 check.observed_bucket_count
             );
-        } else {
-            tracing::info!(
-                "internal levels: level {} produced {} buckets",
-                displayed_level,
-                check.observed_bucket_count
-            );
         }
+        tracing::info!(
+            "internal levels: level {} produced {} buckets",
+            displayed_level,
+            check.observed_bucket_count
+        );
 
         for assigned_entry in assigned_entries {
             let key = (
@@ -589,7 +587,7 @@ mod tests {
     }
 
     #[test]
-    fn build_lookup_keeps_first_duplicate_official_key() {
+    fn build_lookup_errors_on_duplicate_official_key() {
         let songs = vec![
             test_song("Dup", SongGenre::PopsAnime),
             test_song("Dup", SongGenre::Maimai),
@@ -604,8 +602,8 @@ mod tests {
             test_sheet("Dup", SongGenre::Maimai, DifficultyCategory::Expert, "12"),
         ];
 
-        let lookup = build_lookup(&songs, &sheets).expect("duplicate key should warn only");
-        assert_eq!(lookup.len(), 1);
+        let err = build_lookup(&songs, &sheets).expect_err("duplicate key should error");
+        assert!(err.to_string().contains("duplicate official lookup key"));
     }
 
     #[test]
