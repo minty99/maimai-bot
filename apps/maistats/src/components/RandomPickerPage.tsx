@@ -899,8 +899,8 @@ export function RandomPickerPage({
 
         <div className="picker-song-info">
           <h3>{pickedSong.title}</h3>
-          <p className="picker-level-line">
-            {pickedSong.level}
+          <p className={`picker-level-line ${getDifficultyToneClass(pickedSong.difficulty)}`}>
+            Lv {pickedSong.level}
             {pickedSong.internalLevel !== null ? ` (${pickedSong.internalLevel.toFixed(1)})` : ''}
           </p>
 
