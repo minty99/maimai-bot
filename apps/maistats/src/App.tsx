@@ -78,6 +78,7 @@ import type {
   SongInfoResponse,
   SongVersionResponse,
 } from './types';
+import logoUrl from './assets/logo.png';
 
 type AppPage = 'home' | 'scores' | 'rating' | 'playlogs' | 'picker' | 'settings';
 type RatedScoreRow = ScoreRow & { rating: number; version: string };
@@ -392,6 +393,19 @@ function App() {
 
   const loadAbortRef = useRef<AbortController | null>(null);
   const loadedExplorerKeyRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    const selector = 'link[rel="icon"]';
+    const existing = document.head.querySelector<HTMLLinkElement>(selector);
+    const link = existing ?? document.createElement('link');
+    link.rel = 'icon';
+    link.type = 'image/png';
+    link.href = logoUrl;
+
+    if (!existing) {
+      document.head.appendChild(link);
+    }
+  }, []);
 
   const scoreData = useMemo(
     () => buildScoreRows(scoreRecords, songMetadata, locale),
