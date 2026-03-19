@@ -575,6 +575,8 @@ pub(crate) async fn mai_recent(ctx: Context<'_>) -> Result<(), Error> {
             achievement_percent: record.achievement_x10000.map(|x| x as f64 / 10000.0),
             achievement_new_record: record.achievement_new_record.unwrap_or(0) != 0,
             rank: record.score_rank,
+            fc: record.fc,
+            sync: record.sync,
         });
     }
 
