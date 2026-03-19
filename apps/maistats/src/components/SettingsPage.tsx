@@ -8,11 +8,15 @@ import {
 } from '../api';
 import { useI18n, type LanguagePreference } from '../app/i18n';
 
+type ThemePreference = 'system' | 'light' | 'dark';
+
 interface SettingsPageProps {
   sidebarTopContent?: ReactNode;
   languagePreference: LanguagePreference;
   setLanguagePreference: (value: LanguagePreference) => void;
   languageLabel: string;
+  themePreference: ThemePreference;
+  setThemePreference: (value: ThemePreference) => void;
   songInfoUrlDraft: string;
   setSongInfoUrlDraft: Dispatch<SetStateAction<string>>;
   recordCollectorUrlDraft: string;
@@ -26,6 +30,8 @@ export function SettingsPage({
   languagePreference,
   setLanguagePreference,
   languageLabel,
+  themePreference,
+  setThemePreference,
   songInfoUrlDraft,
   setSongInfoUrlDraft,
   recordCollectorUrlDraft,
@@ -107,6 +113,28 @@ export function SettingsPage({
                 ? t('settings.language.helperSystem', { language: languageLabel })
                 : t('settings.language.helperManual', { language: languageLabel })}
             </p>
+          </div>
+
+          <hr className="settings-divider" />
+
+          <div className="settings-field-group">
+            <div className="panel-heading compact">
+              <div>
+                <h3>Theme</h3>
+                <p>앱의 색상 테마를 선택합니다.</p>
+              </div>
+            </div>
+            <label className="home-url-field">
+              <span>Color theme</span>
+              <select
+                value={themePreference}
+                onChange={(event) => setThemePreference(event.target.value as ThemePreference)}
+              >
+                <option value="system">System default</option>
+                <option value="light">Light</option>
+                <option value="dark">Dark</option>
+              </select>
+            </label>
           </div>
 
           <hr className="settings-divider" />

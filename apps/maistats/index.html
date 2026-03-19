@@ -8,6 +8,14 @@
       name="description"
       content="maistats scores/playlogs explorer with deep filters and sort options"
     />
+    <script>
+      (function () {
+        var t = localStorage.getItem('maistats.theme');
+        if (t === 'light' || t === 'dark') {
+          document.documentElement.setAttribute('data-theme', t);
+        }
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>
