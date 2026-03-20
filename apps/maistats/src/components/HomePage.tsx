@@ -226,13 +226,6 @@ export function HomePage({
               {t('home.footer.aliasesTail')}
             </li>
             <li>
-              {t('home.footer.constants')}
-              <a href="https://x.com/maiLv_Chihooooo" target="_blank" rel="noreferrer">
-                maimai譜面定数ちほー
-              </a>
-              {t('home.footer.constantsTail')}
-            </li>
-            <li>
               {t('home.footer.parsing')}
               <a href="https://github.com/zetaraku/arcade-songs-fetch" target="_blank" rel="noreferrer">
                 arcade-songs-fetch
