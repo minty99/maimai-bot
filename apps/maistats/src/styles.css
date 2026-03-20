@@ -1937,7 +1937,7 @@ tbody tr:last-child td {
   text-transform: uppercase;
   color: var(--accent-fg);
   background: var(--accent);
-  transition: background 120ms ease, border-color 120ms ease, transform 80ms ease;
+  transition: background 120ms ease, border-color 120ms ease;
 }
 
 .picker-random-button:hover,
@@ -1951,7 +1951,6 @@ tbody tr:last-child td {
   color: var(--accent-fg);
   background: var(--accent-2);
   border-color: var(--accent-2);
-  transform: translateY(1px);
 }
 
 .picker-result-panel {
