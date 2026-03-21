@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import {
   fetchExplorerPayload,
+  fetchRecentPlaylogs,
   type PlayerProfile,
   refreshSongScores,
 } from './api';
@@ -317,7 +318,9 @@ function App() {
     useState(recordCollectorUrl);
 
   const [isLoading, setIsLoading] = useState(false);
+  const [isPlaylogsLoading, setIsPlaylogsLoading] = useState(false);
   const [loadingError, setLoadingError] = useState<LoadingErrorState | null>(null);
+  const [playlogLoadingError, setPlaylogLoadingError] = useState<LoadingErrorState | null>(null);
 
   const [scoreRecords, setScoreRecords] = useState<ScoreApiResponse[]>([]);
   const [playlogRecords, setPlaylogRecords] = useState<PlayRecordApiResponse[]>([]);
@@ -427,7 +430,10 @@ function App() {
   const [selectedPlaylogDayKey, setSelectedPlaylogDayKey] = useState<string | null>(null);
 
   const loadAbortRef = useRef<AbortController | null>(null);
+  const playlogLoadAbortRef = useRef<AbortController | null>(null);
   const loadedExplorerKeyRef = useRef<string | null>(null);
+  const loadedPlaylogsKeyRef = useRef<string | null>(null);
+  const playlogRecordCountRef = useRef(0);
 
   useEffect(() => {
     const selector = 'link[rel="icon"]';
@@ -441,6 +447,10 @@ function App() {
       document.head.appendChild(link);
     }
   }, []);
+
+  useEffect(() => {
+    playlogRecordCountRef.current = playlogRecords.length;
+  }, [playlogRecords.length]);
 
   const scoreData = useMemo(
     () => buildScoreRows(scoreRecords, songMetadata, locale),
@@ -493,7 +503,10 @@ function App() {
   const loadData = useCallback(async (options?: { force?: boolean; throwOnError?: boolean }) => {
     if (!songInfoUrl.trim() || !recordCollectorUrl.trim()) {
       loadedExplorerKeyRef.current = null;
+      loadedPlaylogsKeyRef.current = null;
+      playlogLoadAbortRef.current?.abort();
       setIsLoading(false);
+      setIsPlaylogsLoading(false);
       setScoreRecords([]);
       setPlaylogRecords([]);
       setVersionsResponse([]);
@@ -501,6 +514,7 @@ function App() {
       setPlayerProfile(null);
       setSongMetadata(new Map<string, SongInfoResponse>());
       setLoadingError({ kind: 'translated', key: 'app.missingUrls' });
+      setPlaylogLoadingError(null);
       return;
     }
 
@@ -533,7 +547,6 @@ function App() {
       }
 
       setScoreRecords(payload.ratedScores);
-      setPlaylogRecords(payload.playlogs);
       setSongMetadata(payload.songMetadata);
       const availableVersions = filterAvailableVersions(payload.versions?.versions ?? []);
       setVersionsResponse(availableVersions.map((version) => version.version_name));
@@ -548,7 +561,6 @@ function App() {
       const message = error instanceof Error ? error.message : String(error);
       setLoadingError({ kind: 'message', message });
       setScoreRecords([]);
-      setPlaylogRecords([]);
       setSongMetadata(new Map<string, SongInfoResponse>());
       setVersionsResponse([]);
       setPickerVersionOptions([]);
@@ -563,13 +575,83 @@ function App() {
     }
   }, [recordCollectorUrl, songInfoUrl]);
 
+  const loadPlaylogs = useCallback(async (options?: { force?: boolean; throwOnError?: boolean }) => {
+    if (!recordCollectorUrl.trim()) {
+      loadedPlaylogsKeyRef.current = null;
+      playlogLoadAbortRef.current?.abort();
+      setIsPlaylogsLoading(false);
+      setPlaylogRecords([]);
+      setPlaylogLoadingError(null);
+      return;
+    }
+
+    const requestKey = recordCollectorUrl.trim();
+    const previousLoadedPlaylogsKey = loadedPlaylogsKeyRef.current;
+    if (options?.force) {
+      loadedPlaylogsKeyRef.current = null;
+    } else if (loadedPlaylogsKeyRef.current === requestKey) {
+      setIsPlaylogsLoading(false);
+      setPlaylogLoadingError(null);
+      return;
+    }
+
+    const shouldPreserveRecords =
+      playlogRecordCountRef.current > 0 && previousLoadedPlaylogsKey === requestKey;
+
+    playlogLoadAbortRef.current?.abort();
+    const controller = new AbortController();
+    playlogLoadAbortRef.current = controller;
+
+    setIsPlaylogsLoading(true);
+    setPlaylogLoadingError(null);
+
+    if (!shouldPreserveRecords) {
+      setPlaylogRecords([]);
+    }
+
+    try {
+      const playlogs = await fetchRecentPlaylogs(recordCollectorUrl, controller.signal);
+
+      if (controller.signal.aborted) {
+        return;
+      }
+
+      setPlaylogRecords(playlogs);
+      loadedPlaylogsKeyRef.current = requestKey;
+    } catch (error) {
+      if (controller.signal.aborted) {
+        return;
+      }
+      loadedPlaylogsKeyRef.current = null;
+      const message = error instanceof Error ? error.message : String(error);
+      setPlaylogLoadingError({ kind: 'message', message });
+      setPlaylogRecords([]);
+      if (options?.throwOnError) {
+        throw error instanceof Error ? error : new Error(String(error));
+      }
+    } finally {
+      if (!controller.signal.aborted) {
+        setIsPlaylogsLoading(false);
+      }
+    }
+  }, [recordCollectorUrl]);
+
   useEffect(() => {
     void loadData();
 
     return () => {
       loadAbortRef.current?.abort();
+      playlogLoadAbortRef.current?.abort();
     };
   }, [loadData]);
+
+  useEffect(() => {
+    if (activePage !== 'playlogs') {
+      return;
+    }
+
+    void loadPlaylogs();
+  }, [activePage, loadPlaylogs]);
 
 
   useEffect(() => {
@@ -711,7 +793,8 @@ function App() {
 
   const handleOpenHistory = useCallback((row: ScoreRow) => {
     setSelectedHistoryKey(row.key);
-  }, []);
+    void loadPlaylogs();
+  }, [loadPlaylogs]);
 
   const closeHistory = useCallback(() => {
     setSelectedHistoryKey(null);
@@ -1141,6 +1224,11 @@ function App() {
       ? t(loadingError.key, loadingError.variables)
       : loadingError.message
     : null;
+  const playlogLoadingErrorMessage = playlogLoadingError
+    ? playlogLoadingError.kind === 'translated'
+      ? t(playlogLoadingError.key, playlogLoadingError.variables)
+      : playlogLoadingError.message
+    : null;
   const navItems = useMemo<Array<{ page: AppPage; label: string; Icon: () => JSX.Element }>>(
     () => [
       { page: 'home', label: t('nav.home'), Icon: HomeIcon },
@@ -1326,10 +1414,12 @@ function App() {
         ) : activePage === 'playlogs' ? (
           <>
             {loadingErrorMessage ? <section className="error-banner">{t('common.error')}: {loadingErrorMessage}</section> : null}
+            {playlogLoadingErrorMessage ? <section className="error-banner">{t('common.error')}: {playlogLoadingErrorMessage}</section> : null}
 
             <PlaylogExplorerSection
               sidebarTopContent={desktopSidebarTopContent}
               playlogCountLabel={playlogCountLabel}
+              isLoading={isPlaylogsLoading}
               showJackets={showJackets}
               setShowJackets={setShowJackets}
               appliedPlaylogQuery={playlogQuery}
@@ -1422,6 +1512,8 @@ function App() {
       <ScoreHistoryModal
         selectedHistoryRow={selectedHistoryRow}
         historyPoints={selectedHistoryPoints}
+        isLoading={isPlaylogsLoading}
+        loadingErrorMessage={playlogLoadingErrorMessage}
         songInfoUrl={songInfoUrl}
         onClose={closeHistory}
       />

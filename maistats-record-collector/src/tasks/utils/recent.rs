@@ -6,10 +6,10 @@ use sqlx::SqlitePool;
 use tokio::time::sleep;
 use tracing::warn;
 
-use crate::db::apply_recent_sync_atomic;
+use crate::db::{apply_recent_sync_atomic, store_player_profile_snapshot};
 use crate::http_client::MaimaiClient;
 use crate::tasks::utils::auth::fetch_html_with_auth_recovery;
-use crate::tasks::utils::player::load_stored_total_play_count;
+use crate::tasks::utils::player::load_stored_player_profile_state;
 use crate::tasks::utils::scores::score_entries_from_song_detail;
 use crate::tasks::utils::song_detail::SongDetailCache;
 use crate::tasks::utils::source::CollectorSource;
@@ -53,14 +53,20 @@ pub(crate) async fn sync_recent_if_play_count_changed(
     source: &mut impl CollectorSource,
     player_data: &ParsedPlayerProfile,
 ) -> RecentSyncOutcome {
-    let stored_total = match load_stored_total_play_count(pool).await {
+    let stored_player_state = match load_stored_player_profile_state(pool).await {
         Ok(value) => value,
         Err(err) => return RecentSyncOutcome::FailedRequest(format!("{err:#}")),
     };
+    let stored_total = stored_player_state.total_play_count();
 
     if let Some(stored_total) = stored_total
         && stored_total == player_data.total_play_count
     {
+        if stored_player_state.has_incomplete_fields() {
+            // Upgrade/backfill path for older DBs that predate newer player snapshot fields.
+            return backfill_incomplete_player_snapshot_or_fail(pool, player_data).await;
+        }
+
         return RecentSyncOutcome::SkippedUnchanged;
     }
 
@@ -207,6 +213,17 @@ fn unix_timestamp() -> i64 {
         .duration_since(UNIX_EPOCH)
         .unwrap_or_default()
         .as_secs() as i64
+}
+
+async fn backfill_incomplete_player_snapshot_or_fail(
+    pool: &SqlitePool,
+    player_data: &ParsedPlayerProfile,
+) -> RecentSyncOutcome {
+    let now = unix_timestamp();
+    match store_player_profile_snapshot(pool, player_data, now).await {
+        Ok(()) => RecentSyncOutcome::SkippedUnchanged,
+        Err(err) => RecentSyncOutcome::FailedRequest(format!("{err:#}")),
+    }
 }
 
 async fn fetch_song_detail_for_recent_entry(
