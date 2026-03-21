@@ -479,6 +479,43 @@ async fn polling_unchanged_skips_recent_fetches() -> eyre::Result<()> {
 }
 
 #[tokio::test]
+async fn polling_unchanged_backfills_incomplete_player_snapshot_only() -> eyre::Result<()> {
+    let pool = test_db().await?;
+    let mut seed_source = load_fixture_source("seed_small_startup");
+    startup_sync_with_source(&pool, &mut seed_source).await?;
+
+    sqlx::query("DELETE FROM app_state WHERE key = ?")
+        .bind("player.current_version_play_count")
+        .execute(&pool)
+        .await?;
+
+    let initial_playlog_count = snapshot_playlogs(&pool).await?.len();
+    let initial_score_count = snapshot_scores(&pool).await?.len();
+
+    let mut unchanged_source = load_fixture_source("polling_unchanged_skips_recent");
+    let report = run_cycle_with_source(&pool, &mut unchanged_source).await?;
+
+    assert!(!report.skipped_for_maintenance);
+    assert!(matches!(
+        report.recent_outcome,
+        Some(RecentSyncOutcome::SkippedUnchanged)
+    ));
+    assert_eq!(unchanged_source.fetch_log(), &[ExpectedPage::PlayerData]);
+    assert_eq!(snapshot_playlogs(&pool).await?.len(), initial_playlog_count);
+    assert_eq!(snapshot_scores(&pool).await?.len(), initial_score_count);
+
+    let app_state = snapshot_app_state(&pool).await?;
+    assert_eq!(
+        app_state
+            .get("player.current_version_play_count")
+            .map(String::as_str),
+        Some("50")
+    );
+
+    Ok(())
+}
+
+#[tokio::test]
 async fn polling_full_recent_truncates_oldest_partial_credit() -> eyre::Result<()> {
     let pool = test_db().await?;
     let mut source = build_full_recent_50_source();

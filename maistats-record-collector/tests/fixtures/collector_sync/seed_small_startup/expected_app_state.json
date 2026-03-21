@@ -1,4 +1,6 @@
 {
+  "player.current_version_play_count": "50",
   "player.rating": "12345",
-  "player.total_play_count": "200"
+  "player.total_play_count": "200",
+  "player.user_name": "fixture-user"
 }

@@ -4,7 +4,10 @@ use eyre::WrapErr;
 use sqlx::sqlite::{SqliteConnectOptions, SqliteJournalMode, SqlitePoolOptions, SqliteSynchronous};
 use sqlx::{Pool, Sqlite};
 
-use crate::tasks::utils::player::{STATE_KEY_RATING, STATE_KEY_TOTAL_PLAY_COUNT};
+use crate::tasks::utils::player::{
+    STATE_KEY_CURRENT_VERSION_PLAY_COUNT, STATE_KEY_RATING, STATE_KEY_TOTAL_PLAY_COUNT,
+    STATE_KEY_USER_NAME,
+};
 use models::{ChartType, ParsedPlayRecord, ParsedPlayerProfile, ParsedScoreEntry};
 
 pub type SqlitePool = Pool<Sqlite>;
@@ -73,16 +76,23 @@ pub(crate) async fn count_scores_rows(pool: &SqlitePool) -> eyre::Result<i64> {
 }
 
 pub(crate) async fn get_app_state_u32(pool: &SqlitePool, key: &str) -> eyre::Result<Option<u32>> {
-    let value = sqlx::query_scalar::<_, String>("SELECT value FROM app_state WHERE key = ?")
-        .bind(key)
-        .fetch_optional(pool)
-        .await
-        .wrap_err("get app_state value")?;
+    let value = get_app_state_string(pool, key).await?;
     let Some(value) = value else {
         return Ok(None);
     };
     let parsed = value.parse::<u32>().wrap_err("parse app_state as u32")?;
     Ok(Some(parsed))
+}
+
+pub(crate) async fn get_app_state_string(
+    pool: &SqlitePool,
+    key: &str,
+) -> eyre::Result<Option<String>> {
+    sqlx::query_scalar::<_, String>("SELECT value FROM app_state WHERE key = ?")
+        .bind(key)
+        .fetch_optional(pool)
+        .await
+        .wrap_err("get app_state value")
 }
 
 pub(crate) async fn apply_recent_sync_atomic(
@@ -105,18 +115,23 @@ pub(crate) async fn apply_recent_sync_atomic(
         insert_playlog(&mut tx, played_at_unixtime, entry).await?;
     }
 
-    set_app_state_u32_in_tx(
-        &mut tx,
-        STATE_KEY_TOTAL_PLAY_COUNT,
-        player_data.total_play_count,
-        updated_at,
-    )
-    .await
-    .wrap_err("store total play count")?;
-    set_app_state_u32_in_tx(&mut tx, STATE_KEY_RATING, player_data.rating, updated_at)
+    upsert_player_profile_snapshot_in_tx(&mut tx, player_data, updated_at)
         .await
-        .wrap_err("store rating")?;
+        .wrap_err("store player profile snapshot")?;
 
+    tx.commit().await.wrap_err("commit transaction")?;
+    Ok(())
+}
+
+pub(crate) async fn store_player_profile_snapshot(
+    pool: &SqlitePool,
+    player_data: &ParsedPlayerProfile,
+    updated_at: i64,
+) -> eyre::Result<()> {
+    let mut tx = pool.begin().await.wrap_err("begin transaction")?;
+    upsert_player_profile_snapshot_in_tx(&mut tx, player_data, updated_at)
+        .await
+        .wrap_err("store player profile snapshot")?;
     tx.commit().await.wrap_err("commit transaction")?;
     Ok(())
 }
@@ -125,6 +140,15 @@ async fn set_app_state_u32_in_tx(
     tx: &mut sqlx::Transaction<'_, Sqlite>,
     key: &str,
     value: u32,
+    updated_at: i64,
+) -> eyre::Result<()> {
+    set_app_state_string_in_tx(tx, key, &value.to_string(), updated_at).await
+}
+
+async fn set_app_state_string_in_tx(
+    tx: &mut sqlx::Transaction<'_, Sqlite>,
+    key: &str,
+    value: &str,
     updated_at: i64,
 ) -> eyre::Result<()> {
     sqlx::query(
@@ -137,11 +161,41 @@ ON CONFLICT(key) DO UPDATE SET
 "#,
     )
     .bind(key)
-    .bind(value.to_string())
+    .bind(value)
     .bind(updated_at)
     .execute(&mut **tx)
     .await
     .wrap_err("set app_state value")?;
+    Ok(())
+}
+
+async fn upsert_player_profile_snapshot_in_tx(
+    tx: &mut sqlx::Transaction<'_, Sqlite>,
+    player_data: &ParsedPlayerProfile,
+    updated_at: i64,
+) -> eyre::Result<()> {
+    set_app_state_u32_in_tx(
+        tx,
+        STATE_KEY_TOTAL_PLAY_COUNT,
+        player_data.total_play_count,
+        updated_at,
+    )
+    .await
+    .wrap_err("store total play count")?;
+    set_app_state_u32_in_tx(tx, STATE_KEY_RATING, player_data.rating, updated_at)
+        .await
+        .wrap_err("store rating")?;
+    set_app_state_u32_in_tx(
+        tx,
+        STATE_KEY_CURRENT_VERSION_PLAY_COUNT,
+        player_data.current_version_play_count,
+        updated_at,
+    )
+    .await
+    .wrap_err("store current version play count")?;
+    set_app_state_string_in_tx(tx, STATE_KEY_USER_NAME, &player_data.user_name, updated_at)
+        .await
+        .wrap_err("store user name")?;
     Ok(())
 }
 
