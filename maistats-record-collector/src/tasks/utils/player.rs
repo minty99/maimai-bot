@@ -194,6 +194,18 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn stored_player_profile_state_returns_none_when_snapshot_missing() -> eyre::Result<()> {
+        let pool = setup_pool("player-state-empty").await?;
+
+        let state = load_stored_player_profile_state(&pool).await?;
+        assert_eq!(state.total_play_count(), None);
+        assert!(!state.has_incomplete_fields());
+        assert!(load_stored_player_profile(&pool).await?.is_none());
+
+        Ok(())
+    }
+
+    #[tokio::test]
     async fn stored_player_profile_state_detects_partial_snapshot() -> eyre::Result<()> {
         let pool = setup_pool("player-state-partial").await?;
 
