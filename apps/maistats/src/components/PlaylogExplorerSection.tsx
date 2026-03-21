@@ -140,7 +140,7 @@ export function PlaylogExplorerSection({
           </div>
           <div className="filter-grid">
             <form
-              className="search-box search-submit-group"
+              className="search-box search-submit-group filter-block"
               onSubmit={(event) => {
                 event.preventDefault();
                 onApplyPlaylogQuery();
@@ -154,13 +154,17 @@ export function PlaylogExplorerSection({
                   onChange={(event) => setPlaylogQueryDraft(event.target.value)}
                   placeholder={t('playlogs.searchPlaceholder')}
                 />
-                <button type="submit" disabled={!isSearchDirty}>
+                <button
+                  type="submit"
+                  className="search-submit-button"
+                  disabled={!isSearchDirty}
+                >
                   {t('common.search')}
                 </button>
               </div>
             </form>
 
-            <div className="playlog-day-filter">
+            <div className="filter-block playlog-day-filter">
               <label className="playlog-day-toggle">
                 <input
                   type="checkbox"
@@ -206,32 +210,34 @@ export function PlaylogExplorerSection({
               optionClassName={(value) => `difficulty-chip ${getDifficultyToneClass(value)}`}
             />
 
-            <div className="range-grid compact">
-              <label>
-                <span>{t('scores.achievementMin')}</span>
-                <input
-                  type="number"
-                  value={playlogAchievementMin}
-                  min={0}
-                  max={101}
-                  step={0.0001}
-                  onChange={(event) => setPlaylogAchievementMin(Number(event.target.value))}
-                />
-              </label>
-              <label>
-                <span>{t('scores.achievementMax')}</span>
-                <input
-                  type="number"
-                  value={playlogAchievementMax}
-                  min={0}
-                  max={101}
-                  step={0.0001}
-                  onChange={(event) => setPlaylogAchievementMax(Number(event.target.value))}
-                />
-              </label>
+            <div className="filter-block">
+              <div className="range-grid compact">
+                <label>
+                  <span>{t('scores.achievementMin')}</span>
+                  <input
+                    type="number"
+                    value={playlogAchievementMin}
+                    min={0}
+                    max={101}
+                    step={0.0001}
+                    onChange={(event) => setPlaylogAchievementMin(Number(event.target.value))}
+                  />
+                </label>
+                <label>
+                  <span>{t('scores.achievementMax')}</span>
+                  <input
+                    type="number"
+                    value={playlogAchievementMax}
+                    min={0}
+                    max={101}
+                    step={0.0001}
+                    onChange={(event) => setPlaylogAchievementMax(Number(event.target.value))}
+                  />
+                </label>
+              </div>
             </div>
 
-            <div className="playlog-special-filters">
+            <div className="playlog-special-filters filter-block">
               <label className="playlog-special-toggle">
                 <input
                   type="checkbox"
@@ -249,7 +255,6 @@ export function PlaylogExplorerSection({
                 <span>{t('playlogs.newRecordOnly')}</span>
               </label>
             </div>
-
           </div>
         </section>
       </aside>

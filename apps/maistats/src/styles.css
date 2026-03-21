@@ -2,7 +2,7 @@
 
 :root {
   color-scheme: dark;
-  --desktop-sidebar-width: 320px;
+  --desktop-sidebar-width: 368px;
   --rating-card-min-width: 125px;
   --rating-card-max-width: 250px;
 
@@ -517,7 +517,7 @@ input[type="radio"] {
 }
 
 .chip {
-  border: 1px solid var(--line-strong);
+  border: 1px solid var(--line);
   background: var(--chip);
   border-radius: 2px;
   height: auto;
@@ -531,7 +531,7 @@ input[type="radio"] {
 }
 
 .chip:hover:not(.active) {
-  border-color: rgba(224, 144, 0, 0.3);
+  border-color: var(--line-strong);
   background: var(--panel-raised);
   color: var(--ink);
 }
@@ -540,7 +540,8 @@ input[type="radio"] {
   border-color: var(--accent-2);
   background: var(--accent);
   color: var(--accent-fg);
-  font-weight: 600;
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.08);
+  font-weight: 700;
 }
 
 .difficulty-label {
@@ -632,13 +633,15 @@ input[type="radio"] {
 
 .chart-type-chip.active.chart-type-std {
   border-color: var(--chart-std);
-  background: color-mix(in srgb, var(--chart-std) 18%, var(--panel));
+  background: color-mix(in srgb, var(--chart-std) 28%, var(--panel));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--chart-std) 40%, transparent);
   color: var(--chart-std);
 }
 
 .chart-type-chip.active.chart-type-dx {
   border-color: var(--chart-dx);
-  background: color-mix(in srgb, var(--chart-dx) 18%, var(--panel));
+  background: color-mix(in srgb, var(--chart-dx) 28%, var(--panel));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--chart-dx) 40%, transparent);
   color: var(--chart-dx);
 }
 
@@ -658,31 +661,36 @@ input[type="radio"] {
 
 .difficulty-chip.active.diff-basic {
   border-color: var(--diff-basic);
-  background: color-mix(in srgb, var(--diff-basic) 18%, var(--panel));
+  background: color-mix(in srgb, var(--diff-basic) 28%, var(--panel));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--diff-basic) 38%, transparent);
   color: var(--diff-basic);
 }
 
 .difficulty-chip.active.diff-advanced {
   border-color: var(--diff-advanced);
-  background: color-mix(in srgb, var(--diff-advanced) 20%, var(--panel));
+  background: color-mix(in srgb, var(--diff-advanced) 30%, var(--panel));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--diff-advanced) 38%, transparent);
   color: var(--diff-advanced);
 }
 
 .difficulty-chip.active.diff-expert {
   border-color: var(--diff-expert);
-  background: color-mix(in srgb, var(--diff-expert) 18%, var(--panel));
+  background: color-mix(in srgb, var(--diff-expert) 28%, var(--panel));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--diff-expert) 38%, transparent);
   color: var(--diff-expert);
 }
 
 .difficulty-chip.active.diff-master {
   border-color: var(--diff-master);
-  background: color-mix(in srgb, var(--diff-master) 18%, var(--panel));
+  background: color-mix(in srgb, var(--diff-master) 28%, var(--panel));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--diff-master) 38%, transparent);
   color: var(--diff-master);
 }
 
 .difficulty-chip.active.diff-remaster {
   border-color: var(--diff-remaster);
-  background: color-mix(in srgb, var(--diff-remaster) 20%, var(--panel));
+  background: color-mix(in srgb, var(--diff-remaster) 30%, var(--panel));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--diff-remaster) 38%, transparent);
   color: var(--diff-remaster);
 }
 
@@ -854,7 +862,7 @@ select:focus-visible {
 }
 
 .filter-panel {
-  gap: 10px;
+  gap: 12px;
 }
 
 .filter-panel .panel-heading.compact {
@@ -863,24 +871,55 @@ select:focus-visible {
 }
 
 .filter-panel .filter-grid {
-  gap: 10px;
+  gap: 0;
 }
 
 .filter-panel .filter-label {
   font-size: 11px;
 }
 
+.filter-panel .filter-grid > * + * {
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px solid var(--line);
+}
+
 .filter-panel .chip-row {
-  gap: 5px;
+  gap: 6px;
 }
 
 .filter-panel .chip {
   border-radius: 2px;
+  min-height: 30px;
+  padding: 4px 9px;
 }
 
 .filter-reset-button {
+  height: 30px;
   padding: 0 10px;
+  border-color: var(--line-strong);
+  background: var(--chip);
+  color: var(--ink-dim);
+  font-weight: 600;
   white-space: nowrap;
+}
+
+.search-submit-button {
+  min-width: 84px;
+  background: var(--accent);
+  border-color: var(--accent-2);
+  color: var(--accent-fg);
+  font-weight: 700;
+}
+
+.search-submit-button:hover:not(:disabled) {
+  background: var(--accent-2);
+  border-color: var(--accent-2);
+  color: var(--accent-fg);
+}
+
+.filter-block-select label {
+  display: grid;
 }
 
 .filter-panel > .filter-grid > label {
@@ -2338,76 +2377,125 @@ tbody tr:last-child td {
 }
 
 .home-content {
-  display: grid;
+  display: flex;
+  flex-direction: column;
   gap: 14px;
-}
-
-.home-hero h2 {
-  font-size: 1.3rem;
-}
-
-.home-hero-desc {
-  color: var(--muted);
-  font-size: 0.92rem;
-  line-height: 1.6;
-  max-width: 68ch;
+  min-height: calc(100dvh - 28px);
 }
 
 .home-hero {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 16px;
-  flex-wrap: wrap;
-}
-
-.home-hero-main {
   display: grid;
+  gap: 16px;
+  padding: 4px 0;
+}
+
+.home-hero-identity {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+
+.home-logo {
+  width: 28px;
+  height: 28px;
+  object-fit: contain;
+}
+
+.home-wordmark {
+  font-size: 0.9rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+
+.home-tagline {
+  font-size: 1.25rem;
+  font-weight: 600;
+  line-height: 1.45;
+  color: var(--ink);
+}
+
+
+.home-cards {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
   gap: 10px;
-  flex: 1;
-  min-width: 0;
 }
 
-.home-hero-aside {
-  flex-shrink: 0;
+.home-card {
+  display: grid;
+  gap: 8px;
+  align-content: start;
+  padding: 16px;
+  border: 1px solid var(--line);
+  background: var(--panel);
+  border-radius: 2px;
 }
 
-.home-discord-btn {
+.home-card-label {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.home-card p {
+  color: var(--muted);
+  font-size: 0.86rem;
+  line-height: 1.6;
+  margin: 0;
+}
+
+.home-card-link {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
-  padding: 9px 16px;
-  background: #5865f2;
-  color: #fff;
-  border-radius: 2px;
+  justify-content: center;
+  min-height: 30px;
+  padding: 0 12px;
+  border: 1px solid var(--line-strong);
+  background: var(--chip);
+  color: var(--ink);
   text-decoration: none;
-  font-size: 0.88rem;
-  font-weight: 700;
-  border: 1px solid rgba(0, 0, 0, 0.2);
-  transition: background 120ms ease;
-  white-space: nowrap;
+  font-size: 0.84rem;
+  font-weight: 600;
+  border-radius: 2px;
+  margin-top: 4px;
+  width: fit-content;
 }
 
-.home-discord-btn:hover {
-  background: #4752c4;
+.home-card-link:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: var(--chip);
 }
 
-@media (max-width: 480px) {
-  .home-hero {
-    flex-direction: column;
+.home-card-link-discord {
+  border-color: rgba(88, 101, 242, 0.35);
+  background: rgba(88, 101, 242, 0.08);
+  color: #a5b4fc;
+}
+
+.home-card-link-discord:hover {
+  border-color: rgba(88, 101, 242, 0.6);
+  background: rgba(88, 101, 242, 0.14);
+  color: #c7d2fe;
+}
+
+@media (max-width: 600px) {
+  .home-cards {
+    grid-template-columns: 1fr;
   }
 
-  .home-hero-aside {
-    width: 100%;
-  }
-
-  .home-discord-btn {
+  .home-card-link {
     width: 100%;
     justify-content: center;
   }
 }
 
 .home-footer {
+  margin-top: auto;
   padding: 14px 0 8px;
   border-top: 1px solid var(--line);
   display: grid;
@@ -2668,6 +2756,7 @@ tbody tr:last-child td {
   .toggle-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
+
 }
 
 @media (min-width: 1201px) {
@@ -2731,6 +2820,10 @@ tbody tr:last-child td {
 
   .search-submit-row {
     grid-template-columns: 1fr;
+  }
+
+  .home-content {
+    min-height: calc(100dvh - 16px);
   }
 
   .table-wrap {
@@ -2854,7 +2947,7 @@ tbody tr:last-child td {
 
 .playlog-day-filter {
   display: grid;
-  gap: 6px;
+  gap: 8px;
 }
 
 .playlog-day-toggle {
@@ -2874,7 +2967,7 @@ tbody tr:last-child td {
 .playlog-day-filter-summary {
   margin: 0;
   font-size: 12px;
-  color: var(--muted);
+  color: var(--ink-dim);
 }
 
 .playlog-special-filters {

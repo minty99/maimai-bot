@@ -167,7 +167,7 @@ export function ScoreExplorerSection({
           </div>
           <div className="filter-grid">
             <form
-              className="search-box search-submit-group"
+              className="search-box search-submit-group filter-block"
               onSubmit={(event) => {
                 event.preventDefault();
                 onApplyQuery();
@@ -181,7 +181,11 @@ export function ScoreExplorerSection({
                   onChange={(event) => setQueryDraft(event.target.value)}
                   placeholder={t('scores.searchPlaceholder')}
                 />
-                <button type="submit" disabled={!isSearchDirty}>
+                <button
+                  type="submit"
+                  className="search-submit-button"
+                  disabled={!isSearchDirty}
+                >
                   {t('common.search')}
                 </button>
               </div>
@@ -203,6 +207,25 @@ export function ScoreExplorerSection({
               renderLabel={(value) => <DifficultyLabel difficulty={value} short />}
               optionClassName={(value) => `difficulty-chip ${getDifficultyToneClass(value)}`}
             />
+
+            <div className="filter-block filter-block-select">
+              <div className="filter-label">{t('scores.version')}</div>
+              <label>
+                <select
+                  value={versionSelection}
+                  onChange={(event) => setVersionSelection(event.target.value)}
+                >
+                  <option value="ALL">{t('scores.versionAll')}</option>
+                  <option value="NEW">{t('scores.versionNew')}</option>
+                  <option value="OLD">{t('scores.versionOld')}</option>
+                  {versionOptions.map((version) => (
+                    <option key={version} value={version}>
+                      {formatVersionLabel(version)}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </div>
 
             <div className="filter-block">
               <div className="filter-label">{t('scores.level')}</div>
@@ -291,25 +314,6 @@ export function ScoreExplorerSection({
             />
 
             <div className="filter-block">
-              <div className="filter-label">{t('scores.version')}</div>
-              <label>
-                <select
-                  value={versionSelection}
-                  onChange={(event) => setVersionSelection(event.target.value)}
-                >
-                  <option value="ALL">{t('scores.versionAll')}</option>
-                  <option value="NEW">{t('scores.versionNew')}</option>
-                  <option value="OLD">{t('scores.versionOld')}</option>
-                  {versionOptions.map((version) => (
-                    <option key={version} value={version}>
-                      {formatVersionLabel(version)}
-                    </option>
-                  ))}
-                </select>
-              </label>
-            </div>
-
-            <div className="filter-block">
               <div className="filter-label">{t('scores.daysSince')}</div>
               <div className="range-pair">
                 <label>
@@ -337,7 +341,6 @@ export function ScoreExplorerSection({
                 </label>
               </div>
             </div>
-
           </div>
         </section>
       </aside>
