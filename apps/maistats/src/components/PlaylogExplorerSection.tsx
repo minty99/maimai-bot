@@ -21,6 +21,7 @@ import { ToggleGroup } from './ToggleGroup';
 interface PlaylogExplorerSectionProps {
   sidebarTopContent?: ReactNode;
   playlogCountLabel: string;
+  isLoading: boolean;
   showJackets: boolean;
   setShowJackets: Dispatch<SetStateAction<boolean>>;
   appliedPlaylogQuery: string;
@@ -65,6 +66,7 @@ interface PlaylogExplorerSectionProps {
 export function PlaylogExplorerSection({
   sidebarTopContent,
   playlogCountLabel,
+  isLoading,
   showJackets,
   setShowJackets,
   appliedPlaylogQuery,
@@ -286,6 +288,7 @@ export function PlaylogExplorerSection({
             </div>
           </div>
           <div className="table-wrap">
+            {isLoading ? <div className="table-loading-state">{t('common.loadingPlaylogs')}</div> : null}
             <table className="playlog-table compact-table">
               <thead>
                 <tr>

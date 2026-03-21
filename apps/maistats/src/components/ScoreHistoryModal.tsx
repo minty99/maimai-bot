@@ -10,6 +10,8 @@ import type { ScoreHistoryPoint, ScoreRow } from '../types';
 interface ScoreHistoryModalProps {
   selectedHistoryRow: ScoreRow | null;
   historyPoints: ScoreHistoryPoint[];
+  isLoading: boolean;
+  loadingErrorMessage: string | null;
   songInfoUrl: string;
   onClose: () => void;
 }
@@ -54,6 +56,8 @@ function formatPointTime(unixtime: number, locale: string): string {
 export function ScoreHistoryModal({
   selectedHistoryRow,
   historyPoints,
+  isLoading,
+  loadingErrorMessage,
   songInfoUrl,
   onClose,
 }: ScoreHistoryModalProps) {
@@ -142,7 +146,11 @@ export function ScoreHistoryModal({
             </button>
           </div>
 
-          {historyPoints.length === 0 ? (
+          {isLoading ? (
+            <p className="muted">{t('history.loading')}</p>
+          ) : loadingErrorMessage ? (
+            <p className="muted">{t('common.error')}: {loadingErrorMessage}</p>
+          ) : historyPoints.length === 0 ? (
             <p className="muted">{t('history.empty')}</p>
           ) : (
             <div
