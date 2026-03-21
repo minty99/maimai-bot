@@ -1,5 +1,4 @@
 use std::collections::HashMap;
-use std::path::{Path, PathBuf};
 
 use base64::Engine as _;
 use eyre::{Result, WrapErr};
@@ -34,106 +33,193 @@ impl MaimaiStatusEmojis {
 struct EmojiAsset {
     name: &'static str,
     file_name: &'static str,
-}
-
-impl EmojiAsset {
-    fn path(self) -> PathBuf {
-        status_emoji_dir().join(self.file_name)
-    }
+    bytes: &'static [u8],
 }
 
 const STATUS_EMOJI_ASSETS: [EmojiAsset; 23] = [
     EmojiAsset {
         name: "maimai_rank_sssp",
         file_name: "music_icon_sssp.png",
+        bytes: include_bytes!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/assets/status-emojis/music_icon_sssp.png"
+        )),
     },
     EmojiAsset {
         name: "maimai_rank_sss",
         file_name: "music_icon_sss.png",
+        bytes: include_bytes!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/assets/status-emojis/music_icon_sss.png"
+        )),
     },
     EmojiAsset {
         name: "maimai_rank_ssp",
         file_name: "music_icon_ssp.png",
+        bytes: include_bytes!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/assets/status-emojis/music_icon_ssp.png"
+        )),
     },
     EmojiAsset {
         name: "maimai_rank_ss",
         file_name: "music_icon_ss.png",
+        bytes: include_bytes!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/assets/status-emojis/music_icon_ss.png"
+        )),
     },
     EmojiAsset {
         name: "maimai_rank_sp",
         file_name: "music_icon_sp.png",
+        bytes: include_bytes!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/assets/status-emojis/music_icon_sp.png"
+        )),
     },
     EmojiAsset {
         name: "maimai_rank_s",
         file_name: "music_icon_s.png",
+        bytes: include_bytes!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/assets/status-emojis/music_icon_s.png"
+        )),
     },
     EmojiAsset {
         name: "maimai_rank_aaa",
         file_name: "music_icon_aaa.png",
+        bytes: include_bytes!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/assets/status-emojis/music_icon_aaa.png"
+        )),
     },
     EmojiAsset {
         name: "maimai_rank_aa",
         file_name: "music_icon_aa.png",
+        bytes: include_bytes!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/assets/status-emojis/music_icon_aa.png"
+        )),
     },
     EmojiAsset {
         name: "maimai_rank_a",
         file_name: "music_icon_a.png",
+        bytes: include_bytes!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/assets/status-emojis/music_icon_a.png"
+        )),
     },
     EmojiAsset {
         name: "maimai_rank_bbb",
         file_name: "music_icon_bbb.png",
+        bytes: include_bytes!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/assets/status-emojis/music_icon_bbb.png"
+        )),
     },
     EmojiAsset {
         name: "maimai_rank_bb",
         file_name: "music_icon_bb.png",
+        bytes: include_bytes!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/assets/status-emojis/music_icon_bb.png"
+        )),
     },
     EmojiAsset {
         name: "maimai_rank_b",
         file_name: "music_icon_b.png",
+        bytes: include_bytes!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/assets/status-emojis/music_icon_b.png"
+        )),
     },
     EmojiAsset {
         name: "maimai_rank_c",
         file_name: "music_icon_c.png",
+        bytes: include_bytes!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/assets/status-emojis/music_icon_c.png"
+        )),
     },
     EmojiAsset {
         name: "maimai_rank_d",
         file_name: "music_icon_d.png",
+        bytes: include_bytes!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/assets/status-emojis/music_icon_d.png"
+        )),
     },
     EmojiAsset {
         name: "maimai_fc_app",
         file_name: "music_icon_app.png",
+        bytes: include_bytes!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/assets/status-emojis/music_icon_app.png"
+        )),
     },
     EmojiAsset {
         name: "maimai_fc_ap",
         file_name: "music_icon_ap.png",
+        bytes: include_bytes!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/assets/status-emojis/music_icon_ap.png"
+        )),
     },
     EmojiAsset {
         name: "maimai_fc_fcp",
         file_name: "music_icon_fcp.png",
+        bytes: include_bytes!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/assets/status-emojis/music_icon_fcp.png"
+        )),
     },
     EmojiAsset {
         name: "maimai_fc_fc",
         file_name: "music_icon_fc.png",
+        bytes: include_bytes!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/assets/status-emojis/music_icon_fc.png"
+        )),
     },
     EmojiAsset {
         name: "maimai_sync_fdxp",
         file_name: "music_icon_fdxp.png",
+        bytes: include_bytes!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/assets/status-emojis/music_icon_fdxp.png"
+        )),
     },
     EmojiAsset {
         name: "maimai_sync_fdx",
         file_name: "music_icon_fdx.png",
+        bytes: include_bytes!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/assets/status-emojis/music_icon_fdx.png"
+        )),
     },
     EmojiAsset {
         name: "maimai_sync_fsp",
         file_name: "music_icon_fsp.png",
+        bytes: include_bytes!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/assets/status-emojis/music_icon_fsp.png"
+        )),
     },
     EmojiAsset {
         name: "maimai_sync_fs",
         file_name: "music_icon_fs.png",
+        bytes: include_bytes!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/assets/status-emojis/music_icon_fs.png"
+        )),
     },
     EmojiAsset {
         name: "maimai_sync_sync",
         file_name: "music_icon_sync.png",
+        bytes: include_bytes!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/assets/status-emojis/music_icon_sync.png"
+        )),
     },
 ];
 
@@ -167,8 +253,7 @@ pub(crate) async fn sync_application_emojis(http: &serenity::Http) -> Result<Mai
             Err(error) => {
                 warn!(
                     "failed to create application emoji {} from {}: {error:?}",
-                    asset.name,
-                    asset.path().display()
+                    asset.name, asset.file_name
                 );
             }
         }
@@ -187,12 +272,9 @@ async fn create_application_emoji(
         image: &'a str,
     }
 
-    let path = asset.path();
-    let bytes = std::fs::read(&path)
-        .wrap_err_with(|| format!("read vendored emoji image: {}", path.display()))?;
     let image = format!(
         "data:image/png;base64,{}",
-        base64::engine::general_purpose::STANDARD.encode(bytes)
+        base64::engine::general_purpose::STANDARD.encode(asset.bytes)
     );
 
     let payload = CreateEmoji {
@@ -203,10 +285,6 @@ async fn create_application_emoji(
     http.create_application_emoji(&payload)
         .await
         .wrap_err_with(|| format!("create application emoji {}", asset.name))
-}
-
-fn status_emoji_dir() -> &'static Path {
-    Path::new(concat!(env!("CARGO_MANIFEST_DIR"), "/assets/status-emojis"))
 }
 
 pub(crate) fn format_rank(

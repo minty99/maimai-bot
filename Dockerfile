@@ -64,9 +64,6 @@ WORKDIR /app
 # Copy record collector binary
 COPY --from=builder /app/target/release/maistats-record-collector /usr/local/bin/maistats-record-collector
 
-# Copy migrations
-COPY maistats-record-collector/migrations /app/migrations
-
 # Create data directory
 RUN mkdir -p /app/data
 
