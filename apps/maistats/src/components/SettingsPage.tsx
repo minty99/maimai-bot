@@ -184,19 +184,19 @@ export function SettingsPage({
           <div className="settings-field-group">
             <div className="panel-heading compact">
               <div>
-                <h3>Theme</h3>
-                <p>앱의 색상 테마를 선택합니다.</p>
+                <h3>{t('settings.theme.title')}</h3>
+                <p>{t('settings.theme.description')}</p>
               </div>
             </div>
             <label className="home-url-field">
-              <span>Color theme</span>
+              <span>{t('settings.theme.label')}</span>
               <select
                 value={themePreference}
                 onChange={(event) => setThemePreference(event.target.value as ThemePreference)}
               >
-                <option value="system">System default</option>
-                <option value="light">Light</option>
-                <option value="dark">Dark</option>
+                <option value="system">{t('settings.theme.optionSystem')}</option>
+                <option value="light">{t('settings.theme.optionLight')}</option>
+                <option value="dark">{t('settings.theme.optionDark')}</option>
               </select>
             </label>
           </div>
