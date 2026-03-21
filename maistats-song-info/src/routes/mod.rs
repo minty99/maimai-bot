@@ -13,14 +13,11 @@ use tower_http::trace::{DefaultMakeSpan, DefaultOnResponse, TraceLayer};
 use crate::state::AppState;
 
 pub(crate) fn create_router(state: AppState) -> Router {
-    Router::new()
-        .route("/health", get(health::health))
-        .route("/health/ready", get(health::ready))
+    let api_routes = Router::new()
         .route("/api/songs", get(songs::list_song_info))
         .route("/api/songs/versions", get(songs::list_versions))
         .route("/api/songs/metadata", post(songs::search_song_metadata))
         .route("/api/cover/{image_name}", get(cover::get_cover))
-        .layer(CorsLayer::permissive())
         .layer(
             TraceLayer::new_for_http()
                 .make_span_with(DefaultMakeSpan::new().level(tracing::Level::INFO))
@@ -29,6 +26,12 @@ pub(crate) fn create_router(state: AppState) -> Router {
                         .level(tracing::Level::INFO)
                         .latency_unit(LatencyUnit::Millis),
                 ),
-        )
+        );
+
+    Router::new()
+        .route("/health", get(health::health))
+        .route("/health/ready", get(health::ready))
+        .merge(api_routes)
+        .layer(CorsLayer::permissive())
         .with_state(state)
 }
