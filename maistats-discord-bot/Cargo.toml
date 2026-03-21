@@ -9,6 +9,7 @@ path = "src/main.rs"
 
 [dependencies]
 ab_glyph = "0.2.32"
+base64 = "0.22.1"
 dotenvy = { workspace = true }
 eyre = { workspace = true }
 image = "0.25.9"

@@ -9,16 +9,19 @@ mod config;
 mod db;
 mod dm;
 mod embeds;
+mod emoji;
 
 use client::SongInfoClient;
 use config::DiscordConfig;
+use emoji::MaimaiStatusEmojis;
 
 #[derive(Debug, Clone)]
-pub struct BotData {
-    pub db_pool: db::SqlitePool,
-    pub dev_user_id: serenity::UserId,
-    pub discord_http: std::sync::Arc<serenity::Http>,
-    pub song_info_client: SongInfoClient,
+pub(crate) struct BotData {
+    pub(crate) db_pool: db::SqlitePool,
+    pub(crate) dev_user_id: serenity::UserId,
+    pub(crate) discord_http: std::sync::Arc<serenity::Http>,
+    pub(crate) song_info_client: SongInfoClient,
+    pub(crate) status_emojis: MaimaiStatusEmojis,
 }
 
 #[tokio::main]
@@ -55,6 +58,7 @@ async fn main() -> eyre::Result<()> {
         dev_user_id,
         discord_http,
         song_info_client,
+        status_emojis: MaimaiStatusEmojis::default(),
     };
 
     let framework = poise::Framework::builder()
@@ -107,14 +111,26 @@ async fn main() -> eyre::Result<()> {
             },
             ..Default::default()
         })
-        .setup(move |ctx, _ready, framework| {
+        .setup(move |ctx, ready, framework| {
             let bot_data = bot_data.clone();
             Box::pin(async move {
                 info!("Bot started as {}", ctx.cache.current_user().name);
+                bot_data
+                    .discord_http
+                    .set_application_id(ready.application.id);
 
                 poise::builtins::register_globally(ctx, &framework.options().commands)
                     .await
                     .wrap_err("register commands globally")?;
+
+                let status_emojis =
+                    match emoji::sync_application_emojis(bot_data.discord_http.as_ref()).await {
+                        Ok(emojis) => emojis,
+                        Err(error) => {
+                            warn!("Status emoji sync failed: {error:?}");
+                            MaimaiStatusEmojis::default()
+                        }
+                    };
 
                 let registration_count = db::count_registrations(&bot_data.db_pool).await?;
                 if let Err(e) = dm::send_developer_startup_dm(
@@ -127,7 +143,10 @@ async fn main() -> eyre::Result<()> {
                     warn!("Developer startup DM failed: {e}");
                 }
 
-                Ok(bot_data)
+                Ok(BotData {
+                    status_emojis,
+                    ..bot_data
+                })
             })
         })
         .build();

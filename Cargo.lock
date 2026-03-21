@@ -1860,6 +1860,7 @@ name = "maistats-discord-bot"
 version = "0.1.0"
 dependencies = [
  "ab_glyph",
+ "base64",
  "dotenvy",
  "eyre",
  "image",
