@@ -15,6 +15,7 @@ use crate::embeds::{
     RecentRecordView, build_mai_recent_embeds, build_mai_today_embed, embed_base,
     embed_maintenance, format_level_with_internal,
 };
+use crate::emoji::{format_fc, format_rank, format_sync};
 
 type Context<'a> = poise::Context<'a, BotData, Box<dyn std::error::Error + Send + Sync>>;
 type Error = Box<dyn std::error::Error + Send + Sync>;
@@ -262,9 +263,9 @@ pub(crate) async fn mai_score(
             .unwrap_or("N/A");
         let level =
             format_level_with_internal(level, metadata.as_ref().and_then(|m| m.internal_level));
-        let rank = score.rank.map(|r| r.as_str()).unwrap_or("N/A");
-        let fc = score.fc.map(|v| v.as_str()).unwrap_or("-");
-        let sync = score.sync.map(|v| v.as_str()).unwrap_or("-");
+        let rank = format_rank(&ctx.data().status_emojis, score.rank, "N/A");
+        let fc = format_fc(&ctx.data().status_emojis, score.fc, "-");
+        let sync = format_sync(&ctx.data().status_emojis, score.sync, "-");
         let last_played = score
             .last_played_at
             .as_deref()
@@ -580,7 +581,7 @@ pub(crate) async fn mai_recent(ctx: Context<'_>) -> Result<(), Error> {
         });
     }
 
-    let embeds = build_mai_recent_embeds(&display_name, &records, None);
+    let embeds = build_mai_recent_embeds(&display_name, &records, None, &ctx.data().status_emojis);
     let mut attachments = Vec::new();
     for image_name in cover_image_names {
         match ctx.data().song_info_client.get_cover(&image_name).await {

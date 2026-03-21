@@ -2,6 +2,8 @@ use models::{ChartType, DifficultyCategory, FcStatus, ScoreRank, SyncStatus};
 use poise::serenity_prelude as serenity;
 use serenity::builder::{CreateEmbed, CreateEmbedFooter};
 
+use crate::emoji::{MaimaiStatusEmojis, format_fc, format_rank, format_sync};
+
 const EMBED_COLOR: u32 = 0x51BCF3;
 const EMBED_COLOR_MAINTENANCE: u32 = 0xFFA500;
 
@@ -78,11 +80,14 @@ fn format_recent_title(record: &RecentRecordView) -> String {
     )
 }
 
-fn format_recent_detail_lines(record: &RecentRecordView) -> String {
+fn format_recent_detail_lines(
+    record: &RecentRecordView,
+    status_emojis: &MaimaiStatusEmojis,
+) -> String {
     let achievement = format_percent_f64(record.achievement_percent);
-    let rank = record.rank.map(|r| r.as_str()).unwrap_or("-");
-    let fc = record.fc.map(|v| v.as_str()).unwrap_or("-");
-    let sync = record.sync.map(|v| v.as_str()).unwrap_or("-");
+    let rank = format_rank(status_emojis, record.rank, "-");
+    let fc = format_fc(status_emojis, record.fc, "-");
+    let sync = format_sync(status_emojis, record.sync, "-");
 
     format!("{achievement} • {rank} • {fc} • {sync}")
 }
@@ -108,6 +113,7 @@ pub(crate) fn build_mai_recent_embeds(
     display_name: &str,
     records: &[RecentRecordView],
     optional_fields: Option<&RecentOptionalFields>,
+    status_emojis: &MaimaiStatusEmojis,
 ) -> Vec<CreateEmbed> {
     let mut embeds = Vec::new();
 
@@ -133,7 +139,7 @@ pub(crate) fn build_mai_recent_embeds(
     }
 
     embeds.extend(records.iter().map(|record| {
-        let mut desc = format_recent_detail_lines(record);
+        let mut desc = format_recent_detail_lines(record, status_emojis);
         if record.achievement_new_record {
             desc.push_str("\n**NEW RECORD**");
         }
