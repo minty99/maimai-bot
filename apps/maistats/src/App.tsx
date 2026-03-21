@@ -605,9 +605,7 @@ function App() {
     setIsPlaylogsLoading(true);
     setPlaylogLoadingError(null);
 
-    if (loadedPlaylogsKeyRef.current !== requestKey) {
-      setPlaylogRecords([]);
-    }
+    setPlaylogRecords([]);
 
     try {
       const playlogs = await fetchRecentPlaylogs(recordCollectorUrl, controller.signal);
