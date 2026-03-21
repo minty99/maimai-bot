@@ -65,6 +65,7 @@ import { RandomPickerPage } from './components/RandomPickerPage';
 import { RatingPage } from './components/RatingPage';
 import { ScoreExplorerSection } from './components/ScoreExplorerSection';
 import { SettingsPage } from './components/SettingsPage';
+import { SetupGuidePage } from './components/SetupGuidePage';
 import { SongDetailModal } from './components/SongDetailModal';
 import { ScoreHistoryModal } from './components/ScoreHistoryModal';
 import type { SongDetailTarget } from './components/TableActionCells';
@@ -81,7 +82,7 @@ import type {
 } from './types';
 import logoUrl from './assets/logo.png';
 
-type AppPage = 'home' | 'scores' | 'rating' | 'playlogs' | 'picker' | 'settings';
+type AppPage = 'home' | 'setup' | 'scores' | 'rating' | 'playlogs' | 'picker' | 'settings';
 type RatedScoreRow = ScoreRow & { rating: number; version: string };
 type ThemePreference = 'system' | 'light' | 'dark';
 type LoadingErrorState =
@@ -94,6 +95,9 @@ function readPageFromHash(hash: string): AppPage {
   }
   if (hash === '#rating') {
     return 'rating';
+  }
+  if (hash === '#setup') {
+    return 'setup';
   }
   if (hash === '#playlogs') {
     return 'playlogs';
@@ -232,6 +236,19 @@ function SettingsIcon() {
   );
 }
 
+function SetupIcon() {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M6 4h12" />
+      <path d="M6 9h12" />
+      <path d="M6 14h8" />
+      <path d="M6 19h8" />
+      <path d="M18 14v5" />
+      <path d="M15.5 16.5 18 14l2.5 2.5" />
+    </svg>
+  );
+}
+
 function ChevronDownIcon() {
   return (
     <svg viewBox="0 0 24 24" aria-hidden="true">
@@ -264,10 +281,11 @@ function App() {
     const stored = localStorage.getItem(RECORD_STORAGE_KEY)?.trim();
     const envUrl = (import.meta.env.RECORD_COLLECTOR_SERVER_URL as string | undefined)?.trim();
     const hasUrl = Boolean(stored ?? envUrl);
-    if (!hasUrl) {
+    const requestedPage = readPageFromHash(window.location.hash);
+    if (!hasUrl && requestedPage !== 'home' && requestedPage !== 'setup' && requestedPage !== 'settings') {
       return 'home';
     }
-    return readPageFromHash(window.location.hash);
+    return requestedPage;
   });
   const [isMobileNavOpen, setIsMobileNavOpen] = useState(false);
 
@@ -556,12 +574,17 @@ function App() {
 
   useEffect(() => {
     const onHashChange = () => {
-      setActivePage(readPageFromHash(window.location.hash));
+      const nextPage = readPageFromHash(window.location.hash);
+      if (!recordCollectorUrl.trim() && nextPage !== 'home' && nextPage !== 'setup' && nextPage !== 'settings') {
+        setActivePage('home');
+        return;
+      }
+      setActivePage(nextPage);
     };
 
     window.addEventListener('hashchange', onHashChange);
     return () => window.removeEventListener('hashchange', onHashChange);
-  }, []);
+  }, [recordCollectorUrl]);
 
   useEffect(() => {
     if (
@@ -1087,12 +1110,14 @@ function App() {
   const handleConnectUrl = handleApplyRecordCollectorUrl;
 
   const handleNavigatePage = useCallback((page: AppPage) => {
-    if (page === 'settings' || page === 'home') {
+    if (page === 'settings' || page === 'home' || page === 'setup') {
       setSongInfoUrlDraft(songInfoUrl);
       setRecordCollectorUrlDraft(recordCollectorUrl);
     }
     const nextHash = page === 'home'
       ? '#home'
+      : page === 'setup'
+        ? '#setup'
       : page === 'playlogs'
         ? '#playlogs'
         : page === 'rating'
@@ -1119,6 +1144,7 @@ function App() {
   const navItems = useMemo<Array<{ page: AppPage; label: string; Icon: () => JSX.Element }>>(
     () => [
       { page: 'home', label: t('nav.home'), Icon: HomeIcon },
+      { page: 'setup', label: t('nav.setup'), Icon: SetupIcon },
       { page: 'scores', label: t('nav.scores'), Icon: ScoresIcon },
       { page: 'rating', label: t('nav.rating'), Icon: RatingIcon },
       { page: 'playlogs', label: t('nav.playlogs'), Icon: PlaylogsIcon },
@@ -1159,7 +1185,7 @@ function App() {
               type="button"
               className={activePage === page ? 'active' : ''}
               onClick={() => handleNavigatePage(page)}
-              disabled={!recordCollectorUrl.trim() && page !== 'home' && page !== 'settings'}
+              disabled={!recordCollectorUrl.trim() && page !== 'home' && page !== 'setup' && page !== 'settings'}
             >
               <Icon />
               <span>{label}</span>
@@ -1203,7 +1229,7 @@ function App() {
                 type="button"
                 className={activePage === page ? 'active' : ''}
                 onClick={() => handleNavigatePage(page)}
-                disabled={!recordCollectorUrl.trim() && page !== 'home' && page !== 'settings'}
+                disabled={!recordCollectorUrl.trim() && page !== 'home' && page !== 'setup' && page !== 'settings'}
               >
                 <Icon />
                 <span>{label}</span>
@@ -1217,7 +1243,7 @@ function App() {
                 type="button"
                 className={activePage === page ? 'active' : ''}
                 onClick={() => handleNavigatePage(page)}
-                disabled={!recordCollectorUrl.trim() && page !== 'home' && page !== 'settings'}
+                disabled={!recordCollectorUrl.trim() && page !== 'home' && page !== 'setup' && page !== 'settings'}
               >
                 <Icon />
                 <span>{label}</span>
@@ -1230,6 +1256,11 @@ function App() {
       <main className="app-main">
         {activePage === 'home' ? (
           <HomePage
+            sidebarTopContent={desktopSidebarTopContent}
+            onNavigateToSetup={() => handleNavigatePage('setup')}
+          />
+        ) : activePage === 'setup' ? (
+          <SetupGuidePage
             sidebarTopContent={desktopSidebarTopContent}
             recordCollectorUrl={recordCollectorUrl}
             onConnect={handleConnectUrl}
