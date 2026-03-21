@@ -75,26 +75,6 @@ pub(crate) async fn count_scores_rows(pool: &SqlitePool) -> eyre::Result<i64> {
         .wrap_err("count scores rows")
 }
 
-pub(crate) async fn get_app_state_u32(pool: &SqlitePool, key: &str) -> eyre::Result<Option<u32>> {
-    let value = get_app_state_string(pool, key).await?;
-    let Some(value) = value else {
-        return Ok(None);
-    };
-    let parsed = value.parse::<u32>().wrap_err("parse app_state as u32")?;
-    Ok(Some(parsed))
-}
-
-pub(crate) async fn get_app_state_string(
-    pool: &SqlitePool,
-    key: &str,
-) -> eyre::Result<Option<String>> {
-    sqlx::query_scalar::<_, String>("SELECT value FROM app_state WHERE key = ?")
-        .bind(key)
-        .fetch_optional(pool)
-        .await
-        .wrap_err("get app_state value")
-}
-
 pub(crate) async fn apply_recent_sync_atomic(
     pool: &SqlitePool,
     score_updates: &[ParsedScoreEntry],
@@ -136,15 +116,6 @@ pub(crate) async fn store_player_profile_snapshot(
     Ok(())
 }
 
-async fn set_app_state_u32_in_tx(
-    tx: &mut sqlx::Transaction<'_, Sqlite>,
-    key: &str,
-    value: u32,
-    updated_at: i64,
-) -> eyre::Result<()> {
-    set_app_state_string_in_tx(tx, key, &value.to_string(), updated_at).await
-}
-
 async fn set_app_state_string_in_tx(
     tx: &mut sqlx::Transaction<'_, Sqlite>,
     key: &str,
@@ -174,28 +145,33 @@ async fn upsert_player_profile_snapshot_in_tx(
     player_data: &ParsedPlayerProfile,
     updated_at: i64,
 ) -> eyre::Result<()> {
-    set_app_state_u32_in_tx(
-        tx,
-        STATE_KEY_TOTAL_PLAY_COUNT,
-        player_data.total_play_count,
-        updated_at,
-    )
-    .await
-    .wrap_err("store total play count")?;
-    set_app_state_u32_in_tx(tx, STATE_KEY_RATING, player_data.rating, updated_at)
-        .await
-        .wrap_err("store rating")?;
-    set_app_state_u32_in_tx(
-        tx,
-        STATE_KEY_CURRENT_VERSION_PLAY_COUNT,
-        player_data.current_version_play_count,
-        updated_at,
-    )
-    .await
-    .wrap_err("store current version play count")?;
-    set_app_state_string_in_tx(tx, STATE_KEY_USER_NAME, &player_data.user_name, updated_at)
-        .await
-        .wrap_err("store user name")?;
+    for (key, value, context) in [
+        (
+            STATE_KEY_TOTAL_PLAY_COUNT,
+            player_data.total_play_count.to_string(),
+            "store total play count",
+        ),
+        (
+            STATE_KEY_RATING,
+            player_data.rating.to_string(),
+            "store rating",
+        ),
+        (
+            STATE_KEY_CURRENT_VERSION_PLAY_COUNT,
+            player_data.current_version_play_count.to_string(),
+            "store current version play count",
+        ),
+        (
+            STATE_KEY_USER_NAME,
+            player_data.user_name.clone(),
+            "store user name",
+        ),
+    ] {
+        set_app_state_string_in_tx(tx, key, &value, updated_at)
+            .await
+            .wrap_err(context)?;
+    }
+
     Ok(())
 }
 
@@ -419,16 +395,6 @@ mod tests {
             .fetch_all(&pool)
             .await?;
         assert_eq!(titles, vec!["Song B".to_string()]);
-
-        Ok(())
-    }
-
-    #[tokio::test]
-    async fn get_app_state_u32_returns_none_for_missing_key() -> eyre::Result<()> {
-        let pool = connect("sqlite::memory:").await?;
-        migrate(&pool).await?;
-
-        assert_eq!(get_app_state_u32(&pool, "missing").await?, None);
 
         Ok(())
     }
