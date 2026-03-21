@@ -433,6 +433,7 @@ function App() {
   const playlogLoadAbortRef = useRef<AbortController | null>(null);
   const loadedExplorerKeyRef = useRef<string | null>(null);
   const loadedPlaylogsKeyRef = useRef<string | null>(null);
+  const playlogRecordCountRef = useRef(0);
 
   useEffect(() => {
     const selector = 'link[rel="icon"]';
@@ -446,6 +447,10 @@ function App() {
       document.head.appendChild(link);
     }
   }, []);
+
+  useEffect(() => {
+    playlogRecordCountRef.current = playlogRecords.length;
+  }, [playlogRecords.length]);
 
   const scoreData = useMemo(
     () => buildScoreRows(scoreRecords, songMetadata, locale),
@@ -529,14 +534,6 @@ function App() {
     setIsLoading(true);
     setLoadingError(null);
     setSongMetadata(new Map<string, SongInfoResponse>());
-    setPlaylogLoadingError(null);
-
-    if (loadedPlaylogsKeyRef.current !== recordCollectorUrl.trim()) {
-      playlogLoadAbortRef.current?.abort();
-      loadedPlaylogsKeyRef.current = null;
-      setIsPlaylogsLoading(false);
-      setPlaylogRecords([]);
-    }
 
     try {
       const payload = await fetchExplorerPayload(
@@ -561,14 +558,9 @@ function App() {
         return;
       }
       loadedExplorerKeyRef.current = null;
-      loadedPlaylogsKeyRef.current = null;
-      playlogLoadAbortRef.current?.abort();
       const message = error instanceof Error ? error.message : String(error);
       setLoadingError({ kind: 'message', message });
       setScoreRecords([]);
-      setPlaylogRecords([]);
-      setIsPlaylogsLoading(false);
-      setPlaylogLoadingError(null);
       setSongMetadata(new Map<string, SongInfoResponse>());
       setVersionsResponse([]);
       setPickerVersionOptions([]);
@@ -584,7 +576,7 @@ function App() {
   }, [recordCollectorUrl, songInfoUrl]);
 
   const loadPlaylogs = useCallback(async (options?: { force?: boolean; throwOnError?: boolean }) => {
-    if (!songInfoUrl.trim() || !recordCollectorUrl.trim()) {
+    if (!recordCollectorUrl.trim()) {
       loadedPlaylogsKeyRef.current = null;
       playlogLoadAbortRef.current?.abort();
       setIsPlaylogsLoading(false);
@@ -594,6 +586,7 @@ function App() {
     }
 
     const requestKey = recordCollectorUrl.trim();
+    const previousLoadedPlaylogsKey = loadedPlaylogsKeyRef.current;
     if (options?.force) {
       loadedPlaylogsKeyRef.current = null;
     } else if (loadedPlaylogsKeyRef.current === requestKey) {
@@ -602,6 +595,9 @@ function App() {
       return;
     }
 
+    const shouldPreserveRecords =
+      playlogRecordCountRef.current > 0 && previousLoadedPlaylogsKey === requestKey;
+
     playlogLoadAbortRef.current?.abort();
     const controller = new AbortController();
     playlogLoadAbortRef.current = controller;
@@ -609,7 +605,9 @@ function App() {
     setIsPlaylogsLoading(true);
     setPlaylogLoadingError(null);
 
-    setPlaylogRecords([]);
+    if (!shouldPreserveRecords) {
+      setPlaylogRecords([]);
+    }
 
     try {
       const playlogs = await fetchRecentPlaylogs(recordCollectorUrl, controller.signal);
@@ -636,7 +634,7 @@ function App() {
         setIsPlaylogsLoading(false);
       }
     }
-  }, [recordCollectorUrl, songInfoUrl]);
+  }, [recordCollectorUrl]);
 
   useEffect(() => {
     void loadData();

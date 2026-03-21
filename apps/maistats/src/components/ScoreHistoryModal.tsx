@@ -63,6 +63,7 @@ export function ScoreHistoryModal({
 }: ScoreHistoryModalProps) {
   const { locale, t } = useI18n();
   const [hoveredPointKey, setHoveredPointKey] = useState<string | null>(null);
+  const shouldShowLoadingState = isLoading && historyPoints.length === 0;
 
   if (!selectedHistoryRow) {
     return null;
@@ -146,7 +147,7 @@ export function ScoreHistoryModal({
             </button>
           </div>
 
-          {isLoading ? (
+          {shouldShowLoadingState ? (
             <p className="muted">{t('history.loading')}</p>
           ) : loadingErrorMessage ? (
             <p className="muted">{t('common.error')}: {loadingErrorMessage}</p>
