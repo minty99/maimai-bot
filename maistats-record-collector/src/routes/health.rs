@@ -35,12 +35,15 @@ pub(crate) async fn ready(State(state): State<AppState>) -> impl IntoResponse {
                 database: "ok".to_string(),
             }),
         ),
-        Err(_) => (
-            StatusCode::SERVICE_UNAVAILABLE,
-            Json(ReadyResponse {
-                status: "not_ready".to_string(),
-                database: "error".to_string(),
-            }),
-        ),
+        Err(e) => {
+            tracing::error!("Database health check failed: {}", e);
+            (
+                StatusCode::SERVICE_UNAVAILABLE,
+                Json(ReadyResponse {
+                    status: "not_ready".to_string(),
+                    database: "error".to_string(),
+                }),
+            )
+        }
     }
 }
