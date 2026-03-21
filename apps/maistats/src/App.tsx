@@ -561,10 +561,14 @@ function App() {
         return;
       }
       loadedExplorerKeyRef.current = null;
+      loadedPlaylogsKeyRef.current = null;
+      playlogLoadAbortRef.current?.abort();
       const message = error instanceof Error ? error.message : String(error);
       setLoadingError({ kind: 'message', message });
       setScoreRecords([]);
       setPlaylogRecords([]);
+      setIsPlaylogsLoading(false);
+      setPlaylogLoadingError(null);
       setSongMetadata(new Map<string, SongInfoResponse>());
       setVersionsResponse([]);
       setPickerVersionOptions([]);
