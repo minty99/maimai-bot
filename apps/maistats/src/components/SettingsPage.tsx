@@ -83,61 +83,12 @@ export function SettingsPage({
 
       <div className="table-column">
         <section className="panel settings-panel">
-          <div className="panel-heading">
+          <div className="panel-heading compact">
             <div>
-              <h2>{t('settings.title')}</h2>
+              <h3>{t('settings.title')}</h3>
               <p>{t('settings.description')}</p>
             </div>
           </div>
-
-          <div className="settings-field-group">
-            <div className="panel-heading compact">
-              <div>
-                <h3>{t('settings.language.title')}</h3>
-                <p>{t('settings.language.description')}</p>
-              </div>
-            </div>
-            <label className="home-url-field">
-              <span>{t('settings.language.label')}</span>
-              <select
-                value={languagePreference}
-                onChange={(event) => setLanguagePreference(event.target.value as LanguagePreference)}
-              >
-                <option value="system">{t('settings.language.optionSystem')}</option>
-                <option value="ko">{t('settings.language.optionKo')}</option>
-                <option value="en">{t('settings.language.optionEn')}</option>
-              </select>
-            </label>
-            <p className="settings-meta">
-              {languagePreference === 'system'
-                ? t('settings.language.helperSystem', { language: languageLabel })
-                : t('settings.language.helperManual', { language: languageLabel })}
-            </p>
-          </div>
-
-          <hr className="settings-divider" />
-
-          <div className="settings-field-group">
-            <div className="panel-heading compact">
-              <div>
-                <h3>Theme</h3>
-                <p>앱의 색상 테마를 선택합니다.</p>
-              </div>
-            </div>
-            <label className="home-url-field">
-              <span>Color theme</span>
-              <select
-                value={themePreference}
-                onChange={(event) => setThemePreference(event.target.value as ThemePreference)}
-              >
-                <option value="system">System default</option>
-                <option value="light">Light</option>
-                <option value="dark">Dark</option>
-              </select>
-            </label>
-          </div>
-
-          <hr className="settings-divider" />
 
           <div className="settings-field-group">
             <div className="home-connect-row">
@@ -200,6 +151,58 @@ export function SettingsPage({
               </div>
             )}
           </div>
+
+          <hr className="settings-divider" />
+
+          <div className="settings-field-group">
+            <div className="panel-heading compact">
+              <div>
+                <h3>{t('settings.language.title')}</h3>
+                <p>{t('settings.language.description')}</p>
+              </div>
+            </div>
+            <label className="home-url-field">
+              <span>{t('settings.language.label')}</span>
+              <select
+                value={languagePreference}
+                onChange={(event) => setLanguagePreference(event.target.value as LanguagePreference)}
+              >
+                <option value="system">{t('settings.language.optionSystem')}</option>
+                <option value="ko">{t('settings.language.optionKo')}</option>
+                <option value="en">{t('settings.language.optionEn')}</option>
+              </select>
+            </label>
+            <p className="settings-meta">
+              {languagePreference === 'system'
+                ? t('settings.language.helperSystem', { language: languageLabel })
+                : t('settings.language.helperManual', { language: languageLabel })}
+            </p>
+          </div>
+
+          <hr className="settings-divider" />
+
+          <div className="settings-field-group">
+            <div className="panel-heading compact">
+              <div>
+                <h3>Theme</h3>
+                <p>앱의 색상 테마를 선택합니다.</p>
+              </div>
+            </div>
+            <label className="home-url-field">
+              <span>Color theme</span>
+              <select
+                value={themePreference}
+                onChange={(event) => setThemePreference(event.target.value as ThemePreference)}
+              >
+                <option value="system">System default</option>
+                <option value="light">Light</option>
+                <option value="dark">Dark</option>
+              </select>
+            </label>
+          </div>
+
+          <hr className="settings-divider" />
+
         </section>
       </div>
     </div>
