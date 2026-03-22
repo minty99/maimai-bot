@@ -1573,14 +1573,77 @@ tbody tr:last-child td {
 .history-chart-panel {
   position: relative;
   border: 1px solid var(--line);
-  border-radius: 2px;
-  background: var(--panel);
-  padding: 12px;
+  border-radius: 16px;
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--panel-raised) 75%, transparent), transparent 42%),
+    var(--panel);
+  padding: 16px;
+  overflow: hidden;
 }
 
-.history-chart-scroll {
-  overflow-x: hidden;
-  overflow-y: visible;
+.history-chart-topline {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(220px, 280px);
+  gap: 12px;
+  align-items: start;
+  margin-bottom: 14px;
+}
+
+.history-metric-strip {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.history-metric,
+.history-inspector {
+  min-width: 0;
+  border: 1px solid color-mix(in srgb, var(--line-strong) 78%, transparent);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--panel-raised) 82%, transparent);
+  padding: 12px 14px;
+}
+
+.history-metric {
+  display: grid;
+  gap: 5px;
+}
+
+.history-metric-label,
+.history-inspector-label {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.history-metric strong,
+.history-inspector strong {
+  font-size: 1.05rem;
+  line-height: 1.15;
+  font-variant-numeric: tabular-nums;
+}
+
+.history-inspector {
+  display: grid;
+  gap: 6px;
+  justify-items: start;
+}
+
+.history-inspector span:last-child {
+  color: var(--ink-dim);
+  font-size: 0.825rem;
+}
+
+.history-chart-stage {
+  border: 1px solid color-mix(in srgb, var(--line-strong) 72%, transparent);
+  border-radius: 14px;
+  background:
+    radial-gradient(circle at top, color-mix(in srgb, var(--accent) 12%, transparent), transparent 54%),
+    linear-gradient(180deg, color-mix(in srgb, var(--panel-raised) 90%, transparent), color-mix(in srgb, var(--panel) 92%, transparent));
+  padding: 10px 8px 0;
+  overflow: hidden;
 }
 
 .history-chart {
@@ -1588,7 +1651,6 @@ tbody tr:last-child td {
   width: 100%;
   min-width: 0;
   height: auto;
-  overflow: visible;
 }
 
 .history-grid line {
@@ -1612,49 +1674,71 @@ tbody tr:last-child td {
   font-weight: 700;
 }
 
+.history-line-stop-start {
+  stop-color: color-mix(in srgb, var(--accent) 70%, white);
+}
+
+.history-line-stop-end {
+  stop-color: var(--accent);
+}
+
+.history-area-stop-start {
+  stop-color: color-mix(in srgb, var(--accent) 28%, transparent);
+}
+
+.history-area-stop-end {
+  stop-color: transparent;
+}
+
+.history-area {
+  fill: url(#history-area-gradient);
+}
+
 .history-line {
-  stroke: var(--accent);
-  stroke-width: 2;
+  stroke: url(#history-line-gradient);
+  stroke-width: 2.5;
   stroke-linecap: round;
   stroke-linejoin: round;
+  vector-effect: non-scaling-stroke;
 }
 
 .history-point {
-  fill: var(--panel);
+  fill: color-mix(in srgb, var(--panel) 58%, white 42%);
   stroke: var(--accent);
-  stroke-width: 2;
+  stroke-width: 2.4;
   cursor: pointer;
+  vector-effect: non-scaling-stroke;
+  transition:
+    fill 160ms ease,
+    stroke 160ms ease,
+    r 160ms ease;
+}
+
+.history-point-hit {
+  fill: transparent;
+  cursor: pointer;
+}
+
+.history-point-glow {
+  fill: color-mix(in srgb, var(--accent) 22%, transparent);
+  pointer-events: none;
+}
+
+.history-point-active {
+  fill: color-mix(in srgb, white 92%, var(--accent) 8%);
+  stroke: color-mix(in srgb, var(--accent) 84%, white);
+}
+
+.history-active-guide {
+  stroke: color-mix(in srgb, var(--accent) 32%, transparent);
+  stroke-width: 1.2;
+  stroke-dasharray: 4 4;
 }
 
 .history-point:focus-visible {
   outline: none;
   stroke: var(--ink);
-}
-
-.history-tooltip {
-  position: absolute;
-  z-index: 2;
-  transform: translate(-50%, calc(-100% - 12px));
-  display: grid;
-  gap: 3px;
-  min-width: 150px;
-  padding: 8px 10px;
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 2px;
-  background: rgba(10, 10, 16, 0.96);
-  color: #f8fafc;
-  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.4);
-  pointer-events: none;
-}
-
-.history-tooltip strong {
-  font-family: inherit;
-  font-size: 13px;
-}
-
-.history-tooltip span {
-  font-size: 11px;
-  color: var(--muted);
+  fill: color-mix(in srgb, white 90%, var(--accent) 10%);
 }
 
 .score-table .title-col,
@@ -1829,6 +1913,22 @@ tbody tr:last-child td {
 .modal-close-button {
   font-size: 0.875rem;
   flex-shrink: 0;
+}
+
+@media (max-width: 900px) {
+  .history-chart-topline {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .history-inspector {
+    order: -1;
+  }
+}
+
+@media (max-width: 720px) {
+  .history-metric-strip {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }
 
 .modal-header-actions {

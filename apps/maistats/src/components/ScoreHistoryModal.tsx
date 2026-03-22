@@ -1,7 +1,7 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 
 import { useI18n } from '../app/i18n';
-import { formatPercent } from '../app/utils';
+import { formatNumber, formatPercent } from '../app/utils';
 import { ChartTypeLabel } from './ChartTypeLabel';
 import { DifficultyLabel } from './DifficultyLabel';
 import { Jacket } from './Jacket';
@@ -18,8 +18,14 @@ interface ScoreHistoryModalProps {
 
 const CHART_WIDTH = 820;
 const CHART_HEIGHT = 360;
-const CHART_MARGIN = { top: 28, right: 32, bottom: 96, left: 96 };
+const CHART_MARGIN = { top: 18, right: 28, bottom: 68, left: 84 };
 const POINT_RADIUS = 5;
+const ACTIVE_POINT_RADIUS = 7;
+
+interface ChartPoint extends ScoreHistoryPoint {
+  chartX: number;
+  chartY: number;
+}
 
 function toUnixMillis(unixtime: number): number {
   return unixtime > 10_000_000_000 ? unixtime : unixtime * 1000;
@@ -53,6 +59,35 @@ function formatPointTime(unixtime: number, locale: string): string {
   });
 }
 
+function formatDeltaPercent(value: number): string {
+  const formatted = formatPercent(Math.abs(value));
+
+  if (value > 0) {
+    return `+${formatted}`;
+  }
+  if (value < 0) {
+    return `-${formatted}`;
+  }
+  return formatted;
+}
+
+function buildAreaPath(points: ChartPoint[], baselineY: number): string {
+  if (points.length === 0) {
+    return '';
+  }
+
+  const [firstPoint, ...remainingPoints] = points;
+  const lastPoint = points[points.length - 1];
+
+  return [
+    `M ${firstPoint.chartX} ${baselineY}`,
+    `L ${firstPoint.chartX} ${firstPoint.chartY}`,
+    ...remainingPoints.map((point) => `L ${point.chartX} ${point.chartY}`),
+    `L ${lastPoint.chartX} ${baselineY}`,
+    'Z',
+  ].join(' ');
+}
+
 export function ScoreHistoryModal({
   selectedHistoryRow,
   historyPoints,
@@ -64,6 +99,10 @@ export function ScoreHistoryModal({
   const { locale, t } = useI18n();
   const [hoveredPointKey, setHoveredPointKey] = useState<string | null>(null);
   const shouldShowLoadingState = isLoading && historyPoints.length === 0;
+
+  useEffect(() => {
+    setHoveredPointKey(historyPoints[historyPoints.length - 1]?.key ?? null);
+  }, [historyPoints]);
 
   if (!selectedHistoryRow) {
     return null;
@@ -110,10 +149,17 @@ export function ScoreHistoryModal({
     chartX: toChartX(point.playedAtUnix),
     chartY: toChartY(point.achievementPercent),
   }));
+  const firstPoint = chartPoints[0] ?? null;
+  const latestPoint = chartPoints[chartPoints.length - 1] ?? null;
+  const hoveredPoint = chartPoints.find((point) => point.key === hoveredPointKey) ?? null;
+  const activePoint = hoveredPoint ?? latestPoint;
   const linePoints = chartPoints
     .map((point) => `${point.chartX},${point.chartY}`)
     .join(' ');
-  const hoveredPoint = chartPoints.find((point) => point.key === hoveredPointKey) ?? null;
+  const areaPath = buildAreaPath(chartPoints, CHART_MARGIN.top + innerHeight);
+  const totalGain = firstPoint && latestPoint
+    ? latestPoint.achievementPercent - firstPoint.achievementPercent
+    : 0;
 
   return (
     <div className="modal-backdrop" onClick={onClose}>
@@ -158,26 +204,51 @@ export function ScoreHistoryModal({
               className="history-chart-panel"
               onMouseLeave={() => setHoveredPointKey(null)}
             >
-              {hoveredPoint ? (
-                <div
-                  className="history-tooltip"
-                  style={{
-                    left: `${(hoveredPoint.chartX / CHART_WIDTH) * 100}%`,
-                    top: `${(hoveredPoint.chartY / CHART_HEIGHT) * 100}%`,
-                  }}
-                >
-                  <strong>{formatPercent(hoveredPoint.achievementPercent)}</strong>
-                  <span>{hoveredPoint.playedAtLabel ?? formatPointTime(hoveredPoint.playedAtUnix, locale)}</span>
+              <div className="history-chart-topline">
+                <div className="history-metric-strip" aria-label={t('history.graphLabel', { title: selectedHistoryRow.title })}>
+                  <div className="history-metric">
+                    <span className="history-metric-label">{t('history.currentBest')}</span>
+                    <strong>{formatPercent(latestPoint?.achievementPercent ?? null)}</strong>
+                  </div>
+                  <div className="history-metric">
+                    <span className="history-metric-label">{t('history.totalGain')}</span>
+                    <strong>{formatDeltaPercent(totalGain)}</strong>
+                  </div>
+                  <div className="history-metric">
+                    <span className="history-metric-label">{t('history.improvements')}</span>
+                    <strong>{formatNumber(chartPoints.length, locale)}</strong>
+                  </div>
                 </div>
-              ) : null}
 
-              <div className="history-chart-scroll">
+                {activePoint ? (
+                  <div className="history-inspector" aria-live="polite">
+                    <span className="history-inspector-label">
+                      {hoveredPoint ? t('history.focusPoint') : t('history.latestPoint')}
+                    </span>
+                    <strong>{formatPercent(activePoint.achievementPercent)}</strong>
+                    <span>{activePoint.playedAtLabel ?? formatPointTime(activePoint.playedAtUnix, locale)}</span>
+                  </div>
+                ) : null}
+              </div>
+
+              <div className="history-chart-stage">
                 <svg
                   viewBox={`0 0 ${CHART_WIDTH} ${CHART_HEIGHT}`}
                   className="history-chart"
                   role="img"
                   aria-label={t('history.graphLabel', { title: selectedHistoryRow.title })}
                 >
+                  <defs>
+                    <linearGradient id="history-line-gradient" x1="0%" y1="0%" x2="100%" y2="0%">
+                      <stop className="history-line-stop-start" offset="0%" />
+                      <stop className="history-line-stop-end" offset="100%" />
+                    </linearGradient>
+                    <linearGradient id="history-area-gradient" x1="0%" y1="0%" x2="0%" y2="100%">
+                      <stop className="history-area-stop-start" offset="0%" />
+                      <stop className="history-area-stop-end" offset="100%" />
+                    </linearGradient>
+                  </defs>
+
                   {yTicks.map((tick) => (
                     <g key={`y-${tick}`} className="history-grid">
                       <line
@@ -185,6 +256,7 @@ export function ScoreHistoryModal({
                         x2={CHART_MARGIN.left + innerWidth}
                         y1={toChartY(tick)}
                         y2={toChartY(tick)}
+                        vectorEffect="non-scaling-stroke"
                       />
                       <text
                         x={CHART_MARGIN.left - 10}
@@ -192,7 +264,7 @@ export function ScoreHistoryModal({
                         textAnchor="end"
                         dominantBaseline="middle"
                       >
-                        {tick.toFixed(4)}%
+                        {formatPercent(tick)}
                       </text>
                     </g>
                   ))}
@@ -204,6 +276,7 @@ export function ScoreHistoryModal({
                         x2={toChartX(tick)}
                         y1={CHART_MARGIN.top}
                         y2={CHART_MARGIN.top + innerHeight}
+                        vectorEffect="non-scaling-stroke"
                       />
                       <text
                         x={toChartX(tick)}
@@ -221,6 +294,7 @@ export function ScoreHistoryModal({
                     x2={CHART_MARGIN.left}
                     y1={CHART_MARGIN.top}
                     y2={CHART_MARGIN.top + innerHeight}
+                    vectorEffect="non-scaling-stroke"
                   />
                   <line
                     className="history-axis"
@@ -228,13 +302,14 @@ export function ScoreHistoryModal({
                     x2={CHART_MARGIN.left + innerWidth}
                     y1={CHART_MARGIN.top + innerHeight}
                     y2={CHART_MARGIN.top + innerHeight}
+                    vectorEffect="non-scaling-stroke"
                   />
 
                   <text
                     className="history-axis-label"
-                    x={26}
+                    x={24}
                     y={CHART_MARGIN.top + innerHeight / 2}
-                    transform={`rotate(-90 26 ${CHART_MARGIN.top + innerHeight / 2})`}
+                    transform={`rotate(-90 24 ${CHART_MARGIN.top + innerHeight / 2})`}
                     textAnchor="middle"
                   >
                     {t('history.axisAchievement')}
@@ -248,6 +323,19 @@ export function ScoreHistoryModal({
                     {t('history.axisTime')}
                   </text>
 
+                  {areaPath ? <path className="history-area" d={areaPath} /> : null}
+
+                  {activePoint ? (
+                    <line
+                      className="history-active-guide"
+                      x1={activePoint.chartX}
+                      x2={activePoint.chartX}
+                      y1={CHART_MARGIN.top}
+                      y2={CHART_MARGIN.top + innerHeight}
+                      vectorEffect="non-scaling-stroke"
+                    />
+                  ) : null}
+
                   {historyPoints.length > 1 ? (
                     <polyline
                       className="history-line"
@@ -256,21 +344,40 @@ export function ScoreHistoryModal({
                     />
                   ) : null}
 
-                  {chartPoints.map((point) => (
-                    <g key={point.key}>
-                      <circle
-                        className="history-point"
-                        cx={point.chartX}
-                        cy={point.chartY}
-                        r={POINT_RADIUS}
-                        tabIndex={0}
-                        aria-label={`${point.playedAtLabel ?? formatPointTime(point.playedAtUnix, locale)} ${formatPercent(point.achievementPercent)}`}
-                        onMouseEnter={() => setHoveredPointKey(point.key)}
-                        onFocus={() => setHoveredPointKey(point.key)}
-                        onBlur={() => setHoveredPointKey((current) => (current === point.key ? null : current))}
-                      />
-                    </g>
-                  ))}
+                  {chartPoints.map((point) => {
+                    const isActive = point.key === activePoint?.key;
+
+                    return (
+                      <g key={point.key}>
+                        <circle
+                          className="history-point-hit"
+                          cx={point.chartX}
+                          cy={point.chartY}
+                          r={14}
+                          onMouseEnter={() => setHoveredPointKey(point.key)}
+                        />
+                        {isActive ? (
+                          <circle
+                            className="history-point-glow"
+                            cx={point.chartX}
+                            cy={point.chartY}
+                            r={ACTIVE_POINT_RADIUS + 5}
+                          />
+                        ) : null}
+                        <circle
+                          className={`history-point${isActive ? ' history-point-active' : ''}`}
+                          cx={point.chartX}
+                          cy={point.chartY}
+                          r={isActive ? ACTIVE_POINT_RADIUS : POINT_RADIUS}
+                          tabIndex={0}
+                          aria-label={`${point.playedAtLabel ?? formatPointTime(point.playedAtUnix, locale)} ${formatPercent(point.achievementPercent)}`}
+                          onMouseEnter={() => setHoveredPointKey(point.key)}
+                          onFocus={() => setHoveredPointKey(point.key)}
+                          onBlur={() => setHoveredPointKey((current) => (current === point.key ? null : current))}
+                        />
+                      </g>
+                    );
+                  })}
                 </svg>
               </div>
             </div>
