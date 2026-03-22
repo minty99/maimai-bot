@@ -2,6 +2,7 @@ use std::collections::{HashMap, HashSet};
 
 use eyre::{Result, WrapErr};
 use sqlx::SqlitePool;
+use tracing::warn;
 
 use crate::db::{apply_recent_sync_atomic, store_player_profile_snapshot};
 use crate::http_client::MaimaiClient;
@@ -83,26 +84,34 @@ pub(crate) async fn sync_recent_if_play_count_changed(
         };
     }
 
-    let (resolved_entries, score_updates) =
-        match resolve_recent_entries_and_collect_score_updates(source, &new_entries).await {
-            Ok(value) => value,
-            Err(err) => return RecentSyncOutcome::FailedRequest(format!("{err:#}")),
-        };
+    let resolved = resolve_recent_entries_and_collect_score_updates(source, &new_entries).await;
 
-    let refreshed_scores = score_updates.len();
+    let refreshed_scores = resolved.score_updates.len();
     let now = unix_timestamp();
-    if let Err(err) =
-        apply_recent_sync_atomic(pool, &score_updates, &resolved_entries, player_data, now).await
+    if let Err(err) = apply_recent_sync_atomic(
+        pool,
+        &resolved.score_updates,
+        &resolved.entries,
+        player_data,
+        now,
+    )
+    .await
     {
         return RecentSyncOutcome::FailedRequest(format!("{err:#}"));
     }
 
     RecentSyncOutcome::Updated {
-        inserted_credits: count_distinct_credit_ids(&resolved_entries),
-        inserted_playlogs: resolved_entries.len(),
+        inserted_credits: count_distinct_credit_ids(&resolved.entries),
+        inserted_playlogs: resolved.entries.len(),
         refreshed_scores,
-        failed_targets: 0,
+        failed_targets: resolved.failed_targets,
     }
+}
+
+struct ResolvedRecentSync {
+    entries: Vec<ParsedPlayRecord>,
+    score_updates: Vec<ParsedScoreEntry>,
+    failed_targets: usize,
 }
 
 async fn filter_entries_for_new_credits(
@@ -146,30 +155,65 @@ async fn filter_entries_for_new_credits(
 async fn resolve_recent_entries_and_collect_score_updates(
     source: &mut impl CollectorSource,
     entries: &[ParsedPlayRecord],
-) -> Result<(Vec<ParsedPlayRecord>, Vec<ParsedScoreEntry>)> {
+) -> ResolvedRecentSync {
     let mut detail_cache = SongDetailCache::default();
     let mut resolved_entries = Vec::with_capacity(entries.len());
     let mut songs_to_refresh = HashMap::new();
+    let mut failed_targets = 0;
 
     for entry in entries {
-        let playlog_idx = entry
-            .playlog_detail_idx
-            .as_deref()
-            .ok_or_else(|| eyre::eyre!("recent entry is missing playlogDetail idx"))?;
-        let playlog_detail = source
-            .fetch_playlog_detail(playlog_idx)
-            .await
-            .wrap_err("fetch playlogDetail from recent entry")?;
+        let Some(playlog_idx) = entry.playlog_detail_idx.as_deref() else {
+            log_resolution_skip(
+                entry,
+                "missing-playlog-detail-idx",
+                "recent entry is missing playlogDetail idx",
+            );
+            resolved_entries.push(entry.clone());
+            failed_targets += 1;
+            continue;
+        };
+        let playlog_detail = match source.fetch_playlog_detail(playlog_idx).await {
+            Ok(playlog_detail) => playlog_detail,
+            Err(err) => {
+                log_resolution_skip(
+                    entry,
+                    "fetch-playlog-detail",
+                    &format!(
+                        "{:#}",
+                        err.wrap_err("fetch playlogDetail from recent entry")
+                    ),
+                );
+                resolved_entries.push(entry.clone());
+                failed_targets += 1;
+                continue;
+            }
+        };
         if titles_mismatch_when_present(&playlog_detail.title, &entry.title) {
-            return Err(eyre::eyre!(
-                "recent/playlogDetail title mismatch: recent='{}' playlogDetail='{}'",
-                entry.title,
-                playlog_detail.title
-            ));
+            log_resolution_skip(
+                entry,
+                "recent-playlog-title-mismatch",
+                &format!(
+                    "recent/playlogDetail title mismatch: recent='{}' playlogDetail='{}'",
+                    entry.title, playlog_detail.title
+                ),
+            );
+            resolved_entries.push(entry.clone());
+            failed_targets += 1;
+            continue;
         }
 
         let detail =
-            fetch_song_detail_for_recent_entry(source, &mut detail_cache, &playlog_detail).await?;
+            match fetch_song_detail_for_recent_entry(source, &mut detail_cache, &playlog_detail)
+                .await
+            {
+                Ok(detail) => detail,
+                Err(err) => {
+                    log_resolution_skip(entry, "fetch-song-detail", &format!("{err:#}"));
+                    resolved_entries.push(entry.clone());
+                    failed_targets += 1;
+                    continue;
+                }
+            };
 
         let mut resolved = entry.clone();
         resolved.genre = detail.genre.clone();
@@ -190,7 +234,22 @@ async fn resolve_recent_entries_and_collect_score_updates(
         .into_values()
         .flat_map(|entries| entries.into_iter())
         .collect::<Vec<_>>();
-    Ok((resolved_entries, updates))
+    ResolvedRecentSync {
+        entries: resolved_entries,
+        score_updates: updates,
+        failed_targets,
+    }
+}
+
+fn log_resolution_skip(entry: &ParsedPlayRecord, stage: &str, reason: &str) {
+    warn!(
+        "recent sync skipping score refresh for unresolved entry: title='{}' played_at='{}' playlog_detail_idx='{}' stage={} reason={}",
+        entry.title,
+        entry.played_at.as_deref().unwrap_or(""),
+        entry.playlog_detail_idx.as_deref().unwrap_or(""),
+        stage,
+        reason
+    );
 }
 
 fn titles_mismatch_when_present(left: &str, right: &str) -> bool {
@@ -382,13 +441,14 @@ mod tests {
         });
         let entries = source.fetch_recent_entries().await?;
 
-        let (_, score_updates) =
-            resolve_recent_entries_and_collect_score_updates(&mut source, &entries).await?;
+        let resolved =
+            resolve_recent_entries_and_collect_score_updates(&mut source, &entries).await;
 
-        assert_eq!(score_updates.len(), 1);
-        assert_eq!(score_updates[0].title, "Song A");
+        assert_eq!(resolved.score_updates.len(), 1);
+        assert_eq!(resolved.failed_targets, 0);
+        assert_eq!(resolved.score_updates[0].title, "Song A");
         assert_eq!(
-            score_updates[0].last_played_at.as_deref(),
+            resolved.score_updates[0].last_played_at.as_deref(),
             Some("2026/03/05 22:15")
         );
         Ok(())
@@ -506,10 +566,58 @@ mod tests {
                 },
             )]),
         });
-        let (_, score_updates) =
-            resolve_recent_entries_and_collect_score_updates(&mut source, &filtered).await?;
-        assert_eq!(score_updates.len(), 1);
+        let resolved =
+            resolve_recent_entries_and_collect_score_updates(&mut source, &filtered).await;
+        assert_eq!(resolved.score_updates.len(), 1);
+        assert_eq!(resolved.failed_targets, 0);
         assert_eq!(source.fetch_log().len(), 2);
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn unresolved_entries_still_return_playlogs_without_score_updates() -> eyre::Result<()> {
+        let entry = ParsedPlayRecord {
+            played_at_unixtime: Some(200),
+            playlog_detail_idx: Some("missing-song::200".to_string()),
+            track: Some(1),
+            played_at: Some("2026/03/05 22:00".to_string()),
+            credit_id: Some(11),
+            title: "Missing Song".to_string(),
+            genre: None,
+            artist: None,
+            chart_type: ChartType::Std,
+            diff_category: None,
+            level: Some("12?".to_string()),
+            achievement_percent: Some(100.5),
+            achievement_new_record: true,
+            score_rank: Some("SSS+".parse().unwrap()),
+            fc: Some("AP+".parse().unwrap()),
+            sync: Some("FDX+".parse().unwrap()),
+            dx_score: Some(1999),
+            dx_score_max: Some(2000),
+        };
+        let mut source = FixtureCollectorSource::from_data(FixtureCollectorData {
+            player_data: None,
+            recent_entries: Some(vec![entry.clone()]),
+            score_lists: Default::default(),
+            playlog_details: Default::default(),
+            song_details: Default::default(),
+        });
+
+        let resolved = resolve_recent_entries_and_collect_score_updates(
+            &mut source,
+            std::slice::from_ref(&entry),
+        )
+        .await;
+
+        assert_eq!(resolved.entries.len(), 1);
+        assert_eq!(resolved.entries[0].title, entry.title);
+        assert_eq!(resolved.entries[0].genre, entry.genre);
+        assert_eq!(resolved.entries[0].artist, entry.artist);
+        assert_eq!(resolved.entries[0].diff_category, entry.diff_category);
+        assert!(resolved.score_updates.is_empty());
+        assert_eq!(resolved.failed_targets, 1);
 
         Ok(())
     }

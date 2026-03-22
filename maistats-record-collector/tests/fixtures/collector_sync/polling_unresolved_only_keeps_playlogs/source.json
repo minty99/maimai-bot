@@ -1,0 +1,30 @@
+{
+  "player_data": {
+    "user_name": "fixture-user",
+    "rating": 12370,
+    "current_version_play_count": 51,
+    "total_play_count": 201
+  },
+  "recent_entries": [
+    {
+      "played_at_unixtime": 200100,
+      "playlog_detail_idx": "song-utage::200100",
+      "track": 1,
+      "played_at": "2026/03/05 14:10",
+      "credit_id": null,
+      "title": "Song Utage",
+      "genre": null,
+      "artist": null,
+      "chart_type": "STD",
+      "diff_category": null,
+      "level": "12?",
+      "achievement_percent": 100.5,
+      "achievement_new_record": true,
+      "score_rank": "SSS+",
+      "fc": "AP+",
+      "sync": "FDX+",
+      "dx_score": 1999,
+      "dx_score_max": 2000
+    }
+  ]
+}

@@ -125,6 +125,7 @@ fn assert_recent_outcome(
     expected_inserted_credits: usize,
     expected_inserted_playlogs: usize,
     expected_refreshed_scores: usize,
+    expected_failed_targets: usize,
 ) {
     match outcome.as_ref().expect("recent outcome present") {
         RecentSyncOutcome::Updated {
@@ -136,7 +137,7 @@ fn assert_recent_outcome(
             assert_eq!(*inserted_credits, expected_inserted_credits);
             assert_eq!(*inserted_playlogs, expected_inserted_playlogs);
             assert_eq!(*refreshed_scores, expected_refreshed_scores);
-            assert_eq!(*failed_targets, 0);
+            assert_eq!(*failed_targets, expected_failed_targets);
         }
         other => panic!("unexpected recent outcome: {other:?}"),
     }
@@ -402,7 +403,7 @@ async fn seed_small_startup_matches_expected_snapshots() -> eyre::Result<()> {
     assert!(!report.skipped_for_maintenance);
     assert!(report.seeded);
     assert_eq!(report.seeded_rows_written, 9);
-    assert_recent_outcome(&report.recent_outcome, 1, 3, 6);
+    assert_recent_outcome(&report.recent_outcome, 1, 3, 6, 0);
 
     let expected_scores: Vec<ScoreSnapshot> =
         read_json(&fixture_dir("seed_small_startup").join("expected_scores.json"));
@@ -429,7 +430,7 @@ async fn polling_update_small_updates_scores_and_playlogs() -> eyre::Result<()> 
 
     assert!(!report.skipped_for_maintenance);
     assert!(!report.seeded);
-    assert_recent_outcome(&report.recent_outcome, 1, 2, 2);
+    assert_recent_outcome(&report.recent_outcome, 1, 2, 2, 0);
 
     let expected_scores: Vec<ScoreSnapshot> =
         read_json(&fixture_dir("polling_update_small").join("expected_scores.json"));
@@ -437,6 +438,66 @@ async fn polling_update_small_updates_scores_and_playlogs() -> eyre::Result<()> 
         read_json(&fixture_dir("polling_update_small").join("expected_playlogs.json"));
     let expected_app_state: BTreeMap<String, String> =
         read_json(&fixture_dir("polling_update_small").join("expected_app_state.json"));
+
+    assert_eq!(snapshot_scores(&pool).await?, expected_scores);
+    assert_eq!(snapshot_playlogs(&pool).await?, expected_playlogs);
+    assert_eq!(snapshot_app_state(&pool).await?, expected_app_state);
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn polling_partial_resolve_keeps_playlogs() -> eyre::Result<()> {
+    let pool = test_db().await?;
+    let mut seed_source = load_fixture_source("seed_small_startup");
+    startup_sync_with_source(&pool, &mut seed_source).await?;
+
+    let mut update_source = load_fixture_source("polling_partial_resolve_keeps_playlogs");
+    let report = run_cycle_with_source(&pool, &mut update_source).await?;
+
+    assert!(!report.skipped_for_maintenance);
+    assert!(!report.seeded);
+    assert_recent_outcome(&report.recent_outcome, 1, 2, 2, 1);
+
+    let expected_scores: Vec<ScoreSnapshot> = read_json(
+        &fixture_dir("polling_partial_resolve_keeps_playlogs").join("expected_scores.json"),
+    );
+    let expected_playlogs: Vec<PlaylogSnapshot> = read_json(
+        &fixture_dir("polling_partial_resolve_keeps_playlogs").join("expected_playlogs.json"),
+    );
+    let expected_app_state: BTreeMap<String, String> = read_json(
+        &fixture_dir("polling_partial_resolve_keeps_playlogs").join("expected_app_state.json"),
+    );
+
+    assert_eq!(snapshot_scores(&pool).await?, expected_scores);
+    assert_eq!(snapshot_playlogs(&pool).await?, expected_playlogs);
+    assert_eq!(snapshot_app_state(&pool).await?, expected_app_state);
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn polling_unresolved_only_keeps_playlogs() -> eyre::Result<()> {
+    let pool = test_db().await?;
+    let mut seed_source = load_fixture_source("seed_small_startup");
+    startup_sync_with_source(&pool, &mut seed_source).await?;
+
+    let mut update_source = load_fixture_source("polling_unresolved_only_keeps_playlogs");
+    let report = run_cycle_with_source(&pool, &mut update_source).await?;
+
+    assert!(!report.skipped_for_maintenance);
+    assert!(!report.seeded);
+    assert_recent_outcome(&report.recent_outcome, 1, 1, 0, 1);
+
+    let expected_scores: Vec<ScoreSnapshot> = read_json(
+        &fixture_dir("polling_unresolved_only_keeps_playlogs").join("expected_scores.json"),
+    );
+    let expected_playlogs: Vec<PlaylogSnapshot> = read_json(
+        &fixture_dir("polling_unresolved_only_keeps_playlogs").join("expected_playlogs.json"),
+    );
+    let expected_app_state: BTreeMap<String, String> = read_json(
+        &fixture_dir("polling_unresolved_only_keeps_playlogs").join("expected_app_state.json"),
+    );
 
     assert_eq!(snapshot_scores(&pool).await?, expected_scores);
     assert_eq!(snapshot_playlogs(&pool).await?, expected_playlogs);
@@ -514,7 +575,7 @@ async fn polling_full_recent_truncates_oldest_partial_credit() -> eyre::Result<(
     let report = run_cycle_with_source(&pool, &mut source).await?;
 
     assert!(!report.skipped_for_maintenance);
-    assert_recent_outcome(&report.recent_outcome, 12, 48, 4);
+    assert_recent_outcome(&report.recent_outcome, 12, 48, 4, 0);
 
     let playlogs = snapshot_playlogs(&pool).await?;
     assert_eq!(playlogs.len(), 48);
