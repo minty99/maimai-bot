@@ -3,6 +3,7 @@ use std::str::FromStr;
 use eyre::WrapErr;
 use sqlx::sqlite::{SqliteConnectOptions, SqliteJournalMode, SqlitePoolOptions, SqliteSynchronous};
 use sqlx::{Pool, Sqlite};
+use tracing::info;
 
 use crate::tasks::utils::player::{
     STATE_KEY_CURRENT_VERSION_PLAY_COUNT, STATE_KEY_RATING, STATE_KEY_TOTAL_PLAY_COUNT,
@@ -178,10 +179,9 @@ async fn upsert_player_profile_snapshot_in_tx(
 async fn upsert_score(
     tx: &mut sqlx::Transaction<'_, Sqlite>,
     entry: &ParsedScoreEntry,
-) -> eyre::Result<()> {
+) -> eyre::Result<bool> {
     let achievement_x10000 = percent_to_x10000(entry.achievement_percent);
-
-    sqlx::query(
+    let result = sqlx::query(
         r#"
 		INSERT INTO scores (
 		  title, genre, artist, chart_type, diff_category,
@@ -198,6 +198,14 @@ async fn upsert_score(
 		  dx_score_max = excluded.dx_score_max,
 		  last_played_at = excluded.last_played_at,
 		  play_count = excluded.play_count
+        WHERE scores.achievement_x10000 IS NOT excluded.achievement_x10000
+           OR scores.rank IS NOT excluded.rank
+           OR scores.fc IS NOT excluded.fc
+           OR scores.sync IS NOT excluded.sync
+           OR scores.dx_score IS NOT excluded.dx_score
+           OR scores.dx_score_max IS NOT excluded.dx_score_max
+           OR scores.last_played_at IS NOT excluded.last_played_at
+           OR scores.play_count IS NOT excluded.play_count
 		"#,
     )
     .bind(&entry.title)
@@ -216,18 +224,26 @@ async fn upsert_score(
     .execute(&mut **tx)
     .await
     .wrap_err("upsert scores")?;
-    Ok(())
+    if result.rows_affected() == 0 {
+        return Ok(false);
+    }
+
+    info!(
+        "recent sync score upserted: {}",
+        entry.format_recent_sync_log_fields()
+    );
+    Ok(true)
 }
 
 async fn insert_playlog(
     tx: &mut sqlx::Transaction<'_, Sqlite>,
     played_at_unixtime: i64,
     entry: &ParsedPlayRecord,
-) -> eyre::Result<()> {
+) -> eyre::Result<bool> {
     let achievement_x10000 = percent_to_x10000(entry.achievement_percent);
 
     let achievement_new_record = i64::from(u8::from(entry.achievement_new_record));
-    sqlx::query(
+    let result = sqlx::query(
         r#"
 	INSERT INTO playlogs (
 	  played_at_unixtime,
@@ -260,7 +276,15 @@ async fn insert_playlog(
     .execute(&mut **tx)
     .await
     .wrap_err("insert playlogs")?;
-    Ok(())
+    if result.rows_affected() == 0 {
+        return Ok(false);
+    }
+
+    info!(
+        "recent sync playlog inserted: {}",
+        entry.format_recent_sync_log_fields()
+    );
+    Ok(true)
 }
 
 fn chart_type_str(t: ChartType) -> &'static str {
@@ -278,6 +302,49 @@ fn percent_to_x10000(percent: Option<f32>) -> Option<i64> {
 mod tests {
     use super::*;
     use models::DifficultyCategory;
+
+    fn sample_score_entry() -> ParsedScoreEntry {
+        ParsedScoreEntry {
+            title: "Song A".to_string(),
+            genre: "Genre A".to_string(),
+            artist: "Artist A".to_string(),
+            chart_type: ChartType::Dx,
+            diff_category: DifficultyCategory::Master,
+            level: "12+".to_string(),
+            achievement_percent: Some(99.1234),
+            rank: Some("SS".parse().unwrap()),
+            fc: Some("FC".parse().unwrap()),
+            sync: Some("FS".parse().unwrap()),
+            dx_score: Some(1000),
+            dx_score_max: Some(2000),
+            last_played_at: Some("2026/01/20 00:00".to_string()),
+            play_count: Some(3),
+            source_idx: None,
+        }
+    }
+
+    fn sample_playlog() -> ParsedPlayRecord {
+        ParsedPlayRecord {
+            played_at_unixtime: Some(123_456),
+            playlog_detail_idx: Some("song-a::123456".to_string()),
+            track: Some(1),
+            played_at: Some("2026/01/20 00:00".to_string()),
+            credit_id: Some(200),
+            title: "Song A".to_string(),
+            genre: Some("Genre A".to_string()),
+            artist: Some("Artist A".to_string()),
+            chart_type: ChartType::Dx,
+            diff_category: Some(DifficultyCategory::Master),
+            level: Some("12+".to_string()),
+            achievement_percent: Some(99.1234),
+            achievement_new_record: true,
+            score_rank: Some("SS".parse().unwrap()),
+            fc: Some("FC".parse().unwrap()),
+            sync: Some("FS".parse().unwrap()),
+            dx_score: Some(1000),
+            dx_score_max: Some(2000),
+        }
+    }
 
     #[tokio::test]
     async fn upsert_scores_overwrites_detail_fields() -> eyre::Result<()> {
@@ -395,6 +462,63 @@ mod tests {
             .fetch_all(&pool)
             .await?;
         assert_eq!(titles, vec!["Song B".to_string()]);
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn upsert_score_returns_true_for_insert_and_update() -> eyre::Result<()> {
+        let pool = connect("sqlite::memory:").await?;
+        migrate(&pool).await?;
+        let mut tx = pool.begin().await?;
+
+        let inserted = upsert_score(&mut tx, &sample_score_entry()).await?;
+        assert!(inserted);
+
+        let unchanged = upsert_score(&mut tx, &sample_score_entry()).await?;
+        assert!(!unchanged);
+
+        let mut updated_score = sample_score_entry();
+        updated_score.achievement_percent = Some(100.5);
+        updated_score.rank = Some("SSS".parse().unwrap());
+        updated_score.dx_score = Some(1234);
+        updated_score.dx_score_max = Some(2345);
+        updated_score.last_played_at = Some("2026/01/23 01:14".to_string());
+        updated_score.play_count = Some(7);
+
+        let updated = upsert_score(&mut tx, &updated_score).await?;
+        assert!(updated);
+        tx.commit().await?;
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn insert_playlog_returns_true_only_for_first_insert() -> eyre::Result<()> {
+        let pool = connect("sqlite::memory:").await?;
+        migrate(&pool).await?;
+        let mut tx = pool.begin().await?;
+
+        let first = insert_playlog(
+            &mut tx,
+            sample_playlog()
+                .played_at_unixtime
+                .expect("played_at_unixtime"),
+            &sample_playlog(),
+        )
+        .await?;
+        assert!(first);
+
+        let repeated = insert_playlog(
+            &mut tx,
+            sample_playlog()
+                .played_at_unixtime
+                .expect("played_at_unixtime"),
+            &sample_playlog(),
+        )
+        .await?;
+        assert!(!repeated);
+        tx.commit().await?;
 
         Ok(())
     }
