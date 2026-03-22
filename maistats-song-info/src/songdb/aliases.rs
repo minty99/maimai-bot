@@ -3,6 +3,7 @@ use models::SongAliases;
 use std::collections::HashMap;
 
 // The GCM-bot author granted permission to reuse these maimai alias files here.
+const GENERATED_KO_ALIAS_TSV: &str = include_str!("data/ko_generated_aliases.tsv");
 const EN_ALIAS_URL: &str =
     "https://raw.githubusercontent.com/lomotos10/GCM-bot/main/data/aliases/en/maimai.tsv";
 const KO_ALIAS_URL: &str =
@@ -11,8 +12,11 @@ const KO_ALIAS_URL: &str =
 pub(crate) async fn fetch_song_aliases(
     client: &reqwest::Client,
 ) -> eyre::Result<HashMap<String, SongAliases>> {
+    let generated_ko =
+        parse_alias_tsv(GENERATED_KO_ALIAS_TSV).wrap_err("parse bundled ko aliases")?;
     let en = fetch_aliases(client, "en", EN_ALIAS_URL).await?;
     let ko = fetch_aliases(client, "ko", KO_ALIAS_URL).await?;
+    let ko = merge_language_alias_maps(ko, generated_ko);
 
     Ok(merge_alias_maps(en, ko))
 }
@@ -85,9 +89,29 @@ fn merge_alias_maps(
     merged
 }
 
+fn merge_language_alias_maps(
+    primary: HashMap<String, Vec<String>>,
+    secondary: HashMap<String, Vec<String>>,
+) -> HashMap<String, Vec<String>> {
+    let mut merged = primary;
+
+    for (title, aliases) in secondary {
+        let existing = merged.entry(title).or_default();
+        for alias in aliases {
+            if existing.iter().any(|current| current == &alias) {
+                continue;
+            }
+            existing.push(alias);
+        }
+    }
+
+    merged
+}
+
 #[cfg(test)]
 mod tests {
-    use super::parse_alias_tsv;
+    use super::{merge_language_alias_maps, parse_alias_tsv};
+    use std::collections::HashMap;
 
     #[test]
     fn parse_alias_tsv_collects_alias_columns() {
@@ -119,6 +143,43 @@ mod tests {
         assert_eq!(
             parsed.get("").cloned(),
             Some(vec!["Alias 1".to_string(), "Alias 2".to_string()])
+        );
+    }
+
+    #[test]
+    fn merge_language_alias_maps_appends_new_aliases_without_duplicates() {
+        let primary = HashMap::from([
+            (
+                "Song A".to_string(),
+                vec!["Alias 1".to_string(), "Alias 2".to_string()],
+            ),
+            ("Song B".to_string(), vec!["Alias 3".to_string()]),
+        ]);
+        let secondary = HashMap::from([
+            (
+                "Song A".to_string(),
+                vec!["Alias 2".to_string(), "Alias 4".to_string()],
+            ),
+            ("Song C".to_string(), vec!["Alias 5".to_string()]),
+        ]);
+
+        let merged = merge_language_alias_maps(primary, secondary);
+
+        assert_eq!(
+            merged.get("Song A").cloned(),
+            Some(vec![
+                "Alias 1".to_string(),
+                "Alias 2".to_string(),
+                "Alias 4".to_string()
+            ])
+        );
+        assert_eq!(
+            merged.get("Song B").cloned(),
+            Some(vec!["Alias 3".to_string()])
+        );
+        assert_eq!(
+            merged.get("Song C").cloned(),
+            Some(vec!["Alias 5".to_string()])
         );
     }
 }
