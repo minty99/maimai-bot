@@ -1,10 +1,7 @@
-use std::collections::HashMap;
-use std::time::Duration;
+use std::collections::{HashMap, HashSet};
 
 use eyre::{Result, WrapErr};
 use sqlx::SqlitePool;
-use tokio::time::sleep;
-use tracing::warn;
 
 use crate::db::{apply_recent_sync_atomic, store_player_profile_snapshot};
 use crate::http_client::MaimaiClient;
@@ -19,18 +16,11 @@ use models::{
     ParsedPlayRecord, ParsedPlayerProfile, ParsedPlaylogDetail, ParsedScoreEntry, ParsedSongDetail,
 };
 
-const MAX_STALE_SONG_DETAIL_RETRIES: usize = 3;
-const STALE_SONG_DETAIL_RETRY_DELAY: Duration = Duration::from_secs(5);
-
 #[derive(Debug, Clone)]
 pub enum RecentSyncOutcome {
     SkippedUnchanged,
-    SeededWithoutPriorSnapshot {
-        inserted_playlogs: usize,
-        refreshed_scores: usize,
-        failed_targets: usize,
-    },
     Updated {
+        inserted_credits: usize,
         inserted_playlogs: usize,
         refreshed_scores: usize,
         failed_targets: usize,
@@ -80,8 +70,21 @@ pub(crate) async fn sync_recent_if_play_count_changed(
             Err(err) => return RecentSyncOutcome::FailedValidation(format!("{err:#}")),
         };
 
+    let new_entries = match filter_entries_for_new_credits(pool, &entries).await {
+        Ok(entries) => entries,
+        Err(err) => return RecentSyncOutcome::FailedRequest(format!("{err:#}")),
+    };
+
+    if new_entries.is_empty() {
+        let now = unix_timestamp();
+        return match store_player_profile_snapshot(pool, player_data, now).await {
+            Ok(()) => RecentSyncOutcome::SkippedUnchanged,
+            Err(err) => RecentSyncOutcome::FailedRequest(format!("{err:#}")),
+        };
+    }
+
     let (resolved_entries, score_updates) =
-        match resolve_recent_entries_and_collect_score_updates(pool, source, &entries).await {
+        match resolve_recent_entries_and_collect_score_updates(source, &new_entries).await {
             Ok(value) => value,
             Err(err) => return RecentSyncOutcome::FailedRequest(format!("{err:#}")),
         };
@@ -94,23 +97,53 @@ pub(crate) async fn sync_recent_if_play_count_changed(
         return RecentSyncOutcome::FailedRequest(format!("{err:#}"));
     }
 
-    if stored_total.is_some() {
-        RecentSyncOutcome::Updated {
-            inserted_playlogs: resolved_entries.len(),
-            refreshed_scores,
-            failed_targets: 0,
-        }
-    } else {
-        RecentSyncOutcome::SeededWithoutPriorSnapshot {
-            inserted_playlogs: resolved_entries.len(),
-            refreshed_scores,
-            failed_targets: 0,
-        }
+    RecentSyncOutcome::Updated {
+        inserted_credits: count_distinct_credit_ids(&resolved_entries),
+        inserted_playlogs: resolved_entries.len(),
+        refreshed_scores,
+        failed_targets: 0,
     }
 }
 
-async fn resolve_recent_entries_and_collect_score_updates(
+async fn filter_entries_for_new_credits(
     pool: &SqlitePool,
+    entries: &[ParsedPlayRecord],
+) -> Result<Vec<ParsedPlayRecord>> {
+    let candidate_credit_ids = entries
+        .iter()
+        .filter_map(|entry| entry.credit_id)
+        .collect::<HashSet<_>>();
+    if candidate_credit_ids.is_empty() {
+        return Ok(entries.to_vec());
+    }
+
+    let mut existing_credit_ids = HashSet::new();
+    for credit_id in candidate_credit_ids {
+        let exists = sqlx::query_scalar::<_, i64>(
+            "SELECT EXISTS(SELECT 1 FROM playlogs WHERE credit_id = ?1 LIMIT 1)",
+        )
+        .bind(i64::from(credit_id))
+        .fetch_one(pool)
+        .await
+        .wrap_err("check existing credit_id in playlogs")?;
+        if exists != 0 {
+            existing_credit_ids.insert(credit_id);
+        }
+    }
+
+    Ok(entries
+        .iter()
+        .filter(|entry| {
+            entry
+                .credit_id
+                .map(|credit_id| !existing_credit_ids.contains(&credit_id))
+                .unwrap_or(true)
+        })
+        .cloned()
+        .collect())
+}
+
+async fn resolve_recent_entries_and_collect_score_updates(
     source: &mut impl CollectorSource,
     entries: &[ParsedPlayRecord],
 ) -> Result<(Vec<ParsedPlayRecord>, Vec<ParsedScoreEntry>)> {
@@ -136,22 +169,19 @@ async fn resolve_recent_entries_and_collect_score_updates(
         }
 
         let detail =
-            fetch_song_detail_for_recent_entry(source, &mut detail_cache, &playlog_detail, entry)
-                .await?;
+            fetch_song_detail_for_recent_entry(source, &mut detail_cache, &playlog_detail).await?;
 
         let mut resolved = entry.clone();
         resolved.genre = detail.genre.clone();
         resolved.artist = Some(detail.artist.clone());
 
-        if score_row_is_affected(pool, &resolved).await? {
-            songs_to_refresh
-                .entry((
-                    detail.title.clone(),
-                    detail.genre.clone().unwrap_or_default(),
-                    detail.artist.clone(),
-                ))
-                .or_insert_with(|| score_entries_from_song_detail(detail.clone()));
-        }
+        songs_to_refresh
+            .entry((
+                detail.title.clone(),
+                detail.genre.clone().unwrap_or_default(),
+                detail.artist.clone(),
+            ))
+            .or_insert_with(|| score_entries_from_song_detail(detail.clone()));
 
         resolved_entries.push(resolved);
     }
@@ -161,43 +191,6 @@ async fn resolve_recent_entries_and_collect_score_updates(
         .flat_map(|entries| entries.into_iter())
         .collect::<Vec<_>>();
     Ok((resolved_entries, updates))
-}
-
-async fn score_row_is_affected(pool: &SqlitePool, recent: &ParsedPlayRecord) -> Result<bool> {
-    let Some(diff_category) = recent.diff_category else {
-        return Ok(true);
-    };
-    let Some(played_at) = recent.played_at.as_deref() else {
-        return Ok(true);
-    };
-    let genre = recent.genre.as_deref().unwrap_or("");
-    let artist = recent.artist.as_deref().unwrap_or("");
-
-    let stored_last_played_at = sqlx::query_scalar::<_, Option<String>>(
-        r#"
-        SELECT last_played_at
-        FROM scores
-        WHERE title = ?1
-          AND genre = ?2
-          AND artist = ?3
-          AND chart_type = ?4
-          AND diff_category = ?5
-        "#,
-    )
-    .bind(&recent.title)
-    .bind(genre)
-    .bind(artist)
-    .bind(recent.chart_type.as_str())
-    .bind(diff_category.as_str())
-    .fetch_optional(pool)
-    .await
-    .wrap_err("fetch stored last_played_at for affected song check")?
-    .flatten();
-
-    Ok(match stored_last_played_at.as_deref() {
-        Some(stored) => stored < played_at,
-        None => true,
-    })
 }
 
 fn titles_mismatch_when_present(left: &str, right: &str) -> bool {
@@ -215,6 +208,14 @@ fn unix_timestamp() -> i64 {
         .as_secs() as i64
 }
 
+fn count_distinct_credit_ids(entries: &[ParsedPlayRecord]) -> usize {
+    entries
+        .iter()
+        .filter_map(|entry| entry.credit_id)
+        .collect::<HashSet<_>>()
+        .len()
+}
+
 async fn backfill_incomplete_player_snapshot_or_fail(
     pool: &SqlitePool,
     player_data: &ParsedPlayerProfile,
@@ -230,87 +231,25 @@ async fn fetch_song_detail_for_recent_entry(
     source: &mut impl CollectorSource,
     cache: &mut SongDetailCache,
     playlog_detail: &ParsedPlaylogDetail,
-    recent: &ParsedPlayRecord,
 ) -> Result<ParsedSongDetail> {
-    if let Some(detail) = cache.get(&playlog_detail.music_detail_idx)
-        && !song_detail_is_stale_for_recent(&detail, recent)
-    {
+    if let Some(detail) = cache.get(&playlog_detail.music_detail_idx) {
         return Ok(detail);
     }
 
-    for attempt in 1..=MAX_STALE_SONG_DETAIL_RETRIES {
-        let detail = source
-            .fetch_song_detail(&playlog_detail.music_detail_idx)
-            .await
-            .wrap_err("fetch musicDetail from playlogDetail")?;
-        if titles_mismatch_when_present(&detail.title, &playlog_detail.title) {
-            return Err(eyre::eyre!(
-                "playlogDetail/musicDetail title mismatch: playlogDetail='{}' musicDetail='{}'",
-                playlog_detail.title,
-                detail.title
-            ));
-        }
-        if !song_detail_is_stale_for_recent(&detail, recent) {
-            cache.insert(playlog_detail.music_detail_idx.clone(), detail.clone());
-            return Ok(detail);
-        }
-
-        let observed_last_played_at = song_detail_last_played_at(&detail, recent)
-            .map(str::to_string)
-            .unwrap_or_else(|| "missing".to_string());
-        if attempt == MAX_STALE_SONG_DETAIL_RETRIES {
-            return Err(eyre::eyre!(
-                "musicDetail remained stale after {} attempts: title='{}' music_detail_idx='{}' expected_last_played_at='{}' observed_last_played_at='{}'",
-                MAX_STALE_SONG_DETAIL_RETRIES,
-                recent.title,
-                playlog_detail.music_detail_idx,
-                recent.played_at.as_deref().unwrap_or("missing"),
-                observed_last_played_at
-            ));
-        }
-
-        warn!(
-            "musicDetail stale for recent-triggered score refresh; retrying: title='{}' music_detail_idx='{}' expected_last_played_at='{}' observed_last_played_at='{}' attempt={}/{}",
-            recent.title,
-            playlog_detail.music_detail_idx,
-            recent.played_at.as_deref().unwrap_or("missing"),
-            observed_last_played_at,
-            attempt,
-            MAX_STALE_SONG_DETAIL_RETRIES
-        );
-        sleep(STALE_SONG_DETAIL_RETRY_DELAY).await;
+    let detail = source
+        .fetch_song_detail(&playlog_detail.music_detail_idx)
+        .await
+        .wrap_err("fetch musicDetail from playlogDetail")?;
+    if titles_mismatch_when_present(&detail.title, &playlog_detail.title) {
+        return Err(eyre::eyre!(
+            "playlogDetail/musicDetail title mismatch: playlogDetail='{}' musicDetail='{}'",
+            playlog_detail.title,
+            detail.title
+        ));
     }
 
-    Err(eyre::eyre!(
-        "unreachable stale musicDetail retry exit for title='{}'",
-        recent.title
-    ))
-}
-
-fn song_detail_is_stale_for_recent(detail: &ParsedSongDetail, recent: &ParsedPlayRecord) -> bool {
-    let Some(expected_played_at) = recent.played_at.as_deref() else {
-        return false;
-    };
-
-    match song_detail_last_played_at(detail, recent) {
-        Some(stored_last_played_at) => stored_last_played_at < expected_played_at,
-        None => true,
-    }
-}
-
-fn song_detail_last_played_at<'a>(
-    detail: &'a ParsedSongDetail,
-    recent: &ParsedPlayRecord,
-) -> Option<&'a str> {
-    let diff_category = recent.diff_category?;
-
-    detail
-        .difficulties
-        .iter()
-        .find(|difficulty| {
-            difficulty.chart_type == recent.chart_type && difficulty.diff_category == diff_category
-        })
-        .and_then(|difficulty| difficulty.last_played_at.as_deref())
+    cache.insert(playlog_detail.music_detail_idx.clone(), detail.clone());
+    Ok(detail)
 }
 
 pub(crate) fn annotate_recent_entries_with_credit_id(
@@ -339,6 +278,7 @@ pub(crate) fn annotate_recent_entries_with_credit_id(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::tasks::utils::source::{FixtureCollectorData, FixtureCollectorSource};
     use models::{ChartType, DifficultyCategory, ParsedSongChartDetail, ParsedSongDetail};
 
     #[test]
@@ -368,19 +308,41 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn score_row_is_affected_when_missing_or_older() -> eyre::Result<()> {
+    async fn recent_entries_always_refresh_scores_even_when_played_at_matches_existing()
+    -> eyre::Result<()> {
         let pool = crate::db::connect("sqlite::memory:").await?;
         crate::db::migrate(&pool).await?;
+        crate::db::upsert_scores(
+            &pool,
+            &[models::ParsedScoreEntry {
+                title: "Song A".to_string(),
+                genre: "Genre A".to_string(),
+                artist: "Artist A".to_string(),
+                chart_type: ChartType::Dx,
+                diff_category: DifficultyCategory::Master,
+                level: "12+".to_string(),
+                achievement_percent: Some(99.0),
+                rank: Some("SS".parse().unwrap()),
+                fc: Some("FC".parse().unwrap()),
+                sync: Some("FS".parse().unwrap()),
+                dx_score: Some(1980),
+                dx_score_max: Some(2100),
+                last_played_at: Some("2026/03/05 22:03".to_string()),
+                play_count: Some(10),
+                source_idx: None,
+            }],
+        )
+        .await?;
 
         let recent = ParsedPlayRecord {
             played_at_unixtime: Some(1),
-            playlog_detail_idx: Some("14,1".to_string()),
+            playlog_detail_idx: Some("song-a::1".to_string()),
             track: Some(1),
-            played_at: Some("2026/01/23 12:34".to_string()),
+            played_at: Some("2026/03/05 22:03".to_string()),
             credit_id: Some(1),
             title: "Song A".to_string(),
-            genre: Some("Genre A".to_string()),
-            artist: Some("Artist A".to_string()),
+            genre: None,
+            artist: None,
             chart_type: ChartType::Dx,
             diff_category: Some(models::DifficultyCategory::Master),
             level: None,
@@ -392,7 +354,163 @@ mod tests {
             dx_score: None,
             dx_score_max: None,
         };
-        assert!(score_row_is_affected(&pool, &recent).await?);
+        let detail = ParsedSongDetail {
+            title: "Song A".to_string(),
+            genre: Some("Genre A".to_string()),
+            artist: "Artist A".to_string(),
+            chart_type: ChartType::Dx,
+            difficulties: vec![ParsedSongChartDetail {
+                diff_category: DifficultyCategory::Master,
+                level: "12+".to_string(),
+                chart_type: ChartType::Dx,
+                achievement_percent: Some(100.2),
+                rank: Some("SSS".parse().unwrap()),
+                fc: Some("AP".parse().unwrap()),
+                sync: Some("FDX+".parse().unwrap()),
+                dx_score: Some(2050),
+                dx_score_max: Some(2100),
+                last_played_at: Some("2026/03/05 22:15".to_string()),
+                play_count: Some(11),
+            }],
+        };
+        let mut source = FixtureCollectorSource::from_data(FixtureCollectorData {
+            player_data: None,
+            recent_entries: Some(vec![recent]),
+            score_lists: Default::default(),
+            playlog_details: Default::default(),
+            song_details: std::collections::BTreeMap::from([("song-a".to_string(), detail)]),
+        });
+        let entries = source.fetch_recent_entries().await?;
+
+        let (_, score_updates) =
+            resolve_recent_entries_and_collect_score_updates(&mut source, &entries).await?;
+
+        assert_eq!(score_updates.len(), 1);
+        assert_eq!(score_updates[0].title, "Song A");
+        assert_eq!(
+            score_updates[0].last_played_at.as_deref(),
+            Some("2026/03/05 22:15")
+        );
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn filters_out_entries_for_existing_credits_before_detail_fetch() -> eyre::Result<()> {
+        let pool = crate::db::connect("sqlite::memory:").await?;
+        crate::db::migrate(&pool).await?;
+        crate::db::apply_recent_sync_atomic(
+            &pool,
+            &[],
+            &[ParsedPlayRecord {
+                played_at_unixtime: Some(100),
+                playlog_detail_idx: Some("old-song::100".to_string()),
+                track: Some(1),
+                played_at: Some("2026/03/05 21:00".to_string()),
+                credit_id: Some(10),
+                title: "Old Song".to_string(),
+                genre: Some("Genre".to_string()),
+                artist: Some("Artist".to_string()),
+                chart_type: ChartType::Std,
+                diff_category: Some(DifficultyCategory::Basic),
+                level: Some("4".to_string()),
+                achievement_percent: Some(90.0),
+                achievement_new_record: false,
+                score_rank: Some("AA".parse().unwrap()),
+                fc: None,
+                sync: None,
+                dx_score: Some(900),
+                dx_score_max: Some(1000),
+            }],
+            &ParsedPlayerProfile {
+                user_name: "fixture-user".to_string(),
+                rating: 10_000,
+                current_version_play_count: 10,
+                total_play_count: 10,
+            },
+            1,
+        )
+        .await?;
+
+        let old_entry = ParsedPlayRecord {
+            played_at_unixtime: Some(100),
+            playlog_detail_idx: Some("old-song::100".to_string()),
+            track: Some(1),
+            played_at: Some("2026/03/05 21:00".to_string()),
+            credit_id: Some(10),
+            title: "Old Song".to_string(),
+            genre: None,
+            artist: None,
+            chart_type: ChartType::Std,
+            diff_category: Some(DifficultyCategory::Basic),
+            level: Some("4".to_string()),
+            achievement_percent: Some(90.0),
+            achievement_new_record: false,
+            score_rank: Some("AA".parse().unwrap()),
+            fc: None,
+            sync: None,
+            dx_score: Some(900),
+            dx_score_max: Some(1000),
+        };
+        let new_entry = ParsedPlayRecord {
+            played_at_unixtime: Some(200),
+            playlog_detail_idx: Some("new-song::200".to_string()),
+            track: Some(1),
+            played_at: Some("2026/03/05 22:00".to_string()),
+            credit_id: Some(11),
+            title: "New Song".to_string(),
+            genre: None,
+            artist: None,
+            chart_type: ChartType::Std,
+            diff_category: Some(DifficultyCategory::Basic),
+            level: Some("4".to_string()),
+            achievement_percent: Some(95.0),
+            achievement_new_record: true,
+            score_rank: Some("AAA".parse().unwrap()),
+            fc: Some("FC".parse().unwrap()),
+            sync: Some("FS".parse().unwrap()),
+            dx_score: Some(950),
+            dx_score_max: Some(1000),
+        };
+
+        let filtered =
+            filter_entries_for_new_credits(&pool, &[old_entry.clone(), new_entry.clone()]).await?;
+        assert_eq!(filtered.len(), 1);
+        assert_eq!(filtered[0].credit_id, Some(11));
+        assert_eq!(filtered[0].title, "New Song");
+
+        let mut source = FixtureCollectorSource::from_data(FixtureCollectorData {
+            player_data: None,
+            recent_entries: Some(vec![old_entry, new_entry]),
+            score_lists: Default::default(),
+            playlog_details: Default::default(),
+            song_details: std::collections::BTreeMap::from([(
+                "new-song".to_string(),
+                ParsedSongDetail {
+                    title: "New Song".to_string(),
+                    genre: Some("Genre".to_string()),
+                    artist: "Artist".to_string(),
+                    chart_type: ChartType::Std,
+                    difficulties: vec![ParsedSongChartDetail {
+                        diff_category: DifficultyCategory::Basic,
+                        level: "4".to_string(),
+                        chart_type: ChartType::Std,
+                        achievement_percent: Some(95.0),
+                        rank: Some("AAA".parse().unwrap()),
+                        fc: Some("FC".parse().unwrap()),
+                        sync: Some("FS".parse().unwrap()),
+                        dx_score: Some(950),
+                        dx_score_max: Some(1000),
+                        last_played_at: Some("2026/03/05 22:03".to_string()),
+                        play_count: Some(2),
+                    }],
+                },
+            )]),
+        });
+        let (_, score_updates) =
+            resolve_recent_entries_and_collect_score_updates(&mut source, &filtered).await?;
+        assert_eq!(score_updates.len(), 1);
+        assert_eq!(source.fetch_log().len(), 2);
+
         Ok(())
     }
 
@@ -403,58 +521,5 @@ mod tests {
         assert!(!titles_mismatch_when_present("", "Song A"));
         assert!(!titles_mismatch_when_present("Song A", "Song A"));
         assert!(titles_mismatch_when_present("Song A", "Song B"));
-    }
-
-    #[test]
-    fn song_detail_staleness_detects_older_last_played() {
-        let recent = ParsedPlayRecord {
-            played_at_unixtime: Some(1),
-            playlog_detail_idx: Some("14,1".to_string()),
-            track: Some(1),
-            played_at: Some("2026/03/14 12:34".to_string()),
-            credit_id: Some(1),
-            title: "Song A".to_string(),
-            genre: Some("Genre A".to_string()),
-            artist: Some("Artist A".to_string()),
-            chart_type: ChartType::Dx,
-            diff_category: Some(DifficultyCategory::Master),
-            level: None,
-            achievement_percent: None,
-            achievement_new_record: false,
-            score_rank: None,
-            fc: None,
-            sync: None,
-            dx_score: None,
-            dx_score_max: None,
-        };
-        let stale_detail = ParsedSongDetail {
-            title: "Song A".to_string(),
-            genre: Some("Genre A".to_string()),
-            artist: "Artist A".to_string(),
-            chart_type: ChartType::Dx,
-            difficulties: vec![ParsedSongChartDetail {
-                diff_category: DifficultyCategory::Master,
-                level: "12+".to_string(),
-                chart_type: ChartType::Dx,
-                achievement_percent: Some(100.0),
-                rank: None,
-                fc: None,
-                sync: None,
-                dx_score: Some(1000),
-                dx_score_max: Some(1500),
-                last_played_at: Some("2026/03/14 12:20".to_string()),
-                play_count: Some(5),
-            }],
-        };
-        let fresh_detail = ParsedSongDetail {
-            difficulties: vec![ParsedSongChartDetail {
-                last_played_at: Some("2026/03/14 12:34".to_string()),
-                ..stale_detail.difficulties[0].clone()
-            }],
-            ..stale_detail.clone()
-        };
-
-        assert!(song_detail_is_stale_for_recent(&stale_detail, &recent));
-        assert!(!song_detail_is_stale_for_recent(&fresh_detail, &recent));
     }
 }

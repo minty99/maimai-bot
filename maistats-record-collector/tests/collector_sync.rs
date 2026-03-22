@@ -122,27 +122,18 @@ fn load_fixture_source(name: &str) -> FixtureCollectorSource {
 
 fn assert_recent_outcome(
     outcome: &Option<RecentSyncOutcome>,
+    expected_inserted_credits: usize,
     expected_inserted_playlogs: usize,
     expected_refreshed_scores: usize,
-    updated: bool,
 ) {
     match outcome.as_ref().expect("recent outcome present") {
         RecentSyncOutcome::Updated {
+            inserted_credits,
             inserted_playlogs,
             refreshed_scores,
             failed_targets,
         } => {
-            assert!(updated, "expected seeded outcome, got updated");
-            assert_eq!(*inserted_playlogs, expected_inserted_playlogs);
-            assert_eq!(*refreshed_scores, expected_refreshed_scores);
-            assert_eq!(*failed_targets, 0);
-        }
-        RecentSyncOutcome::SeededWithoutPriorSnapshot {
-            inserted_playlogs,
-            refreshed_scores,
-            failed_targets,
-        } => {
-            assert!(!updated, "expected updated outcome, got seeded");
+            assert_eq!(*inserted_credits, expected_inserted_credits);
             assert_eq!(*inserted_playlogs, expected_inserted_playlogs);
             assert_eq!(*refreshed_scores, expected_refreshed_scores);
             assert_eq!(*failed_targets, 0);
@@ -411,7 +402,7 @@ async fn seed_small_startup_matches_expected_snapshots() -> eyre::Result<()> {
     assert!(!report.skipped_for_maintenance);
     assert!(report.seeded);
     assert_eq!(report.seeded_rows_written, 9);
-    assert_recent_outcome(&report.recent_outcome, 3, 0, false);
+    assert_recent_outcome(&report.recent_outcome, 1, 3, 6);
 
     let expected_scores: Vec<ScoreSnapshot> =
         read_json(&fixture_dir("seed_small_startup").join("expected_scores.json"));
@@ -438,7 +429,7 @@ async fn polling_update_small_updates_scores_and_playlogs() -> eyre::Result<()> 
 
     assert!(!report.skipped_for_maintenance);
     assert!(!report.seeded);
-    assert_recent_outcome(&report.recent_outcome, 2, 2, true);
+    assert_recent_outcome(&report.recent_outcome, 1, 2, 2);
 
     let expected_scores: Vec<ScoreSnapshot> =
         read_json(&fixture_dir("polling_update_small").join("expected_scores.json"));
@@ -523,7 +514,7 @@ async fn polling_full_recent_truncates_oldest_partial_credit() -> eyre::Result<(
     let report = run_cycle_with_source(&pool, &mut source).await?;
 
     assert!(!report.skipped_for_maintenance);
-    assert_recent_outcome(&report.recent_outcome, 48, 4, false);
+    assert_recent_outcome(&report.recent_outcome, 12, 48, 4);
 
     let playlogs = snapshot_playlogs(&pool).await?;
     assert_eq!(playlogs.len(), 48);
