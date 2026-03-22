@@ -25,26 +25,17 @@ impl From<SeedScoresOutcome> for SyncCycleReport {
 pub(crate) fn log_recent_outcome(scope: &str, outcome: &RecentSyncOutcome) {
     match outcome {
         RecentSyncOutcome::SkippedUnchanged => {
-            info!("{scope} recent sync skipped: play count unchanged");
-        }
-        RecentSyncOutcome::SeededWithoutPriorSnapshot {
-            inserted_playlogs,
-            refreshed_scores,
-            failed_targets,
-        } => {
-            info!(
-                "{scope} recent sync seeded without prior snapshot: playlogs={} refreshed_scores={} failed_targets={}",
-                inserted_playlogs, refreshed_scores, failed_targets
-            );
+            info!("{scope} recent sync skipped: play count unchanged or no new recent credits");
         }
         RecentSyncOutcome::Updated {
+            inserted_credits,
             inserted_playlogs,
             refreshed_scores,
             failed_targets,
         } => {
             info!(
-                "{scope} recent sync updated: playlogs={} refreshed_scores={} failed_targets={}",
-                inserted_playlogs, refreshed_scores, failed_targets
+                "{scope} recent sync updated: credits={} playlogs={} refreshed_scores={} failed_targets={}",
+                inserted_credits, inserted_playlogs, refreshed_scores, failed_targets
             );
         }
         RecentSyncOutcome::FailedValidation(message) => {
