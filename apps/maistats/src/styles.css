@@ -1581,61 +1581,6 @@ tbody tr:last-child td {
   overflow: hidden;
 }
 
-.history-chart-topline {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(220px, 280px);
-  gap: 12px;
-  align-items: start;
-  margin-bottom: 14px;
-}
-
-.history-metric-strip {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 10px;
-}
-
-.history-metric,
-.history-inspector {
-  min-width: 0;
-  border: 1px solid color-mix(in srgb, var(--line-strong) 78%, transparent);
-  border-radius: 12px;
-  background: color-mix(in srgb, var(--panel-raised) 82%, transparent);
-  padding: 12px 14px;
-}
-
-.history-metric {
-  display: grid;
-  gap: 5px;
-}
-
-.history-metric-label,
-.history-inspector-label {
-  color: var(--muted);
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-}
-
-.history-metric strong,
-.history-inspector strong {
-  font-size: 1.05rem;
-  line-height: 1.15;
-  font-variant-numeric: tabular-nums;
-}
-
-.history-inspector {
-  display: grid;
-  gap: 6px;
-  justify-items: start;
-}
-
-.history-inspector span:last-child {
-  color: var(--ink-dim);
-  font-size: 0.825rem;
-}
-
 .history-chart-stage {
   border: 1px solid color-mix(in srgb, var(--line-strong) 72%, transparent);
   border-radius: 14px;
@@ -1727,6 +1672,34 @@ tbody tr:last-child td {
 .history-point-active {
   fill: color-mix(in srgb, white 92%, var(--accent) 8%);
   stroke: color-mix(in srgb, var(--accent) 84%, white);
+}
+
+.history-tooltip-box {
+  fill: rgba(10, 10, 16, 0.96);
+  stroke: color-mix(in srgb, white 9%, transparent);
+  stroke-width: 1;
+}
+
+.history-tooltip-connector {
+  stroke: color-mix(in srgb, var(--accent) 45%, white 10%);
+  stroke-width: 1.2;
+}
+
+.history-tooltip-value,
+.history-tooltip-time {
+  font-family: 'Pretendard Variable', Pretendard, sans-serif;
+  pointer-events: none;
+}
+
+.history-tooltip-value {
+  fill: #f8fafc;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.history-tooltip-time {
+  fill: #9ea5b5;
+  font-size: 11px;
 }
 
 .history-active-guide {
@@ -1913,22 +1886,6 @@ tbody tr:last-child td {
 .modal-close-button {
   font-size: 0.875rem;
   flex-shrink: 0;
-}
-
-@media (max-width: 900px) {
-  .history-chart-topline {
-    grid-template-columns: minmax(0, 1fr);
-  }
-
-  .history-inspector {
-    order: -1;
-  }
-}
-
-@media (max-width: 720px) {
-  .history-metric-strip {
-    grid-template-columns: minmax(0, 1fr);
-  }
 }
 
 .modal-header-actions {

@@ -1,7 +1,7 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 
 import { useI18n } from '../app/i18n';
-import { formatNumber, formatPercent } from '../app/utils';
+import { formatPercent } from '../app/utils';
 import { ChartTypeLabel } from './ChartTypeLabel';
 import { DifficultyLabel } from './DifficultyLabel';
 import { Jacket } from './Jacket';
@@ -21,6 +21,9 @@ const CHART_HEIGHT = 360;
 const CHART_MARGIN = { top: 18, right: 28, bottom: 68, left: 84 };
 const POINT_RADIUS = 5;
 const ACTIVE_POINT_RADIUS = 7;
+const TOOLTIP_WIDTH = 188;
+const TOOLTIP_HEIGHT = 58;
+const TOOLTIP_GAP = 14;
 
 interface ChartPoint extends ScoreHistoryPoint {
   chartX: number;
@@ -59,16 +62,8 @@ function formatPointTime(unixtime: number, locale: string): string {
   });
 }
 
-function formatDeltaPercent(value: number): string {
-  const formatted = formatPercent(Math.abs(value));
-
-  if (value > 0) {
-    return `+${formatted}`;
-  }
-  if (value < 0) {
-    return `-${formatted}`;
-  }
-  return formatted;
+function clamp(value: number, min: number, max: number): number {
+  return Math.min(Math.max(value, min), max);
 }
 
 function buildAreaPath(points: ChartPoint[], baselineY: number): string {
@@ -99,10 +94,6 @@ export function ScoreHistoryModal({
   const { locale, t } = useI18n();
   const [hoveredPointKey, setHoveredPointKey] = useState<string | null>(null);
   const shouldShowLoadingState = isLoading && historyPoints.length === 0;
-
-  useEffect(() => {
-    setHoveredPointKey(historyPoints[historyPoints.length - 1]?.key ?? null);
-  }, [historyPoints]);
 
   if (!selectedHistoryRow) {
     return null;
@@ -149,16 +140,32 @@ export function ScoreHistoryModal({
     chartX: toChartX(point.playedAtUnix),
     chartY: toChartY(point.achievementPercent),
   }));
-  const firstPoint = chartPoints[0] ?? null;
-  const latestPoint = chartPoints[chartPoints.length - 1] ?? null;
   const hoveredPoint = chartPoints.find((point) => point.key === hoveredPointKey) ?? null;
-  const activePoint = hoveredPoint ?? latestPoint;
+  const activePoint = hoveredPoint;
   const linePoints = chartPoints
     .map((point) => `${point.chartX},${point.chartY}`)
     .join(' ');
   const areaPath = buildAreaPath(chartPoints, CHART_MARGIN.top + innerHeight);
-  const totalGain = firstPoint && latestPoint
-    ? latestPoint.achievementPercent - firstPoint.achievementPercent
+  const tooltipMinX = CHART_MARGIN.left + 8;
+  const tooltipMaxX = CHART_MARGIN.left + innerWidth - TOOLTIP_WIDTH - 8;
+  const tooltipBaseX = activePoint ? activePoint.chartX - TOOLTIP_WIDTH / 2 : 0;
+  const tooltipX = clamp(tooltipBaseX, tooltipMinX, tooltipMaxX);
+  const shouldPlaceTooltipBelow = activePoint
+    ? activePoint.chartY - TOOLTIP_HEIGHT - TOOLTIP_GAP < CHART_MARGIN.top + 6
+    : false;
+  const tooltipMinY = CHART_MARGIN.top + 6;
+  const tooltipMaxY = CHART_MARGIN.top + innerHeight - TOOLTIP_HEIGHT - 6;
+  const tooltipBaseY = activePoint
+    ? shouldPlaceTooltipBelow
+      ? activePoint.chartY + TOOLTIP_GAP
+      : activePoint.chartY - TOOLTIP_HEIGHT - TOOLTIP_GAP
+    : 0;
+  const tooltipY = clamp(tooltipBaseY, tooltipMinY, tooltipMaxY);
+  const tooltipAnchorX = activePoint ? clamp(activePoint.chartX, tooltipX + 18, tooltipX + TOOLTIP_WIDTH - 18) : 0;
+  const tooltipAnchorY = activePoint
+    ? shouldPlaceTooltipBelow
+      ? tooltipY
+      : tooltipY + TOOLTIP_HEIGHT
     : 0;
 
   return (
@@ -204,33 +211,6 @@ export function ScoreHistoryModal({
               className="history-chart-panel"
               onMouseLeave={() => setHoveredPointKey(null)}
             >
-              <div className="history-chart-topline">
-                <div className="history-metric-strip" aria-label={t('history.graphLabel', { title: selectedHistoryRow.title })}>
-                  <div className="history-metric">
-                    <span className="history-metric-label">{t('history.currentBest')}</span>
-                    <strong>{formatPercent(latestPoint?.achievementPercent ?? null)}</strong>
-                  </div>
-                  <div className="history-metric">
-                    <span className="history-metric-label">{t('history.totalGain')}</span>
-                    <strong>{formatDeltaPercent(totalGain)}</strong>
-                  </div>
-                  <div className="history-metric">
-                    <span className="history-metric-label">{t('history.improvements')}</span>
-                    <strong>{formatNumber(chartPoints.length, locale)}</strong>
-                  </div>
-                </div>
-
-                {activePoint ? (
-                  <div className="history-inspector" aria-live="polite">
-                    <span className="history-inspector-label">
-                      {hoveredPoint ? t('history.focusPoint') : t('history.latestPoint')}
-                    </span>
-                    <strong>{formatPercent(activePoint.achievementPercent)}</strong>
-                    <span>{activePoint.playedAtLabel ?? formatPointTime(activePoint.playedAtUnix, locale)}</span>
-                  </div>
-                ) : null}
-              </div>
-
               <div className="history-chart-stage">
                 <svg
                   viewBox={`0 0 ${CHART_WIDTH} ${CHART_HEIGHT}`}
@@ -326,14 +306,47 @@ export function ScoreHistoryModal({
                   {areaPath ? <path className="history-area" d={areaPath} /> : null}
 
                   {activePoint ? (
-                    <line
-                      className="history-active-guide"
-                      x1={activePoint.chartX}
-                      x2={activePoint.chartX}
-                      y1={CHART_MARGIN.top}
-                      y2={CHART_MARGIN.top + innerHeight}
-                      vectorEffect="non-scaling-stroke"
-                    />
+                    <g className="history-chart-tooltip" aria-live="polite">
+                      <line
+                        className="history-active-guide"
+                        x1={activePoint.chartX}
+                        x2={activePoint.chartX}
+                        y1={CHART_MARGIN.top}
+                        y2={CHART_MARGIN.top + innerHeight}
+                        vectorEffect="non-scaling-stroke"
+                      />
+                      <line
+                        className="history-tooltip-connector"
+                        x1={tooltipAnchorX}
+                        x2={activePoint.chartX}
+                        y1={tooltipAnchorY}
+                        y2={activePoint.chartY}
+                        vectorEffect="non-scaling-stroke"
+                      />
+                      <rect
+                        className="history-tooltip-box"
+                        x={tooltipX}
+                        y={tooltipY}
+                        width={TOOLTIP_WIDTH}
+                        height={TOOLTIP_HEIGHT}
+                        rx={12}
+                        ry={12}
+                      />
+                      <text
+                        className="history-tooltip-value"
+                        x={tooltipX + 14}
+                        y={tooltipY + 24}
+                      >
+                        {formatPercent(activePoint.achievementPercent)}
+                      </text>
+                      <text
+                        className="history-tooltip-time"
+                        x={tooltipX + 14}
+                        y={tooltipY + 42}
+                      >
+                        {activePoint.playedAtLabel ?? formatPointTime(activePoint.playedAtUnix, locale)}
+                      </text>
+                    </g>
                   ) : null}
 
                   {historyPoints.length > 1 ? (
