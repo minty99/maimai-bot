@@ -330,12 +330,9 @@ export function ScoreHistoryModal({
                         height={TOOLTIP_HEIGHT}
                       >
                         <div className="history-tooltip-card">
-                          <div className="history-tooltip-row">
-                            <span className="history-tooltip-label">{t('history.axisAchievement')}</span>
-                            <strong className="history-tooltip-value">
-                              {formatPercent(activePoint.achievementPercent)}
-                            </strong>
-                          </div>
+                          <strong className="history-tooltip-value">
+                            {formatPercent(activePoint.achievementPercent)}
+                          </strong>
                           <div className="history-tooltip-time">
                             {activePoint.playedAtLabel ?? formatPointTime(activePoint.playedAtUnix, locale)}
                           </div>

@@ -1696,29 +1696,6 @@ tbody tr:last-child td {
   pointer-events: none;
 }
 
-.history-tooltip-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-}
-
-.history-tooltip-label {
-  display: inline-flex;
-  align-items: center;
-  min-height: 20px;
-  padding: 0 7px;
-  border: 1px solid color-mix(in srgb, var(--accent) 18%, transparent);
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--accent) 14%, var(--panel));
-  color: color-mix(in srgb, var(--accent) 75%, white 12%);
-  font-size: 10px;
-  font-weight: 700;
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
-  white-space: nowrap;
-}
-
 .history-tooltip-value {
   color: var(--ink);
   font-size: 0.98rem;
