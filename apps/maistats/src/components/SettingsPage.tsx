@@ -1,11 +1,13 @@
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import type { Dispatch, ReactNode, SetStateAction } from 'react';
 
 import {
   checkRecordCollectorHealth,
+  fetchCollectorLogs,
   formatApiErrorMessage,
   LocalizedApiError,
 } from '../api';
+import type { CollectorLogEntry } from '../types';
 import { useI18n, type LanguagePreference } from '../app/i18n';
 
 type ThemePreference = 'system' | 'light' | 'dark';
@@ -21,6 +23,7 @@ interface SettingsPageProps {
   setSongInfoUrlDraft: Dispatch<SetStateAction<string>>;
   recordCollectorUrlDraft: string;
   setRecordCollectorUrlDraft: Dispatch<SetStateAction<string>>;
+  recordCollectorUrl: string;
   onApplySongInfoUrl: () => void;
   onApplyRecordCollectorUrl: (url: string) => void;
 }
@@ -36,6 +39,7 @@ export function SettingsPage({
   setSongInfoUrlDraft,
   recordCollectorUrlDraft,
   setRecordCollectorUrlDraft,
+  recordCollectorUrl,
   onApplySongInfoUrl,
   onApplyRecordCollectorUrl,
 }: SettingsPageProps) {
@@ -43,7 +47,69 @@ export function SettingsPage({
   const [isRcChecking, setIsRcChecking] = useState(false);
   const [rcCheckError, setRcCheckError] = useState<string | null>(null);
   const [rcConnectedPlayer, setRcConnectedPlayer] = useState<string | null>(null);
+  const [collectorLogs, setCollectorLogs] = useState<CollectorLogEntry[]>([]);
+  const [collectorLogsError, setCollectorLogsError] = useState<string | null>(null);
+  const [isCollectorLogsLoading, setIsCollectorLogsLoading] = useState(false);
   const rcAbortRef = useRef<AbortController | null>(null);
+  const logsAbortRef = useRef<AbortController | null>(null);
+
+  const handleSaveLogs = useCallback(() => {
+    if (collectorLogs.length === 0) {
+      return;
+    }
+
+    const blob = new Blob([collectorLogs.map((entry) => entry.line).join('\n')], {
+      type: 'text/plain;charset=utf-8',
+    });
+    const objectUrl = URL.createObjectURL(blob);
+    const anchor = document.createElement('a');
+    anchor.href = objectUrl;
+    anchor.download = `maistats-record-collector-logs-${new Date().toISOString().replace(/:/g, '-')}.txt`;
+    anchor.click();
+    URL.revokeObjectURL(objectUrl);
+  }, [collectorLogs]);
+
+  const loadCollectorLogs = useCallback(async (baseUrl?: string) => {
+    const url = (baseUrl ?? recordCollectorUrl).trim();
+    if (!url) {
+      logsAbortRef.current?.abort();
+      setCollectorLogs([]);
+      setCollectorLogsError(null);
+      setIsCollectorLogsLoading(false);
+      return;
+    }
+
+    logsAbortRef.current?.abort();
+    const controller = new AbortController();
+    logsAbortRef.current = controller;
+
+    setIsCollectorLogsLoading(true);
+    setCollectorLogsError(null);
+
+    try {
+      const response = await fetchCollectorLogs(url, controller.signal);
+      if (controller.signal.aborted) return;
+
+      setCollectorLogs(response.logs);
+    } catch (error) {
+      if (controller.signal.aborted) return;
+      setCollectorLogsError(
+        t('settings.logs.failed', { message: formatApiErrorMessage(error, t) }),
+      );
+    } finally {
+      if (!controller.signal.aborted) {
+        setIsCollectorLogsLoading(false);
+      }
+    }
+  }, [recordCollectorUrl, t]);
+
+  useEffect(() => {
+    void loadCollectorLogs();
+
+    return () => {
+      logsAbortRef.current?.abort();
+    };
+  }, [loadCollectorLogs]);
 
   const handleConnectRc = useCallback(async () => {
     const url = recordCollectorUrlDraft.trim();
@@ -62,6 +128,7 @@ export function SettingsPage({
       if (controller.signal.aborted) return;
       setRcConnectedPlayer(profile.user_name);
       onApplyRecordCollectorUrl(url);
+      void loadCollectorLogs(url);
     } catch (error) {
       if (controller.signal.aborted) return;
       const message = formatApiErrorMessage(error, t);
@@ -75,7 +142,7 @@ export function SettingsPage({
         setIsRcChecking(false);
       }
     }
-  }, [onApplyRecordCollectorUrl, recordCollectorUrlDraft, t]);
+  }, [loadCollectorLogs, onApplyRecordCollectorUrl, recordCollectorUrlDraft, t]);
 
   return (
     <div className="explorer-layout settings-layout">
@@ -155,6 +222,60 @@ export function SettingsPage({
           <hr className="settings-divider" />
 
           <div className="settings-field-group">
+            <div className="panel-heading compact settings-log-header">
+              <div>
+                <h3>{t('settings.logs.title')}</h3>
+                <p>{t('settings.logs.description')}</p>
+              </div>
+              <div className="settings-log-actions">
+                <button
+                  type="button"
+                  onClick={handleSaveLogs}
+                  disabled={collectorLogs.length === 0}
+                >
+                  {t('settings.logs.save')}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void loadCollectorLogs()}
+                  disabled={isCollectorLogsLoading || !recordCollectorUrl.trim()}
+                >
+                  {isCollectorLogsLoading ? t('settings.logs.refreshing') : t('settings.logs.refresh')}
+                </button>
+              </div>
+            </div>
+            {!recordCollectorUrl.trim() ? (
+              <p className="settings-meta">{t('settings.logs.emptyUrl')}</p>
+            ) : (
+              <p className="settings-meta">
+                {t('settings.logs.count', {
+                  shown: collectorLogs.length,
+                })}
+              </p>
+            )}
+            {collectorLogsError ? (
+              <p className="home-status home-status-error">{collectorLogsError}</p>
+            ) : null}
+            <div className="settings-log-shell" aria-busy={isCollectorLogsLoading}>
+              {isCollectorLogsLoading && collectorLogs.length === 0 ? (
+                <div className="table-loading-state">{t('settings.logs.refreshing')}</div>
+              ) : collectorLogs.length > 0 ? (
+                <pre className="settings-log-output">
+                  {collectorLogs.map((entry) => entry.line).join('\n')}
+                </pre>
+              ) : (
+                <div className="settings-log-empty">
+                  {recordCollectorUrl.trim()
+                    ? t('settings.logs.empty')
+                    : t('settings.logs.emptyUrl')}
+                </div>
+              )}
+            </div>
+          </div>
+
+          <hr className="settings-divider" />
+
+          <div className="settings-field-group">
             <div className="panel-heading compact">
               <div>
                 <h3>{t('settings.language.title')}</h3>
@@ -202,7 +323,6 @@ export function SettingsPage({
           </div>
 
           <hr className="settings-divider" />
-
         </section>
       </div>
     </div>

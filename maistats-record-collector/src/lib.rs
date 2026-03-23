@@ -2,15 +2,17 @@ pub(crate) mod config;
 pub mod db;
 pub(crate) mod error;
 pub(crate) mod http_client;
+pub mod logging;
 pub(crate) mod routes;
 pub(crate) mod state;
 pub mod tasks;
 
 use eyre::WrapErr;
 use std::net::SocketAddr;
+use std::sync::Arc;
 use tokio::net::TcpListener;
 
-pub async fn run_server() -> eyre::Result<()> {
+pub async fn run_server(log_buffer: Arc<logging::LogBuffer>) -> eyre::Result<()> {
     tracing::info!("Record collector server starting...");
 
     let config = config::RecordCollectorConfig::from_env()
@@ -44,6 +46,7 @@ pub async fn run_server() -> eyre::Result<()> {
     let app_state = state::AppState {
         db_pool,
         config: config.clone(),
+        log_buffer,
     };
 
     tasks::polling::start_background_polling(app_state.clone());

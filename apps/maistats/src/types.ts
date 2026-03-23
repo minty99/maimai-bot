@@ -33,6 +33,15 @@ export interface ApiErrorResponse {
   maintenance?: boolean;
 }
 
+export interface CollectorLogEntry {
+  line: string;
+}
+
+export interface CollectorLogsResponse {
+  logs: CollectorLogEntry[];
+  total: number;
+}
+
 export interface ScoreApiResponse {
   title: string;
   genre: string;

@@ -1,6 +1,7 @@
 import type { TranslationKey, TranslationVariables } from './app/i18n';
 import type {
   ApiErrorResponse,
+  CollectorLogsResponse,
   PlayRecordApiResponse,
   ScoreApiResponse,
   SongInfoListResponse,
@@ -40,6 +41,7 @@ export interface ExplorerPayload {
 }
 
 const RECENT_LIMIT = 10000;
+const COLLECTOR_LOG_LIMIT = 1000;
 
 function normalizeBaseUrl(url: string): string {
   return url.trim().replace(/\/+$/, '');
@@ -158,6 +160,21 @@ export async function fetchRecentPlaylogs(
   }
 
   return getJson<PlayRecordApiResponse[]>(`${recordBase}/api/recent?limit=${RECENT_LIMIT}`, signal);
+}
+
+export async function fetchCollectorLogs(
+  recordCollectorBaseUrl: string,
+  signal?: AbortSignal,
+): Promise<CollectorLogsResponse> {
+  const recordBase = normalizeBaseUrl(recordCollectorBaseUrl);
+  if (!recordBase) {
+    throw new LocalizedApiError('api.recordCollectorRequired');
+  }
+
+  return getJson<CollectorLogsResponse>(
+    `${recordBase}/api/logs?limit=${COLLECTOR_LOG_LIMIT}`,
+    signal,
+  );
 }
 
 export async function fetchSongVersions(
