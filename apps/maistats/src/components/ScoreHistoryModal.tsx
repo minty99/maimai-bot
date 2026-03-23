@@ -21,9 +21,9 @@ const CHART_HEIGHT = 360;
 const CHART_MARGIN = { top: 18, right: 28, bottom: 68, left: 84 };
 const POINT_RADIUS = 5;
 const ACTIVE_POINT_RADIUS = 7;
-const TOOLTIP_WIDTH = 220;
-const TOOLTIP_HEIGHT = 86;
-const TOOLTIP_GAP = 16;
+const TOOLTIP_WIDTH = 196;
+const TOOLTIP_HEIGHT = 64;
+const TOOLTIP_GAP = 14;
 
 interface ChartPoint extends ScoreHistoryPoint {
   chartX: number;
@@ -330,14 +330,15 @@ export function ScoreHistoryModal({
                         height={TOOLTIP_HEIGHT}
                       >
                         <div className="history-tooltip-card">
-                          <div className="history-tooltip-topline">
-                            <span className="history-tooltip-mark" />
-                            <span>{activePoint.playedAtLabel ?? formatPointTime(activePoint.playedAtUnix, locale)}</span>
+                          <div className="history-tooltip-row">
+                            <span className="history-tooltip-label">{t('history.axisAchievement')}</span>
+                            <strong className="history-tooltip-value">
+                              {formatPercent(activePoint.achievementPercent)}
+                            </strong>
                           </div>
-                          <strong className="history-tooltip-value">
-                            {formatPercent(activePoint.achievementPercent)}
-                          </strong>
-                          <div className="history-tooltip-footer" />
+                          <div className="history-tooltip-time">
+                            {activePoint.playedAtLabel ?? formatPointTime(activePoint.playedAtUnix, locale)}
+                          </div>
                         </div>
                       </foreignObject>
                     </g>
