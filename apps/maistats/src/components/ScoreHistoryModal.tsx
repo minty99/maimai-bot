@@ -21,9 +21,9 @@ const CHART_HEIGHT = 360;
 const CHART_MARGIN = { top: 18, right: 28, bottom: 68, left: 84 };
 const POINT_RADIUS = 5;
 const ACTIVE_POINT_RADIUS = 7;
-const TOOLTIP_WIDTH = 188;
-const TOOLTIP_HEIGHT = 58;
-const TOOLTIP_GAP = 14;
+const TOOLTIP_WIDTH = 220;
+const TOOLTIP_HEIGHT = 86;
+const TOOLTIP_GAP = 16;
 
 interface ChartPoint extends ScoreHistoryPoint {
   chartX: number;
@@ -323,29 +323,23 @@ export function ScoreHistoryModal({
                         y2={activePoint.chartY}
                         vectorEffect="non-scaling-stroke"
                       />
-                      <rect
-                        className="history-tooltip-box"
+                      <foreignObject
                         x={tooltipX}
                         y={tooltipY}
                         width={TOOLTIP_WIDTH}
                         height={TOOLTIP_HEIGHT}
-                        rx={12}
-                        ry={12}
-                      />
-                      <text
-                        className="history-tooltip-value"
-                        x={tooltipX + 14}
-                        y={tooltipY + 24}
                       >
-                        {formatPercent(activePoint.achievementPercent)}
-                      </text>
-                      <text
-                        className="history-tooltip-time"
-                        x={tooltipX + 14}
-                        y={tooltipY + 42}
-                      >
-                        {activePoint.playedAtLabel ?? formatPointTime(activePoint.playedAtUnix, locale)}
-                      </text>
+                        <div className="history-tooltip-card">
+                          <div className="history-tooltip-topline">
+                            <span className="history-tooltip-mark" />
+                            <span>{activePoint.playedAtLabel ?? formatPointTime(activePoint.playedAtUnix, locale)}</span>
+                          </div>
+                          <strong className="history-tooltip-value">
+                            {formatPercent(activePoint.achievementPercent)}
+                          </strong>
+                          <div className="history-tooltip-footer" />
+                        </div>
+                      </foreignObject>
                     </g>
                   ) : null}
 
