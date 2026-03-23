@@ -2370,6 +2370,57 @@ tbody tr:last-child td {
   margin: 4px 0;
 }
 
+.settings-log-header {
+  display: flex;
+  align-items: start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.settings-log-header button {
+  white-space: nowrap;
+}
+
+.settings-log-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.settings-log-shell {
+  min-height: 240px;
+  border: 1px solid var(--line);
+  background: rgba(8, 10, 20, 0.88);
+  border-radius: 2px;
+  overflow: auto;
+}
+
+.settings-log-output,
+.settings-log-empty {
+  margin: 0;
+  padding: 12px 14px;
+  font-size: 0.78rem;
+  line-height: 1.65;
+  font-family:
+    "SFMono-Regular",
+    "SF Mono",
+    Consolas,
+    "Liberation Mono",
+    Menlo,
+    monospace;
+  color: #d7e2f0;
+}
+
+.settings-log-output {
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.settings-log-empty {
+  color: #90a4ba;
+}
+
 .app-nav-list button:disabled {
   opacity: 0.28;
   cursor: not-allowed;

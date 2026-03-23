@@ -1492,6 +1492,7 @@ function App() {
             setSongInfoUrlDraft={setSongInfoUrlDraft}
             recordCollectorUrlDraft={recordCollectorUrlDraft}
             setRecordCollectorUrlDraft={setRecordCollectorUrlDraft}
+            recordCollectorUrl={recordCollectorUrl}
             onApplySongInfoUrl={handleApplySongInfoUrl}
             onApplyRecordCollectorUrl={handleApplyRecordCollectorUrl}
           />

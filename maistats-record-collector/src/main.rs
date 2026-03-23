@@ -1,17 +1,13 @@
 use eyre::WrapErr;
-use maistats_record_collector::run_server;
-use tracing_subscriber::EnvFilter;
+use maistats_record_collector::{logging::init_tracing, run_server};
 
 #[tokio::main]
 async fn main() -> eyre::Result<()> {
     dotenvy::dotenv().ok();
 
-    // Initialize tracing
-    tracing_subscriber::fmt()
-        .with_env_filter(
-            EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info")),
-        )
-        .init();
+    let log_buffer = init_tracing().wrap_err("initialize tracing")?;
 
-    run_server().await.wrap_err("run record collector server")
+    run_server(log_buffer)
+        .await
+        .wrap_err("run record collector server")
 }
