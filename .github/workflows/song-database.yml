@@ -1,0 +1,100 @@
+name: Song Database
+
+on:
+  pull_request:
+    paths:
+      - .github/workflows/song-database.yml
+      - .github/scripts/upload-song-database.sh
+      - Cargo.toml
+      - Cargo.lock
+      - rust-toolchain.toml
+      - .env.example
+      - crates/**
+      - maistats-song-info/**
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/song-database.yml
+      - .github/scripts/upload-song-database.sh
+      - Cargo.toml
+      - Cargo.lock
+      - rust-toolchain.toml
+      - .env.example
+      - crates/**
+      - maistats-song-info/**
+  schedule:
+    - cron: "30 22 * * *"
+  workflow_dispatch:
+
+jobs:
+  validate:
+    if: (github.event_name == 'pull_request' || github.event_name == 'push') && secrets.MAIMAI_INTL_SEGA_ID != '' && secrets.MAIMAI_INTL_SEGA_PASSWORD != '' && secrets.MAIMAI_JP_SEGA_ID != '' && secrets.MAIMAI_JP_SEGA_PASSWORD != '' && secrets.USER_AGENT != ''
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo artifacts
+        uses: Swatinem/rust-cache@v2
+
+      - name: Generate song database
+        env:
+          SONG_DATA_PATH: /tmp/song_data
+          MAIMAI_INTL_SEGA_ID: ${{ secrets.MAIMAI_INTL_SEGA_ID }}
+          MAIMAI_INTL_SEGA_PASSWORD: ${{ secrets.MAIMAI_INTL_SEGA_PASSWORD }}
+          MAIMAI_JP_SEGA_ID: ${{ secrets.MAIMAI_JP_SEGA_ID }}
+          MAIMAI_JP_SEGA_PASSWORD: ${{ secrets.MAIMAI_JP_SEGA_PASSWORD }}
+          USER_AGENT: ${{ secrets.USER_AGENT }}
+        run: cargo run -p maistats-song-info
+
+      - name: Validate generated artifacts
+        env:
+          SONG_DATA_PATH: /tmp/song_data
+        run: |
+          test -f "${SONG_DATA_PATH}/data.json"
+          test -d "${SONG_DATA_PATH}/cover"
+
+  publish:
+    if: (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && secrets.MAIMAI_INTL_SEGA_ID != '' && secrets.MAIMAI_INTL_SEGA_PASSWORD != '' && secrets.MAIMAI_JP_SEGA_ID != '' && secrets.MAIMAI_JP_SEGA_PASSWORD != '' && secrets.USER_AGENT != '' && secrets.R2_BUCKET_NAME != '' && secrets.R2_ENDPOINT != '' && secrets.R2_ACCESS_KEY_ID != '' && secrets.R2_SECRET_ACCESS_KEY != '' && secrets.R2_PUBLIC_BASE_URL != ''
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo artifacts
+        uses: Swatinem/rust-cache@v2
+
+      - name: Install AWS CLI
+        run: sudo apt-get update && sudo apt-get install -y awscli
+
+      - name: Generate song database
+        env:
+          SONG_DATA_PATH: /tmp/song_data
+          MAIMAI_INTL_SEGA_ID: ${{ secrets.MAIMAI_INTL_SEGA_ID }}
+          MAIMAI_INTL_SEGA_PASSWORD: ${{ secrets.MAIMAI_INTL_SEGA_PASSWORD }}
+          MAIMAI_JP_SEGA_ID: ${{ secrets.MAIMAI_JP_SEGA_ID }}
+          MAIMAI_JP_SEGA_PASSWORD: ${{ secrets.MAIMAI_JP_SEGA_PASSWORD }}
+          USER_AGENT: ${{ secrets.USER_AGENT }}
+        run: cargo run -p maistats-song-info
+
+      - name: Upload to R2
+        env:
+          SONG_DATA_PATH: /tmp/song_data
+          R2_BUCKET_NAME: ${{ secrets.R2_BUCKET_NAME }}
+          R2_ENDPOINT: ${{ secrets.R2_ENDPOINT }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+        run: bash ./.github/scripts/upload-song-database.sh
+
+      - name: Smoke check public data.json
+        env:
+          R2_PUBLIC_BASE_URL: ${{ secrets.R2_PUBLIC_BASE_URL }}
+        run: curl -fsSL "${R2_PUBLIC_BASE_URL}/data.json" > /dev/null

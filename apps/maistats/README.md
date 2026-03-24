@@ -1,6 +1,6 @@
 # maistats
 
-`maistats-song-info`와 `maistats-record-collector` 데이터를 탐색하는 Vite + React 기반 웹 프론트엔드입니다.
+정적 song database와 `maistats-record-collector` 데이터를 탐색하는 Vite + React 기반 웹 프론트엔드입니다.
 
 ## Requirements
 
@@ -34,7 +34,7 @@ cp apps/maistats/.env.example apps/maistats/.env
 3. 필요하면 `.env` 값을 수정:
 
 ```env
-SONG_INFO_SERVER_URL=<your-song-info-server-origin>
+SONG_DATABASE_URL=https://maimai-charts.muhwan.dev
 RECORD_COLLECTOR_SERVER_URL=<your-record-collector-server-origin>
 ```
 
@@ -50,8 +50,8 @@ npm run dev --workspace apps/maistats
 
 ## Environment Variables
 
-- `SONG_INFO_SERVER_URL`
-  - `maistats-song-info` origin
+- `SONG_DATABASE_URL`
+  - static song database base URL
 - `RECORD_COLLECTOR_SERVER_URL`
   - `maistats-record-collector` origin
 
@@ -98,7 +98,7 @@ npm run preview --workspace apps/maistats
 
 환경 변수:
 
-- Production과 Preview 모두에 `SONG_INFO_SERVER_URL`, `RECORD_COLLECTOR_SERVER_URL` 설정
+- Production과 Preview 모두에 `SONG_DATABASE_URL`, `RECORD_COLLECTOR_SERVER_URL` 설정
 - 필요하면 custom domain 연결
 
 이 저장소는 `@cloudflare/vite-plugin`과 `wrangler.jsonc`를 포함하므로 루트에서 `npx wrangler deploy --config apps/maistats/wrangler.jsonc` 형태의 배포도 지원합니다.
