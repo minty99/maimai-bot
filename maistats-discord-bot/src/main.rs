@@ -3,6 +3,7 @@ use poise::serenity_prelude as serenity;
 use poise::{CreateReply, FrameworkOptions};
 use tracing::{info, warn};
 
+mod chart_links;
 mod client;
 mod commands;
 mod config;
