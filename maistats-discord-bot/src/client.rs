@@ -1,7 +1,7 @@
 use eyre::{Result, WrapErr};
 use models::{
-    ChartType, DifficultyCategory, ParsedPlayerProfile, PlayRecordApiResponse, SongChartRegion,
-    SongDetailScoreApiResponse,
+    ChartType, DifficultyCategory, ParsedPlayerProfile, PlayRecordApiResponse, SongAliases,
+    SongChartRegion, SongDetailScoreApiResponse,
 };
 use reqwest::{Client, Url};
 use serde::{Deserialize, Serialize};
@@ -75,6 +75,7 @@ pub(crate) struct SongMetadata {
     pub(crate) version: Option<String>,
     pub(crate) genre: String,
     pub(crate) artist: String,
+    pub(crate) aliases: SongAliases,
     pub(crate) region: SongChartRegion,
 }
 

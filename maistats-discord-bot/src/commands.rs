@@ -1,4 +1,5 @@
 use eyre::WrapErr;
+use models::SongAliases;
 use poise::CreateReply;
 use poise::serenity_prelude as serenity;
 use std::collections::BTreeMap;
@@ -149,11 +150,11 @@ pub(crate) async fn mai_score(
         .await
         .wrap_err("search song metadata")?;
 
-    let mut unique_songs = BTreeMap::new();
+    let mut unique_songs = BTreeMap::<(String, String, String), SongAliases>::new();
     for song in response.items {
         unique_songs
             .entry((song.title, song.genre, song.artist))
-            .or_insert(());
+            .or_insert(song.aliases);
     }
 
     if unique_songs.is_empty() {
@@ -171,7 +172,7 @@ pub(crate) async fn mai_score(
         ctx.send(
             CreateReply::default()
                 .ephemeral(true)
-                .embed(embed_base("여러 곡이 검색됐어요").description(description)),
+                .embed(embed_base("Multiple songs found").description(description)),
         )
         .await?;
         return Ok(());
@@ -342,7 +343,11 @@ pub(crate) async fn mai_song_info(
         .wrap_err("search song metadata")?;
 
     let mut songs = BTreeMap::<(String, String, String), Vec<SongMetadata>>::new();
+    let mut song_aliases = BTreeMap::<(String, String, String), SongAliases>::new();
     for item in response.items {
+        song_aliases
+            .entry((item.title.clone(), item.genre.clone(), item.artist.clone()))
+            .or_insert_with(|| item.aliases.clone());
         songs
             .entry((item.title.clone(), item.genre.clone(), item.artist.clone()))
             .or_default()
@@ -360,18 +365,12 @@ pub(crate) async fn mai_song_info(
     }
 
     if songs.len() > 2 {
-        let candidates = songs
-            .keys()
-            .take(8)
-            .map(|(title, genre, artist)| format!("`{title}` / `{genre}` / `{artist}`"))
-            .collect::<Vec<_>>()
-            .join("\n");
-        ctx.send(CreateReply::default().ephemeral(true).embed(
-            embed_base("여러 곡이 검색됐어요").description(format!(
-                "정확히 일치하는 제목의 곡이 여러 개 있습니다.\n후보:\n{}",
-                candidates
-            )),
-        ))
+        ctx.send(
+            CreateReply::default().ephemeral(true).embed(
+                embed_base("Multiple songs found")
+                    .description(duplicate_song_candidates_description(&song_aliases)),
+            ),
+        )
         .await?;
         return Ok(());
     }
@@ -746,18 +745,59 @@ async fn fetch_song_metadata(
 }
 
 fn duplicate_song_candidates_description(
-    candidates: &BTreeMap<(String, String, String), ()>,
+    candidates: &BTreeMap<(String, String, String), SongAliases>,
 ) -> String {
     let lines = candidates
-        .keys()
+        .iter()
         .take(8)
-        .map(|(title, genre, artist)| format!("`{title}` / `{genre}` / `{artist}`"))
+        .map(|((title, genre, artist), aliases)| {
+            format_song_candidate_line(title, genre, artist, aliases)
+        })
         .collect::<Vec<_>>();
 
     format!(
-        "검색어와 정확히 일치하는 곡이 여러 개 있습니다.\n후보:\n{}",
+        "Multiple songs exactly match your search.\nCandidates:\n{}",
         lines.join("\n")
     )
+}
+
+fn format_song_candidate_line(
+    title: &str,
+    genre: &str,
+    artist: &str,
+    aliases: &SongAliases,
+) -> String {
+    let mut line = format!("{title} / {genre} / {artist}");
+    if let Some(alias_summary) = format_song_alias_summary(aliases) {
+        line.push_str(&format!(" (alias: {alias_summary})"));
+    }
+    line
+}
+
+fn format_song_alias_summary(aliases: &SongAliases) -> Option<String> {
+    let mut values = Vec::new();
+    for alias in aliases.en.iter().chain(aliases.ko.iter()) {
+        let alias = alias.trim();
+        if alias.is_empty() || values.iter().any(|existing| existing == alias) {
+            continue;
+        }
+        values.push(alias.to_string());
+    }
+
+    if values.is_empty() {
+        return None;
+    }
+
+    const MAX_ALIASES: usize = 6;
+    let total = values.len();
+    values.truncate(MAX_ALIASES);
+
+    let mut summary = values.join(", ");
+    if total > MAX_ALIASES {
+        summary.push_str(", ...");
+    }
+
+    Some(summary)
 }
 
 fn build_region_unreleased_line(sheets: &[SongMetadata]) -> Option<String> {
@@ -850,7 +890,11 @@ fn chart_rating_points(internal_level: f64, achievement_percent: f64, ap_bonus: 
 
 #[cfg(test)]
 mod tests {
-    use super::latest_credit_len;
+    use super::{
+        duplicate_song_candidates_description, format_song_alias_summary, latest_credit_len,
+    };
+    use models::SongAliases;
+    use std::collections::BTreeMap;
 
     #[test]
     fn latest_credit_len_uses_first_track_one_boundary() {
@@ -862,5 +906,50 @@ mod tests {
     fn latest_credit_len_falls_back_to_four_when_track_one_is_missing() {
         assert_eq!(latest_credit_len(&[Some(4), Some(3), Some(2), Some(5)]), 4);
         assert_eq!(latest_credit_len(&[Some(4), Some(3)]), 2);
+    }
+
+    #[test]
+    fn format_song_alias_summary_deduplicates_and_limits_values() {
+        let aliases = SongAliases {
+            en: vec![
+                "aaa".to_string(),
+                "bbb".to_string(),
+                "ccc".to_string(),
+                "ddd".to_string(),
+            ],
+            ko: vec![
+                "bbb".to_string(),
+                "eee".to_string(),
+                "fff".to_string(),
+                "ggg".to_string(),
+            ],
+        };
+
+        assert_eq!(
+            format_song_alias_summary(&aliases).as_deref(),
+            Some("aaa, bbb, ccc, ddd, eee, fff, ...")
+        );
+    }
+
+    #[test]
+    fn duplicate_song_candidates_description_is_english_and_includes_aliases() {
+        let mut candidates = BTreeMap::new();
+        candidates.insert(
+            (
+                "Test Song".to_string(),
+                "POPS & ANIME".to_string(),
+                "Composer".to_string(),
+            ),
+            SongAliases {
+                en: vec!["alias-a".to_string()],
+                ko: vec!["별칭".to_string()],
+            },
+        );
+
+        let description = duplicate_song_candidates_description(&candidates);
+
+        assert!(description.starts_with("Multiple songs exactly match your search."));
+        assert!(description.contains("Test Song / POPS & ANIME / Composer"));
+        assert!(description.contains("(alias: alias-a, 별칭)"));
     }
 }
