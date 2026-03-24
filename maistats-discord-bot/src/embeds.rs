@@ -2,6 +2,7 @@ use models::{ChartType, DifficultyCategory, FcStatus, ScoreRank, SyncStatus};
 use poise::serenity_prelude as serenity;
 use serenity::builder::{CreateEmbed, CreateEmbedFooter};
 
+use crate::chart_links::linked_chart_label;
 use crate::emoji::{MaimaiStatusEmojis, format_fc, format_rank, format_sync};
 
 const EMBED_COLOR: u32 = 0x51BCF3;
@@ -64,20 +65,20 @@ pub(crate) fn format_level_with_internal(level: &str, internal_level: Option<f32
 }
 
 fn format_recent_title(record: &RecentRecordView) -> String {
-    let diff = record
-        .diff_category
-        .map(|d| d.as_str())
-        .unwrap_or("Unknown");
+    record.title.clone()
+}
+
+fn format_recent_chart_line(record: &RecentRecordView) -> String {
     let level = record
-        .internal_level
-        .map(|v| format!("{v:.1}"))
-        .or_else(|| record.level.clone())
+        .level
+        .as_deref()
+        .map(|v| format_level_with_internal(v, record.internal_level))
         .unwrap_or_else(|| "N/A".to_string());
 
-    format!(
-        "{} [{} {} {}]",
-        record.title, record.chart_type, diff, level
-    )
+    match record.diff_category {
+        Some(diff) => linked_chart_label(&record.title, record.chart_type, diff, &level),
+        None => format!("[{}] Unknown {}", record.chart_type, level),
+    }
 }
 
 fn format_recent_detail_lines(
@@ -139,7 +140,11 @@ pub(crate) fn build_mai_recent_embeds(
     }
 
     embeds.extend(records.iter().map(|record| {
-        let mut desc = format_recent_detail_lines(record, status_emojis);
+        let mut desc = format!(
+            "{}\n{}",
+            format_recent_chart_line(record),
+            format_recent_detail_lines(record, status_emojis)
+        );
         if record.achievement_new_record {
             desc.push_str("\n**NEW RECORD**");
         }

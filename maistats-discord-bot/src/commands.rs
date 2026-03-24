@@ -6,6 +6,7 @@ use time::{Duration as TimeDuration, OffsetDateTime, UtcOffset};
 use tracing::warn;
 
 use crate::BotData;
+use crate::chart_links::{linked_chart_label, linked_short_difficulty};
 use crate::client::{
     ApiError, RecordCollectorClient, SongInfoClient, SongMetadata, SongMetadataSearchRequest,
     normalize_record_collector_url,
@@ -281,7 +282,8 @@ pub(crate) async fn mai_score(
             first_image_name = metadata.and_then(|m| m.image_name);
         }
 
-        let field_name = format!("[{}] {} {}", score.chart_type, score.diff_category, level);
+        let field_name =
+            linked_chart_label(&score.title, score.chart_type, score.diff_category, &level);
 
         let field_value = if detail_suffix.is_empty() {
             format!("{achievement_percent:.4}% • {rank} • {fc} • {sync}")
@@ -438,13 +440,7 @@ fn build_song_info_embed(
                 continue;
             };
 
-            let short = match difficulty {
-                models::DifficultyCategory::Basic => "B",
-                models::DifficultyCategory::Advanced => "A",
-                models::DifficultyCategory::Expert => "E",
-                models::DifficultyCategory::Master => "M",
-                models::DifficultyCategory::ReMaster => "R",
-            };
+            let short = linked_short_difficulty(song_title, chart_type, difficulty);
 
             let mut part = format!(
                 "{short} {}",
