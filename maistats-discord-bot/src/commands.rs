@@ -184,7 +184,10 @@ pub(crate) async fn mai_score(
         .get_song_detail_scores(&resolved_title, &resolved_genre, &resolved_artist)
         .await
     {
-        Ok(v) => v,
+        Ok(mut v) => {
+            v.sort_by_key(|s| (s.chart_type.as_u8(), s.diff_category));
+            v
+        }
         Err(e) => {
             if let Some(api_error) = e.downcast_ref::<ApiError>() {
                 match api_error.code() {
