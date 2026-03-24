@@ -2,15 +2,14 @@ use eyre::WrapErr;
 use models::SongAliases;
 use poise::CreateReply;
 use poise::serenity_prelude as serenity;
-use std::collections::BTreeMap;
 use time::{Duration as TimeDuration, OffsetDateTime, UtcOffset};
 use tracing::warn;
 
 use crate::BotData;
 use crate::chart_links::{linked_chart_label, linked_short_difficulty};
 use crate::client::{
-    ApiError, RecordCollectorClient, SongInfoClient, SongMetadata, SongMetadataSearchRequest,
-    normalize_record_collector_url,
+    ApiError, RecordCollectorClient, SongCatalogSheet, SongCatalogSong, SongInfoClient,
+    SongMetadata, normalize_record_collector_url,
 };
 use crate::db;
 use crate::embeds::{
@@ -136,53 +135,38 @@ pub(crate) async fn mai_score(
         return Ok(());
     }
 
-    let response = ctx
-        .data()
-        .song_info_client
-        .search_song_metadata(&SongMetadataSearchRequest {
-            title: Some(requested_title.to_string()),
-            genre: None,
-            artist: None,
-            chart_type: None,
-            diff_category: None,
-            limits: Some(100),
-        })
+    let matched_songs = search_song_catalog(&ctx.data().song_info_client, requested_title)
         .await
-        .wrap_err("search song metadata")?;
+        .wrap_err("search song catalog")?;
 
-    let mut unique_songs = BTreeMap::<(String, String, String), SongAliases>::new();
-    for song in response.items {
-        unique_songs
-            .entry((song.title, song.genre, song.artist))
-            .or_insert(song.aliases);
-    }
-
-    if unique_songs.is_empty() {
+    if matched_songs.is_empty() {
         ctx.send(
             CreateReply::default()
                 .ephemeral(true)
-                .embed(embed_base("No records found").description("No scores for this title.")),
+                .embed(embed_base("No song found").description("No matching title or alias.")),
         )
         .await?;
         return Ok(());
     }
 
-    if unique_songs.len() > 1 {
-        let description = duplicate_song_candidates_description(&unique_songs);
+    if matched_songs.len() > 1 {
         ctx.send(
             CreateReply::default()
                 .ephemeral(true)
-                .embed(embed_base("Multiple songs found").description(description)),
+                .embed(build_duplicate_song_candidates_embed(&matched_songs)),
         )
         .await?;
         return Ok(());
     }
 
-    let (resolved_title, resolved_genre, resolved_artist) =
-        unique_songs.into_keys().next().expect("checked non-empty");
+    let resolved_song = matched_songs.into_iter().next().expect("checked non-empty");
 
     let detailed_scores = match record_collector_client
-        .get_song_detail_scores(&resolved_title, &resolved_genre, &resolved_artist)
+        .get_song_detail_scores(
+            &resolved_song.title,
+            &resolved_song.genre,
+            &resolved_song.artist,
+        )
         .await
     {
         Ok(mut v) => {
@@ -202,10 +186,7 @@ pub(crate) async fn mai_score(
                         return Ok(());
                     }
                     "NOT_FOUND" => {
-                        ctx.send(CreateReply::default().ephemeral(true).embed(
-                            embed_base("No records found").description("No scores for this title."),
-                        ))
-                        .await?;
+                        send_no_records_found_reply(ctx, &resolved_song).await?;
                         return Ok(());
                     }
                     _ => {}
@@ -227,12 +208,7 @@ pub(crate) async fn mai_score(
     };
 
     if detailed_scores.is_empty() {
-        ctx.send(
-            CreateReply::default()
-                .ephemeral(true)
-                .embed(embed_base("No records found").description("No scores for this title.")),
-        )
-        .await?;
+        send_no_records_found_reply(ctx, &resolved_song).await?;
         return Ok(());
     }
 
@@ -249,8 +225,8 @@ pub(crate) async fn mai_score(
         let metadata = fetch_song_metadata(
             &ctx.data().song_info_client,
             &score.title,
-            &resolved_genre,
-            &resolved_artist,
+            &resolved_song.genre,
+            &resolved_song.artist,
             score.chart_type,
             score.diff_category,
         )
@@ -328,33 +304,22 @@ pub(crate) async fn mai_song_info(
 ) -> Result<(), Error> {
     ctx.defer().await?;
 
-    let response = ctx
-        .data()
-        .song_info_client
-        .search_song_metadata(&SongMetadataSearchRequest {
-            title: Some(title.trim().to_string()),
-            genre: None,
-            artist: None,
-            chart_type: None,
-            diff_category: None,
-            limits: Some(100),
-        })
-        .await
-        .wrap_err("search song metadata")?;
-
-    let mut songs = BTreeMap::<(String, String, String), Vec<SongMetadata>>::new();
-    let mut song_aliases = BTreeMap::<(String, String, String), SongAliases>::new();
-    for item in response.items {
-        song_aliases
-            .entry((item.title.clone(), item.genre.clone(), item.artist.clone()))
-            .or_insert_with(|| item.aliases.clone());
-        songs
-            .entry((item.title.clone(), item.genre.clone(), item.artist.clone()))
-            .or_default()
-            .push(item);
+    let requested_title = title.trim();
+    if requested_title.is_empty() {
+        ctx.send(
+            CreateReply::default()
+                .ephemeral(true)
+                .embed(embed_base("No song found").description("Please provide a title.")),
+        )
+        .await?;
+        return Ok(());
     }
 
-    if songs.is_empty() {
+    let matched_songs = search_song_catalog(&ctx.data().song_info_client, requested_title)
+        .await
+        .wrap_err("search song catalog")?;
+
+    if matched_songs.is_empty() {
         ctx.send(
             CreateReply::default()
                 .ephemeral(true)
@@ -364,12 +329,11 @@ pub(crate) async fn mai_song_info(
         return Ok(());
     }
 
-    if songs.len() > 2 {
+    if matched_songs.len() > 1 {
         ctx.send(
-            CreateReply::default().ephemeral(true).embed(
-                embed_base("Multiple songs found")
-                    .description(duplicate_song_candidates_description(&song_aliases)),
-            ),
+            CreateReply::default()
+                .ephemeral(true)
+                .embed(build_duplicate_song_candidates_embed(&matched_songs)),
         )
         .await?;
         return Ok(());
@@ -377,10 +341,10 @@ pub(crate) async fn mai_song_info(
 
     let mut embeds = Vec::new();
     let mut image_names = Vec::new();
-    for ((song_title, song_genre, song_artist), mut sheets) in songs {
-        sheets.sort_by_key(|sheet| (sheet.chart_type.as_u8(), sheet.diff_category.as_u8()));
-        let (embed, image_name) =
-            build_song_info_embed(&song_title, &song_genre, &song_artist, &sheets);
+    for mut song in matched_songs {
+        song.sheets
+            .sort_by_key(|sheet| (sheet.chart_type.as_u8(), sheet.diff_category.as_u8()));
+        let (embed, image_name) = build_song_info_embed(&song);
         if let Some(image_name) = image_name {
             image_names.push(image_name.to_string());
         }
@@ -407,59 +371,53 @@ pub(crate) async fn mai_song_info(
     Ok(())
 }
 
-fn build_song_info_embed(
-    song_title: &str,
-    song_genre: &str,
-    song_artist: &str,
-    sheets: &[SongMetadata],
-) -> (serenity::CreateEmbed, Option<String>) {
-    let region_unreleased_line = build_region_unreleased_line(sheets);
+fn build_song_info_embed(song: &SongCatalogSong) -> (serenity::CreateEmbed, Option<String>) {
+    let region_unreleased_line = build_region_unreleased_line(&song.sheets);
 
-    let std_version = sheets
+    let std_version = song
+        .sheets
         .iter()
         .find(|sheet| sheet.chart_type == models::ChartType::Std)
         .and_then(|sheet| sheet.version.as_deref());
-    let dx_version = sheets
+    let dx_version = song
+        .sheets
         .iter()
         .find(|sheet| sheet.chart_type == models::ChartType::Dx)
         .and_then(|sheet| sheet.version.as_deref());
 
-    let format_levels = |chart_type: models::ChartType| -> Option<String> {
-        let ordered_difficulties = [
-            models::DifficultyCategory::Basic,
-            models::DifficultyCategory::Advanced,
-            models::DifficultyCategory::Expert,
-            models::DifficultyCategory::Master,
-            models::DifficultyCategory::ReMaster,
-        ];
+    let format_levels =
+        |chart_type: models::ChartType| -> Option<String> {
+            let ordered_difficulties = [
+                models::DifficultyCategory::Basic,
+                models::DifficultyCategory::Advanced,
+                models::DifficultyCategory::Expert,
+                models::DifficultyCategory::Master,
+                models::DifficultyCategory::ReMaster,
+            ];
 
-        let mut parts = Vec::new();
-        for difficulty in ordered_difficulties {
-            let Some(sheet) = sheets
-                .iter()
-                .find(|sheet| sheet.chart_type == chart_type && sheet.diff_category == difficulty)
-            else {
-                continue;
-            };
+            let mut parts = Vec::new();
+            for difficulty in ordered_difficulties {
+                let Some(sheet) = song.sheets.iter().find(|sheet| {
+                    sheet.chart_type == chart_type && sheet.diff_category == difficulty
+                }) else {
+                    continue;
+                };
 
-            let short = linked_short_difficulty(song_title, chart_type, difficulty);
+                let short = linked_short_difficulty(&song.title, chart_type, difficulty);
 
-            let mut part = format!(
-                "{short} {}",
-                sheet.level.clone().unwrap_or_else(|| "N/A".to_string())
-            );
-            if let Some(internal) = sheet.internal_level {
-                part.push_str(&format!(" ({internal:.1})"));
+                let mut part = format!("{short} {}", sheet.level);
+                if let Some(internal) = sheet.internal_level {
+                    part.push_str(&format!(" ({internal:.1})"));
+                }
+                parts.push(part);
             }
-            parts.push(part);
-        }
 
-        if parts.is_empty() {
-            None
-        } else {
-            Some(parts.join(" / "))
-        }
-    };
+            if parts.is_empty() {
+                None
+            } else {
+                Some(parts.join(" / "))
+            }
+        };
 
     let mut blocks = Vec::new();
     if let Some(region_line) = region_unreleased_line {
@@ -476,7 +434,7 @@ fn build_song_info_embed(
     if !version_lines.is_empty() {
         blocks.push(version_lines.join("\n"));
     }
-    blocks.push(format!("Genre: {}\nArtist: {}", song_genre, song_artist));
+    blocks.push(format!("Genre: {}\nArtist: {}", song.genre, song.artist));
 
     if let Some(levels) = format_levels(models::ChartType::Std) {
         blocks.push(format!("Level (STD)\n{levels}"));
@@ -485,12 +443,12 @@ fn build_song_info_embed(
         blocks.push(format!("Level (DX)\n{levels}"));
     }
 
-    let mut embed = embed_base(song_title);
+    let mut embed = embed_base(&song.title);
     if !blocks.is_empty() {
         embed = embed.description(blocks.join("\n\n"));
     }
 
-    let image_name = sheets.iter().find_map(|sheet| sheet.image_name.clone());
+    let image_name = song.image_name.clone();
     if let Some(image_name) = image_name.as_deref() {
         embed = embed.thumbnail(format!("attachment://{image_name}"));
     }
@@ -744,34 +702,182 @@ async fn fetch_song_metadata(
     }
 }
 
-fn duplicate_song_candidates_description(
-    candidates: &BTreeMap<(String, String, String), SongAliases>,
-) -> String {
-    let lines = candidates
-        .iter()
-        .take(8)
-        .map(|((title, genre, artist), aliases)| {
-            format_song_candidate_line(title, genre, artist, aliases)
-        })
-        .collect::<Vec<_>>();
+async fn send_no_records_found_reply(
+    ctx: Context<'_>,
+    song: &SongCatalogSong,
+) -> Result<(), Error> {
+    let mut embed = embed_base(&song.title).description("No records found.");
+    let mut attachments = Vec::new();
 
-    format!(
-        "Multiple songs exactly match your search.\nCandidates:\n{}",
-        lines.join("\n")
-    )
+    if let Some(image_name) = song.image_name.as_deref() {
+        embed = embed.thumbnail(format!("attachment://{image_name}"));
+        match ctx.data().song_info_client.get_cover(image_name).await {
+            Ok(bytes) => {
+                attachments.push(serenity::CreateAttachment::bytes(
+                    bytes,
+                    image_name.to_string(),
+                ));
+            }
+            Err(e) => tracing::warn!("failed to fetch cover image {image_name}: {e:?}"),
+        }
+    }
+
+    ctx.send(CreateReply {
+        embeds: vec![embed],
+        attachments,
+        ephemeral: Some(true),
+        ..Default::default()
+    })
+    .await?;
+
+    Ok(())
 }
 
-fn format_song_candidate_line(
-    title: &str,
-    genre: &str,
-    artist: &str,
-    aliases: &SongAliases,
-) -> String {
-    let mut line = format!("{title} / {genre} / {artist}");
+async fn search_song_catalog(
+    song_info_client: &SongInfoClient,
+    query: &str,
+) -> eyre::Result<Vec<SongCatalogSong>> {
+    let songs = song_info_client.list_song_catalog().await?;
+    Ok(find_song_candidates(songs, query))
+}
+
+fn build_duplicate_song_candidates_embed(candidates: &[SongCatalogSong]) -> serenity::CreateEmbed {
+    let shown = candidates.len().min(8);
+    let mut description =
+        "Search matched multiple songs. Please try a more specific title or alias.".to_string();
+    if candidates.len() > shown {
+        description.push_str(&format!(
+            "\nShowing first {shown} of {} candidates.",
+            candidates.len()
+        ));
+    }
+
+    let mut embed = embed_base("Multiple songs found").description(description);
+    for candidate in candidates.iter().take(shown) {
+        embed = embed.field(
+            &candidate.title,
+            format_song_candidate_details(&candidate.genre, &candidate.artist, &candidate.aliases),
+            false,
+        );
+    }
+
+    embed
+}
+
+fn format_song_candidate_details(genre: &str, artist: &str, aliases: &SongAliases) -> String {
+    let mut line = format!("Genre: {genre}\nArtist: {artist}");
     if let Some(alias_summary) = format_song_alias_summary(aliases) {
-        line.push_str(&format!(" (alias: {alias_summary})"));
+        line.push_str(&format!("\nAliases: {alias_summary}"));
     }
     line
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+enum SongSearchMatchKind {
+    Exact,
+    CaseInsensitiveExact,
+    WhitespaceInsensitiveExact,
+    Contains,
+}
+
+fn find_song_candidates(mut songs: Vec<SongCatalogSong>, query: &str) -> Vec<SongCatalogSong> {
+    let mut exact_matches = Vec::new();
+    let mut case_insensitive_matches = Vec::new();
+    let mut whitespace_insensitive_matches = Vec::new();
+    let mut contains_matches = Vec::new();
+
+    for song in songs.drain(..) {
+        match song_match_kind(&song, query) {
+            Some(SongSearchMatchKind::Exact) => exact_matches.push(song),
+            Some(SongSearchMatchKind::CaseInsensitiveExact) => case_insensitive_matches.push(song),
+            Some(SongSearchMatchKind::WhitespaceInsensitiveExact) => {
+                whitespace_insensitive_matches.push(song);
+            }
+            Some(SongSearchMatchKind::Contains) => contains_matches.push(song),
+            None => {}
+        }
+    }
+
+    for matches in [
+        &mut exact_matches,
+        &mut case_insensitive_matches,
+        &mut whitespace_insensitive_matches,
+        &mut contains_matches,
+    ] {
+        if matches.is_empty() {
+            continue;
+        }
+
+        matches
+            .sort_by(|a, b| (&a.title, &a.genre, &a.artist).cmp(&(&b.title, &b.genre, &b.artist)));
+        return std::mem::take(matches);
+    }
+
+    Vec::new()
+}
+
+fn song_match_kind(song: &SongCatalogSong, query: &str) -> Option<SongSearchMatchKind> {
+    let trimmed_query = query.trim();
+    if trimmed_query.is_empty() {
+        return None;
+    }
+
+    let search_values = song_search_values(song);
+    if search_values
+        .iter()
+        .any(|value| value.trim() == trimmed_query)
+    {
+        return Some(SongSearchMatchKind::Exact);
+    }
+
+    let normalized_query = normalize_search_value(trimmed_query);
+    if search_values
+        .iter()
+        .any(|value| normalize_search_value(value) == normalized_query)
+    {
+        return Some(SongSearchMatchKind::CaseInsensitiveExact);
+    }
+
+    let collapsed_query = collapse_search_value(trimmed_query);
+    if search_values
+        .iter()
+        .any(|value| collapse_search_value(value) == collapsed_query)
+    {
+        return Some(SongSearchMatchKind::WhitespaceInsensitiveExact);
+    }
+
+    if normalized_query.len() < 2 && collapsed_query.len() < 2 {
+        return None;
+    }
+
+    if search_values.iter().any(|value| {
+        let normalized_value = normalize_search_value(value);
+        let collapsed_value = collapse_search_value(value);
+        normalized_value.contains(&normalized_query) || collapsed_value.contains(&collapsed_query)
+    }) {
+        return Some(SongSearchMatchKind::Contains);
+    }
+
+    None
+}
+
+fn song_search_values(song: &SongCatalogSong) -> Vec<&str> {
+    std::iter::once(song.title.as_str())
+        .chain(song.aliases.en.iter().map(String::as_str))
+        .chain(song.aliases.ko.iter().map(String::as_str))
+        .collect()
+}
+
+fn normalize_search_value(value: &str) -> String {
+    value.trim().to_lowercase()
+}
+
+fn collapse_search_value(value: &str) -> String {
+    value
+        .chars()
+        .filter(|ch| !ch.is_whitespace())
+        .flat_map(|ch| ch.to_lowercase())
+        .collect()
 }
 
 fn format_song_alias_summary(aliases: &SongAliases) -> Option<String> {
@@ -800,7 +906,7 @@ fn format_song_alias_summary(aliases: &SongAliases) -> Option<String> {
     Some(summary)
 }
 
-fn build_region_unreleased_line(sheets: &[SongMetadata]) -> Option<String> {
+fn build_region_unreleased_line(sheets: &[SongCatalogSheet]) -> Option<String> {
     let has_jp = sheets.iter().any(|sheet| sheet.region.jp);
     let has_intl = sheets.iter().any(|sheet| sheet.region.intl);
 
@@ -891,10 +997,11 @@ fn chart_rating_points(internal_level: f64, achievement_percent: f64, ap_bonus: 
 #[cfg(test)]
 mod tests {
     use super::{
-        duplicate_song_candidates_description, format_song_alias_summary, latest_credit_len,
+        find_song_candidates, format_song_alias_summary, format_song_candidate_details,
+        latest_credit_len,
     };
+    use crate::client::SongCatalogSong;
     use models::SongAliases;
-    use std::collections::BTreeMap;
 
     #[test]
     fn latest_credit_len_uses_first_track_one_boundary() {
@@ -932,24 +1039,70 @@ mod tests {
     }
 
     #[test]
-    fn duplicate_song_candidates_description_is_english_and_includes_aliases() {
-        let mut candidates = BTreeMap::new();
-        candidates.insert(
-            (
-                "Test Song".to_string(),
-                "POPS & ANIME".to_string(),
-                "Composer".to_string(),
-            ),
-            SongAliases {
+    fn format_song_candidate_details_is_english_and_includes_aliases() {
+        let details = format_song_candidate_details(
+            "POPS & ANIME",
+            "Composer",
+            &SongAliases {
                 en: vec!["alias-a".to_string()],
                 ko: vec!["별칭".to_string()],
             },
         );
 
-        let description = duplicate_song_candidates_description(&candidates);
+        assert!(details.contains("Genre: POPS & ANIME"));
+        assert!(details.contains("Artist: Composer"));
+        assert!(details.contains("Aliases: alias-a, 별칭"));
+    }
 
-        assert!(description.starts_with("Multiple songs exactly match your search."));
-        assert!(description.contains("Test Song / POPS & ANIME / Composer"));
-        assert!(description.contains("(alias: alias-a, 별칭)"));
+    #[test]
+    fn find_song_candidates_prefers_whitespace_insensitive_exact_over_contains() {
+        let matches = find_song_candidates(
+            vec![
+                test_song("Night of Nights", "alias"),
+                test_song("Nightwalker", "night"),
+            ],
+            "nightofnights",
+        );
+
+        assert_eq!(matches.len(), 1);
+        assert_eq!(matches[0].title, "Night of Nights");
+    }
+
+    #[test]
+    fn find_song_candidates_returns_multiple_contains_matches() {
+        let matches = find_song_candidates(
+            vec![
+                test_song("Alpha Song", "first"),
+                test_song("Beta Song", "second"),
+                test_song("Gamma", "third"),
+            ],
+            "song",
+        );
+
+        assert_eq!(matches.len(), 2);
+        assert_eq!(matches[0].title, "Alpha Song");
+        assert_eq!(matches[1].title, "Beta Song");
+    }
+
+    #[test]
+    fn find_song_candidates_matches_alias_case_insensitively() {
+        let matches = find_song_candidates(vec![test_song("Real Title", "My Alias")], "my alias");
+
+        assert_eq!(matches.len(), 1);
+        assert_eq!(matches[0].title, "Real Title");
+    }
+
+    fn test_song(title: &str, alias: &str) -> SongCatalogSong {
+        SongCatalogSong {
+            title: title.to_string(),
+            genre: "POPS & ANIME".to_string(),
+            artist: "Composer".to_string(),
+            image_name: None,
+            aliases: SongAliases {
+                en: vec![alias.to_string()],
+                ko: Vec::new(),
+            },
+            sheets: Vec::new(),
+        }
     }
 }

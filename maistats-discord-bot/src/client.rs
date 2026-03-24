@@ -80,6 +80,32 @@ pub(crate) struct SongMetadata {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub(crate) struct SongCatalogSheet {
+    pub(crate) chart_type: ChartType,
+    #[serde(rename = "difficulty")]
+    pub(crate) diff_category: DifficultyCategory,
+    pub(crate) level: String,
+    pub(crate) version: Option<String>,
+    pub(crate) internal_level: Option<f32>,
+    pub(crate) region: SongChartRegion,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub(crate) struct SongCatalogSong {
+    pub(crate) title: String,
+    pub(crate) genre: String,
+    pub(crate) artist: String,
+    pub(crate) image_name: Option<String>,
+    pub(crate) aliases: SongAliases,
+    pub(crate) sheets: Vec<SongCatalogSheet>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct SongCatalogResponse {
+    songs: Vec<SongCatalogSong>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub(crate) struct SongMetadataSearchRequest {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub(crate) title: Option<String>,
@@ -166,6 +192,29 @@ impl SongInfoClient {
     pub fn new(base_url: String) -> Result<Self> {
         let client = build_client()?;
         Ok(Self { client, base_url })
+    }
+
+    pub(crate) async fn list_song_catalog(&self) -> Result<Vec<SongCatalogSong>> {
+        let url = format!("{}/api/songs", self.base_url);
+        let resp = self
+            .client
+            .get(&url)
+            .send()
+            .await
+            .wrap_err("list song catalog")?;
+
+        if !resp.status().is_success() {
+            return Err(eyre::eyre!(
+                "Failed to list song catalog: HTTP {}",
+                resp.status()
+            ));
+        }
+
+        let response = resp
+            .json::<SongCatalogResponse>()
+            .await
+            .wrap_err("parse song catalog response")?;
+        Ok(response.songs)
     }
 
     pub(crate) async fn get_cover(&self, image_name: &str) -> Result<Vec<u8>> {
