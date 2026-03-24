@@ -1,4 +1,11 @@
-import { useEffect, useRef, type Dispatch, type ReactNode, type SetStateAction } from 'react';
+import {
+  useEffect,
+  useRef,
+  useState,
+  type Dispatch,
+  type ReactNode,
+  type SetStateAction,
+} from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
 
 import { useI18n } from '../app/i18n';
@@ -131,6 +138,7 @@ export function ScoreExplorerSection({
 }: ScoreExplorerSectionProps) {
   const { locale, t } = useI18n();
   const tableWrapRef = useRef<HTMLDivElement | null>(null);
+  const [isFilterModalOpen, setIsFilterModalOpen] = useState(false);
   const isSearchDirty = queryDraft.trim() !== appliedQuery.trim();
 
   const virtualizer = useVirtualizer({
@@ -152,197 +160,202 @@ export function ScoreExplorerSection({
       ? virtualizer.getTotalSize() - virtualItems[virtualItems.length - 1].end
       : 0;
 
-  return (
-    <div className="explorer-layout">
-      <aside className="sidebar-column">
-        {sidebarTopContent}
-        <section className="panel filter-panel">
-          <div className="panel-heading compact">
-            <div>
-              <h2>Filters</h2>
-            </div>
-            <button type="button" className="filter-reset-button" onClick={onResetFilters}>
-              {t('scores.resetAll')}
+  const filterPanel = (
+    <section className="panel filter-panel">
+      <div className="panel-heading compact">
+        <div>
+          <h2>{t('common.filters')}</h2>
+        </div>
+        <button type="button" className="filter-reset-button" onClick={onResetFilters}>
+          {t('scores.resetAll')}
+        </button>
+      </div>
+      <div className="filter-grid">
+        <form
+          className="search-box search-submit-group filter-block"
+          onSubmit={(event) => {
+            event.preventDefault();
+            onApplyQuery();
+          }}
+        >
+          <span>{t('scores.searchLabel')}</span>
+          <div className="search-submit-row">
+            <input
+              type="search"
+              value={queryDraft}
+              onChange={(event) => setQueryDraft(event.target.value)}
+              placeholder={t('scores.searchPlaceholder')}
+            />
+            <button
+              type="submit"
+              className="search-submit-button"
+              disabled={!isSearchDirty}
+            >
+              {t('common.search')}
             </button>
           </div>
-          <div className="filter-grid">
-            <form
-              className="search-box search-submit-group filter-block"
-              onSubmit={(event) => {
-                event.preventDefault();
-                onApplyQuery();
-              }}
+        </form>
+
+        <ToggleGroup
+          label={t('scores.chartType')}
+          options={chartTypes}
+          selected={chartFilter}
+          onToggle={(value) => setChartFilter((prev) => toggleArrayValue(prev, value))}
+          optionClassName={(value) => `chart-type-chip ${getChartTypeToneClass(value)}`}
+        />
+
+        <ToggleGroup
+          label={t('scores.difficulty')}
+          options={difficulties}
+          selected={difficultyFilter}
+          onToggle={(value) => setDifficultyFilter((prev) => toggleArrayValue(prev, value))}
+          renderLabel={(value) => <DifficultyLabel difficulty={value} short />}
+          optionClassName={(value) => `difficulty-chip ${getDifficultyToneClass(value)}`}
+        />
+
+        <div className="filter-block filter-block-select">
+          <div className="filter-label">{t('scores.version')}</div>
+          <label>
+            <select
+              value={versionSelection}
+              onChange={(event) => setVersionSelection(event.target.value)}
             >
-              <span>{t('scores.searchLabel')}</span>
-              <div className="search-submit-row">
-                <input
-                  type="search"
-                  value={queryDraft}
-                  onChange={(event) => setQueryDraft(event.target.value)}
-                  placeholder={t('scores.searchPlaceholder')}
-                />
-                <button
-                  type="submit"
-                  className="search-submit-button"
-                  disabled={!isSearchDirty}
-                >
-                  {t('common.search')}
-                </button>
-              </div>
-            </form>
+              <option value="ALL">{t('scores.versionAll')}</option>
+              <option value="NEW">{t('scores.versionNew')}</option>
+              <option value="OLD">{t('scores.versionOld')}</option>
+              {versionOptions.map((version) => (
+                <option key={version} value={version}>
+                  {formatVersionLabel(version)}
+                </option>
+              ))}
+            </select>
+          </label>
+        </div>
 
-            <ToggleGroup
-              label={t('scores.chartType')}
-              options={chartTypes}
-              selected={chartFilter}
-              onToggle={(value) => setChartFilter((prev) => toggleArrayValue(prev, value))}
-              optionClassName={(value) => `chart-type-chip ${getChartTypeToneClass(value)}`}
-            />
-
-            <ToggleGroup
-              label={t('scores.difficulty')}
-              options={difficulties}
-              selected={difficultyFilter}
-              onToggle={(value) => setDifficultyFilter((prev) => toggleArrayValue(prev, value))}
-              renderLabel={(value) => <DifficultyLabel difficulty={value} short />}
-              optionClassName={(value) => `difficulty-chip ${getDifficultyToneClass(value)}`}
-            />
-
-            <div className="filter-block filter-block-select">
-              <div className="filter-label">{t('scores.version')}</div>
-              <label>
-                <select
-                  value={versionSelection}
-                  onChange={(event) => setVersionSelection(event.target.value)}
-                >
-                  <option value="ALL">{t('scores.versionAll')}</option>
-                  <option value="NEW">{t('scores.versionNew')}</option>
-                  <option value="OLD">{t('scores.versionOld')}</option>
-                  {versionOptions.map((version) => (
-                    <option key={version} value={version}>
-                      {formatVersionLabel(version)}
-                    </option>
-                  ))}
-                </select>
-              </label>
-            </div>
-
-            <div className="filter-block">
-              <div className="filter-label">{t('scores.level')}</div>
-              <div className="range-pair">
-                <label>
-                  <input
-                    type="number"
-                    value={internalMin}
-                    min={1}
-                    max={15.5}
-                    step={0.1}
-                    aria-label={t('scores.levelMin')}
-                    onChange={(event) => onChangeInternalMin(Number(event.target.value))}
-                  />
-                </label>
-                <span className="range-separator">~</span>
-                <label>
-                  <input
-                    type="number"
-                    value={internalMax}
-                    min={1}
-                    max={15.5}
-                    step={0.1}
-                    aria-label={t('scores.levelMax')}
-                    onChange={(event) => onChangeInternalMax(Number(event.target.value))}
-                  />
-                </label>
-              </div>
-              <ToggleGroup
-                label=""
-                options={internalLevelPresetOptions}
-                selected={selectedInternalLevelPresets}
-                onToggle={onToggleInternalLevelPreset}
-                hideLabel
+        <div className="filter-block">
+          <div className="filter-label">{t('scores.level')}</div>
+          <div className="range-pair">
+            <label>
+              <input
+                type="number"
+                value={internalMin}
+                min={1}
+                max={15.5}
+                step={0.1}
+                aria-label={t('scores.levelMin')}
+                onChange={(event) => onChangeInternalMin(Number(event.target.value))}
               />
-            </div>
-
-            <div className="filter-block">
-              <div className="filter-label">{t('scores.score')}</div>
-              <div className="range-pair">
-                <label>
-                  <input
-                    type="number"
-                    value={achievementMin}
-                    min={0}
-                    max={101}
-                    step={0.0001}
-                    aria-label={t('scores.achievementMin')}
-                    onChange={(event) => onChangeAchievementMin(Number(event.target.value))}
-                  />
-                </label>
-                <span className="range-separator">~</span>
-                <label>
-                  <input
-                    type="number"
-                    value={achievementMax}
-                    min={0}
-                    max={101}
-                    step={0.0001}
-                    aria-label={t('scores.achievementMax')}
-                    onChange={(event) => onChangeAchievementMax(Number(event.target.value))}
-                  />
-                </label>
-              </div>
-              <ToggleGroup
-                label=""
-                options={scoreRankOptions}
-                selected={selectedScoreRankPresets}
-                onToggle={onToggleScoreRankPreset}
-                hideLabel
+            </label>
+            <span className="range-separator">~</span>
+            <label>
+              <input
+                type="number"
+                value={internalMax}
+                min={1}
+                max={15.5}
+                step={0.1}
+                aria-label={t('scores.levelMax')}
+                onChange={(event) => onChangeInternalMax(Number(event.target.value))}
               />
-            </div>
-
-            <ToggleGroup
-              label="FC"
-              options={fcOptions}
-              selected={fcFilter}
-              onToggle={onToggleFcFilter}
-            />
-
-            <ToggleGroup
-              label="Sync"
-              options={syncOptions}
-              selected={syncFilter}
-              onToggle={onToggleSyncFilter}
-            />
-
-            <div className="filter-block">
-              <div className="filter-label">{t('scores.daysSince')}</div>
-              <div className="range-pair">
-                <label>
-                  <input
-                    type="number"
-                    value={daysMin}
-                    min={0}
-                    max={5000}
-                    step={1}
-                    aria-label={t('scores.daysMin')}
-                    onChange={(event) => setDaysMin(Number(event.target.value))}
-                  />
-                </label>
-                <span className="range-separator">~</span>
-                <label>
-                  <input
-                    type="number"
-                    value={daysMax}
-                    min={0}
-                    max={5000}
-                    step={1}
-                    aria-label={t('scores.daysMax')}
-                    onChange={(event) => setDaysMax(Number(event.target.value))}
-                  />
-                </label>
-              </div>
-            </div>
+            </label>
           </div>
-        </section>
+          <ToggleGroup
+            label=""
+            options={internalLevelPresetOptions}
+            selected={selectedInternalLevelPresets}
+            onToggle={onToggleInternalLevelPreset}
+            hideLabel
+          />
+        </div>
+
+        <div className="filter-block">
+          <div className="filter-label">{t('scores.score')}</div>
+          <div className="range-pair">
+            <label>
+              <input
+                type="number"
+                value={achievementMin}
+                min={0}
+                max={101}
+                step={0.0001}
+                aria-label={t('scores.achievementMin')}
+                onChange={(event) => onChangeAchievementMin(Number(event.target.value))}
+              />
+            </label>
+            <span className="range-separator">~</span>
+            <label>
+              <input
+                type="number"
+                value={achievementMax}
+                min={0}
+                max={101}
+                step={0.0001}
+                aria-label={t('scores.achievementMax')}
+                onChange={(event) => onChangeAchievementMax(Number(event.target.value))}
+              />
+            </label>
+          </div>
+          <ToggleGroup
+            label=""
+            options={scoreRankOptions}
+            selected={selectedScoreRankPresets}
+            onToggle={onToggleScoreRankPreset}
+            hideLabel
+          />
+        </div>
+
+        <ToggleGroup
+          label="FC"
+          options={fcOptions}
+          selected={fcFilter}
+          onToggle={onToggleFcFilter}
+        />
+
+        <ToggleGroup
+          label="Sync"
+          options={syncOptions}
+          selected={syncFilter}
+          onToggle={onToggleSyncFilter}
+        />
+
+        <div className="filter-block">
+          <div className="filter-label">{t('scores.daysSince')}</div>
+          <div className="range-pair">
+            <label>
+              <input
+                type="number"
+                value={daysMin}
+                min={0}
+                max={5000}
+                step={1}
+                aria-label={t('scores.daysMin')}
+                onChange={(event) => setDaysMin(Number(event.target.value))}
+              />
+            </label>
+            <span className="range-separator">~</span>
+            <label>
+              <input
+                type="number"
+                value={daysMax}
+                min={0}
+                max={5000}
+                step={1}
+                aria-label={t('scores.daysMax')}
+                onChange={(event) => setDaysMax(Number(event.target.value))}
+              />
+            </label>
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+
+  return (
+    <>
+      <div className="explorer-layout">
+      <aside className="sidebar-column">
+        {sidebarTopContent}
+        {filterPanel}
       </aside>
 
       <div className="table-column">
@@ -523,6 +536,37 @@ export function ScoreExplorerSection({
           </div>
         </section>
       </div>
-    </div>
+      </div>
+
+      <button
+        type="button"
+        className="mobile-filter-fab"
+        onClick={() => setIsFilterModalOpen(true)}
+      >
+        {t('common.filters')}
+      </button>
+
+      {isFilterModalOpen ? (
+        <div className="modal-backdrop mobile-filter-backdrop" onClick={() => setIsFilterModalOpen(false)}>
+          <section
+            className="modal-card panel mobile-filter-modal"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="detail-header">
+              <h2>{t('common.filters')}</h2>
+              <button
+                type="button"
+                className="modal-close-button"
+                onClick={() => setIsFilterModalOpen(false)}
+              >
+                {t('common.close')}
+              </button>
+            </div>
+            {sidebarTopContent}
+            {filterPanel}
+          </section>
+        </div>
+      ) : null}
+    </>
   );
 }
