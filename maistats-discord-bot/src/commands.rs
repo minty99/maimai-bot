@@ -143,7 +143,7 @@ pub(crate) async fn mai_score(
         ctx.send(
             CreateReply::default()
                 .ephemeral(true)
-                .embed(embed_base("No records found").description("No scores for this title.")),
+                .embed(embed_base("No song found").description("No matching title or alias.")),
         )
         .await?;
         return Ok(());
@@ -160,12 +160,13 @@ pub(crate) async fn mai_score(
     }
 
     let resolved_song = matched_songs.into_iter().next().expect("checked non-empty");
-    let resolved_title = resolved_song.title;
-    let resolved_genre = resolved_song.genre;
-    let resolved_artist = resolved_song.artist;
 
     let detailed_scores = match record_collector_client
-        .get_song_detail_scores(&resolved_title, &resolved_genre, &resolved_artist)
+        .get_song_detail_scores(
+            &resolved_song.title,
+            &resolved_song.genre,
+            &resolved_song.artist,
+        )
         .await
     {
         Ok(mut v) => {
@@ -185,10 +186,7 @@ pub(crate) async fn mai_score(
                         return Ok(());
                     }
                     "NOT_FOUND" => {
-                        ctx.send(CreateReply::default().ephemeral(true).embed(
-                            embed_base("No records found").description("No scores for this title."),
-                        ))
-                        .await?;
+                        send_no_records_found_reply(ctx, &resolved_song).await?;
                         return Ok(());
                     }
                     _ => {}
@@ -210,12 +208,7 @@ pub(crate) async fn mai_score(
     };
 
     if detailed_scores.is_empty() {
-        ctx.send(
-            CreateReply::default()
-                .ephemeral(true)
-                .embed(embed_base("No records found").description("No scores for this title.")),
-        )
-        .await?;
+        send_no_records_found_reply(ctx, &resolved_song).await?;
         return Ok(());
     }
 
@@ -232,8 +225,8 @@ pub(crate) async fn mai_score(
         let metadata = fetch_song_metadata(
             &ctx.data().song_info_client,
             &score.title,
-            &resolved_genre,
-            &resolved_artist,
+            &resolved_song.genre,
+            &resolved_song.artist,
             score.chart_type,
             score.diff_category,
         )
@@ -707,6 +700,37 @@ async fn fetch_song_metadata(
             None
         }
     }
+}
+
+async fn send_no_records_found_reply(
+    ctx: Context<'_>,
+    song: &SongCatalogSong,
+) -> Result<(), Error> {
+    let mut embed = embed_base(&song.title).description("No records found.");
+    let mut attachments = Vec::new();
+
+    if let Some(image_name) = song.image_name.as_deref() {
+        embed = embed.thumbnail(format!("attachment://{image_name}"));
+        match ctx.data().song_info_client.get_cover(image_name).await {
+            Ok(bytes) => {
+                attachments.push(serenity::CreateAttachment::bytes(
+                    bytes,
+                    image_name.to_string(),
+                ));
+            }
+            Err(e) => tracing::warn!("failed to fetch cover image {image_name}: {e:?}"),
+        }
+    }
+
+    ctx.send(CreateReply {
+        embeds: vec![embed],
+        attachments,
+        ephemeral: Some(true),
+        ..Default::default()
+    })
+    .await?;
+
+    Ok(())
 }
 
 async fn search_song_catalog(
