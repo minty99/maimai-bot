@@ -8,7 +8,7 @@ use tracing::warn;
 use crate::BotData;
 use crate::chart_links::{linked_chart_label, linked_short_difficulty};
 use crate::client::{
-    ApiError, RecordCollectorClient, SongCatalogSheet, SongCatalogSong, SongInfoClient,
+    ApiError, RecordCollectorClient, SongCatalogSheet, SongCatalogSong, SongDatabaseClient,
     SongMetadata, normalize_record_collector_url,
 };
 use crate::db;
@@ -135,7 +135,7 @@ pub(crate) async fn mai_score(
         return Ok(());
     }
 
-    let matched_songs = search_song_catalog(&ctx.data().song_info_client, requested_title)
+    let matched_songs = search_song_catalog(&ctx.data().song_database_client, requested_title)
         .await
         .wrap_err("search song catalog")?;
 
@@ -223,7 +223,7 @@ pub(crate) async fn mai_score(
     for score in &detailed_scores {
         has_rows = true;
         let metadata = fetch_song_metadata(
-            &ctx.data().song_info_client,
+            &ctx.data().song_database_client,
             &score.title,
             &resolved_song.genre,
             &resolved_song.artist,
@@ -273,21 +273,12 @@ pub(crate) async fn mai_score(
     }
 
     let mut embed = embed_base(embed_title).description(desc_blocks.join("\n\n"));
-
-    let mut attachments = Vec::new();
     if let Some(ref image_name) = first_image_name {
-        embed = embed.thumbnail(format!("attachment://{image_name}"));
-        match ctx.data().song_info_client.get_cover(image_name).await {
-            Ok(bytes) => {
-                attachments.push(serenity::CreateAttachment::bytes(bytes, image_name.clone()));
-            }
-            Err(e) => tracing::warn!("failed to fetch cover image {image_name}: {e:?}"),
-        }
+        embed = embed.thumbnail(ctx.data().song_database_client.cover_url(image_name));
     }
 
     ctx.send(CreateReply {
         embeds: vec![embed],
-        attachments,
         ephemeral: Some(!has_rows),
         ..Default::default()
     })
@@ -296,7 +287,7 @@ pub(crate) async fn mai_score(
     Ok(())
 }
 
-/// Get full song info from song-info server
+/// Get full song info from the shared song database
 #[poise::command(slash_command, rename = "mai-song-info")]
 pub(crate) async fn mai_song_info(
     ctx: Context<'_>,
@@ -315,7 +306,7 @@ pub(crate) async fn mai_song_info(
         return Ok(());
     }
 
-    let matched_songs = search_song_catalog(&ctx.data().song_info_client, requested_title)
+    let matched_songs = search_song_catalog(&ctx.data().song_database_client, requested_title)
         .await
         .wrap_err("search song catalog")?;
 
@@ -340,30 +331,18 @@ pub(crate) async fn mai_song_info(
     }
 
     let mut embeds = Vec::new();
-    let mut image_names = Vec::new();
     for mut song in matched_songs {
         song.sheets
             .sort_by_key(|sheet| (sheet.chart_type.as_u8(), sheet.diff_category.as_u8()));
-        let (embed, image_name) = build_song_info_embed(&song);
-        if let Some(image_name) = image_name {
-            image_names.push(image_name.to_string());
+        let mut embed = build_song_info_embed(&song);
+        if let Some(image_name) = song.image_name.as_deref() {
+            embed = embed.thumbnail(ctx.data().song_database_client.cover_url(image_name));
         }
         embeds.push(embed);
     }
 
-    let mut attachments = Vec::new();
-    for image_name in image_names {
-        match ctx.data().song_info_client.get_cover(&image_name).await {
-            Ok(bytes) => {
-                attachments.push(serenity::CreateAttachment::bytes(bytes, image_name.clone()));
-            }
-            Err(e) => tracing::warn!("failed to fetch cover image {image_name}: {e:?}"),
-        }
-    }
-
     ctx.send(CreateReply {
         embeds,
-        attachments,
         ..Default::default()
     })
     .await?;
@@ -371,7 +350,7 @@ pub(crate) async fn mai_song_info(
     Ok(())
 }
 
-fn build_song_info_embed(song: &SongCatalogSong) -> (serenity::CreateEmbed, Option<String>) {
+fn build_song_info_embed(song: &SongCatalogSong) -> serenity::CreateEmbed {
     let region_unreleased_line = build_region_unreleased_line(&song.sheets);
 
     let std_version = song
@@ -448,12 +427,7 @@ fn build_song_info_embed(song: &SongCatalogSong) -> (serenity::CreateEmbed, Opti
         embed = embed.description(blocks.join("\n\n"));
     }
 
-    let image_name = song.image_name.clone();
-    if let Some(image_name) = image_name.as_deref() {
-        embed = embed.thumbnail(format!("attachment://{image_name}"));
-    }
-
-    (embed, image_name)
+    embed
 }
 
 /// Get most recent credit records
@@ -487,13 +461,12 @@ pub(crate) async fn mai_recent(ctx: Context<'_>) -> Result<(), Error> {
     recent.reverse();
 
     let mut records = Vec::with_capacity(recent.len());
-    let mut cover_image_names = std::collections::BTreeSet::new();
     for record in recent {
         let metadata = match record.diff_category {
             Some(diff_category) => match record.genre.as_deref().zip(record.artist.as_deref()) {
                 Some((genre, artist)) => {
                     fetch_song_metadata(
-                        &ctx.data().song_info_client,
+                        &ctx.data().song_database_client,
                         &record.title,
                         genre,
                         artist,
@@ -516,9 +489,6 @@ pub(crate) async fn mai_recent(ctx: Context<'_>) -> Result<(), Error> {
             _ => None,
         };
         let image_name = metadata.as_ref().and_then(|m| m.image_name.clone());
-        if let Some(name) = image_name.as_ref() {
-            cover_image_names.insert(name.clone());
-        }
         records.push(RecentRecordView {
             track: record.track.map(|t| t as i64),
             played_at: record.played_at,
@@ -537,20 +507,16 @@ pub(crate) async fn mai_recent(ctx: Context<'_>) -> Result<(), Error> {
         });
     }
 
-    let embeds = build_mai_recent_embeds(&display_name, &records, None, &ctx.data().status_emojis);
-    let mut attachments = Vec::new();
-    for image_name in cover_image_names {
-        match ctx.data().song_info_client.get_cover(&image_name).await {
-            Ok(bytes) => {
-                attachments.push(serenity::CreateAttachment::bytes(bytes, image_name));
-            }
-            Err(e) => tracing::warn!("failed to fetch cover image {image_name}: {e:?}"),
-        }
-    }
+    let embeds = build_mai_recent_embeds(
+        &display_name,
+        &records,
+        None,
+        &ctx.data().status_emojis,
+        &ctx.data().song_database_client,
+    );
 
     ctx.send(CreateReply {
         embeds,
-        attachments,
         ..Default::default()
     })
     .await?;
@@ -680,14 +646,14 @@ async fn load_player_display_name(record_collector_client: &RecordCollectorClien
 }
 
 async fn fetch_song_metadata(
-    song_info_client: &SongInfoClient,
+    song_database_client: &SongDatabaseClient,
     title: &str,
     genre: &str,
     artist: &str,
     chart_type: models::ChartType,
     diff_category: models::DifficultyCategory,
 ) -> Option<SongMetadata> {
-    let response = song_info_client
+    let response = song_database_client
         .find_song_metadata(title, genre, artist, chart_type, diff_category)
         .await;
 
@@ -707,24 +673,13 @@ async fn send_no_records_found_reply(
     song: &SongCatalogSong,
 ) -> Result<(), Error> {
     let mut embed = embed_base(&song.title).description("No records found.");
-    let mut attachments = Vec::new();
 
     if let Some(image_name) = song.image_name.as_deref() {
-        embed = embed.thumbnail(format!("attachment://{image_name}"));
-        match ctx.data().song_info_client.get_cover(image_name).await {
-            Ok(bytes) => {
-                attachments.push(serenity::CreateAttachment::bytes(
-                    bytes,
-                    image_name.to_string(),
-                ));
-            }
-            Err(e) => tracing::warn!("failed to fetch cover image {image_name}: {e:?}"),
-        }
+        embed = embed.thumbnail(ctx.data().song_database_client.cover_url(image_name));
     }
 
     ctx.send(CreateReply {
         embeds: vec![embed],
-        attachments,
         ephemeral: Some(true),
         ..Default::default()
     })
@@ -734,10 +689,10 @@ async fn send_no_records_found_reply(
 }
 
 async fn search_song_catalog(
-    song_info_client: &SongInfoClient,
+    song_database_client: &SongDatabaseClient,
     query: &str,
 ) -> eyre::Result<Vec<SongCatalogSong>> {
-    let songs = song_info_client.list_song_catalog().await?;
+    let songs = song_database_client.list_song_catalog().await?;
     Ok(find_song_candidates(songs, query))
 }
 

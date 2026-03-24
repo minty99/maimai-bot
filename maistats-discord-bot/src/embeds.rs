@@ -3,6 +3,7 @@ use poise::serenity_prelude as serenity;
 use serenity::builder::{CreateEmbed, CreateEmbedFooter};
 
 use crate::chart_links::linked_chart_label;
+use crate::client::SongDatabaseClient;
 use crate::emoji::{MaimaiStatusEmojis, format_fc, format_rank, format_sync};
 
 const EMBED_COLOR: u32 = 0x51BCF3;
@@ -115,6 +116,7 @@ pub(crate) fn build_mai_recent_embeds(
     records: &[RecentRecordView],
     optional_fields: Option<&RecentOptionalFields>,
     status_emojis: &MaimaiStatusEmojis,
+    song_database_client: &SongDatabaseClient,
 ) -> Vec<CreateEmbed> {
     let mut embeds = Vec::new();
 
@@ -153,7 +155,7 @@ pub(crate) fn build_mai_recent_embeds(
             .description(desc)
             .footer(format_recent_footer(record));
         if let Some(image_name) = record.image_name.as_deref() {
-            embed = embed.thumbnail(format!("attachment://{image_name}"));
+            embed = embed.thumbnail(song_database_client.cover_url(image_name));
         }
         embed
     }));

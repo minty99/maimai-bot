@@ -12,7 +12,7 @@ mod dm;
 mod embeds;
 mod emoji;
 
-use client::SongInfoClient;
+use client::SongDatabaseClient;
 use config::DiscordConfig;
 use emoji::MaimaiStatusEmojis;
 
@@ -21,7 +21,7 @@ pub(crate) struct BotData {
     pub(crate) db_pool: db::SqlitePool,
     pub(crate) dev_user_id: serenity::UserId,
     pub(crate) discord_http: std::sync::Arc<serenity::Http>,
-    pub(crate) song_info_client: SongInfoClient,
+    pub(crate) song_database_client: SongDatabaseClient,
     pub(crate) status_emojis: MaimaiStatusEmojis,
 }
 
@@ -52,13 +52,13 @@ async fn main() -> eyre::Result<()> {
     let db_pool = db::connect(&config.database_url).await?;
     db::migrate(&db_pool).await?;
 
-    let song_info_client = SongInfoClient::new(config.song_info_server_url.clone())?;
+    let song_database_client = SongDatabaseClient::new(config.song_database_url.clone())?;
 
     let bot_data = BotData {
         db_pool,
         dev_user_id,
         discord_http,
-        song_info_client,
+        song_database_client,
         status_emojis: MaimaiStatusEmojis::default(),
     };
 
