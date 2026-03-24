@@ -6,7 +6,7 @@ use time::{Duration as TimeDuration, OffsetDateTime, UtcOffset};
 use tracing::warn;
 
 use crate::BotData;
-use crate::chart_links::{linked_short_difficulty, plain_chart_label, youtube_link_emoji};
+use crate::chart_links::{linked_chart_label, linked_short_difficulty};
 use crate::client::{
     ApiError, RecordCollectorClient, SongInfoClient, SongMetadata, SongMetadataSearchRequest,
     normalize_record_collector_url,
@@ -236,11 +236,9 @@ pub(crate) async fn mai_score(
         .first()
         .map(|score| score.title.as_str())
         .unwrap_or(requested_title);
-    let mut embed = embed_base(embed_title)
-        .field("Genre", &resolved_genre, true)
-        .field("Artist", &resolved_artist, false);
     let mut has_rows = false;
     let mut first_image_name = None::<String>;
+    let mut desc_blocks: Vec<String> = Vec::new();
 
     for score in &detailed_scores {
         has_rows = true;
@@ -282,17 +280,19 @@ pub(crate) async fn mai_score(
             first_image_name = metadata.and_then(|m| m.image_name);
         }
 
-        let field_name = plain_chart_label(score.chart_type, score.diff_category, &level);
+        let chart_line =
+            linked_chart_label(&score.title, score.chart_type, score.diff_category, &level);
+        let score_line = format!("{achievement_percent:.4}% • {rank} • {fc} • {sync}");
 
-        let yt = youtube_link_emoji(&score.title, score.chart_type, score.diff_category);
-        let field_value = if detail_suffix.is_empty() {
-            format!("{achievement_percent:.4}% • {rank} • {fc} • {sync} {yt}")
+        let block = if detail_suffix.is_empty() {
+            format!("**{chart_line}**\n{score_line}")
         } else {
-            format!("{achievement_percent:.4}% • {rank} • {fc} • {sync}\n{detail_suffix} {yt}")
+            format!("**{chart_line}**\n{score_line}\n{detail_suffix}")
         };
-
-        embed = embed.field(field_name, field_value, false);
+        desc_blocks.push(block);
     }
+
+    let mut embed = embed_base(embed_title).description(desc_blocks.join("\n\n"));
 
     let mut attachments = Vec::new();
     if let Some(ref image_name) = first_image_name {
