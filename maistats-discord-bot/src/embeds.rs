@@ -141,7 +141,7 @@ pub(crate) fn build_mai_recent_embeds(
 
     embeds.extend(records.iter().map(|record| {
         let mut desc = format!(
-            "{}\n{}",
+            "**{}**\n{}",
             format_recent_chart_line(record),
             format_recent_detail_lines(record, status_emojis)
         );
