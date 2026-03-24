@@ -1,4 +1,4 @@
-import type { Dispatch, ReactNode, SetStateAction } from 'react';
+import { useState, type Dispatch, type ReactNode, type SetStateAction } from 'react';
 
 import type { PlaylogSortKey } from '../app/constants';
 import { useI18n } from '../app/i18n';
@@ -105,6 +105,7 @@ export function PlaylogExplorerSection({
   onSortBy,
 }: PlaylogExplorerSectionProps) {
   const { formatNumber: formatLocalizedNumber, locale, t } = useI18n();
+  const [isFilterModalOpen, setIsFilterModalOpen] = useState(false);
   const isSearchDirty = playlogQueryDraft.trim() !== appliedPlaylogQuery.trim();
 
   const handlePlaylogDayInputChange = (value: string) => {
@@ -130,135 +131,140 @@ export function PlaylogExplorerSection({
         : formatLocalizedNumber(selectedPlaylogDayCreditCount),
     });
 
+  const filterPanel = (
+    <section className="panel filter-panel">
+      <div className="panel-heading compact">
+        <div>
+          <h2>{t('common.filters')}</h2>
+        </div>
+      </div>
+      <div className="filter-grid">
+        <form
+          className="search-box search-submit-group filter-block"
+          onSubmit={(event) => {
+            event.preventDefault();
+            onApplyPlaylogQuery();
+          }}
+        >
+          <span>{t('playlogs.searchLabel')}</span>
+          <div className="search-submit-row">
+            <input
+              type="search"
+              value={playlogQueryDraft}
+              onChange={(event) => setPlaylogQueryDraft(event.target.value)}
+              placeholder={t('playlogs.searchPlaceholder')}
+            />
+            <button
+              type="submit"
+              className="search-submit-button"
+              disabled={!isSearchDirty}
+            >
+              {t('common.search')}
+            </button>
+          </div>
+        </form>
+
+        <div className="filter-block playlog-day-filter">
+          <label className="playlog-day-toggle">
+            <input
+              type="checkbox"
+              checked={isPlaylogDateFilterDisabled}
+              onChange={(event) => setIsPlaylogDateFilterDisabled(event.target.checked)}
+            />
+            <span>{t('playlogs.showAll')}</span>
+          </label>
+          <label className="search-box">
+            <span>{t('playlogs.dayLabel')}</span>
+            <select
+              value={selectedPlaylogDayKey ?? ''}
+              onChange={(event) => handlePlaylogDayInputChange(event.target.value)}
+              disabled={isPlaylogDateFilterDisabled || playlogDayOptions.length === 0}
+            >
+              {playlogDayOptions.map((option) => (
+                <option key={option.key} value={option.key}>
+                  {t('playlogs.dayOption', {
+                    date: formatDayLabel(option.key),
+                    credits: option.creditCount === null ? '-' : formatLocalizedNumber(option.creditCount),
+                  })}
+                </option>
+              ))}
+            </select>
+          </label>
+          <p className="playlog-day-filter-summary">{playlogDaySummary}</p>
+        </div>
+
+        <ToggleGroup
+          label={t('scores.chartType')}
+          options={chartTypes}
+          selected={playlogChartFilter}
+          onToggle={(value) => setPlaylogChartFilter((prev) => toggleArrayValue(prev, value))}
+          optionClassName={(value) => `chart-type-chip ${getChartTypeToneClass(value)}`}
+        />
+
+        <ToggleGroup
+          label={t('scores.difficulty')}
+          options={difficulties}
+          selected={playlogDifficultyFilter}
+          onToggle={(value) => setPlaylogDifficultyFilter((prev) => toggleArrayValue(prev, value))}
+          renderLabel={(value) => <DifficultyLabel difficulty={value} short />}
+          optionClassName={(value) => `difficulty-chip ${getDifficultyToneClass(value)}`}
+        />
+
+        <div className="filter-block">
+          <div className="range-grid compact">
+            <label>
+              <span>{t('scores.achievementMin')}</span>
+              <input
+                type="number"
+                value={playlogAchievementMin}
+                min={0}
+                max={101}
+                step={0.0001}
+                onChange={(event) => setPlaylogAchievementMin(Number(event.target.value))}
+              />
+            </label>
+            <label>
+              <span>{t('scores.achievementMax')}</span>
+              <input
+                type="number"
+                value={playlogAchievementMax}
+                min={0}
+                max={101}
+                step={0.0001}
+                onChange={(event) => setPlaylogAchievementMax(Number(event.target.value))}
+              />
+            </label>
+          </div>
+        </div>
+
+        <div className="playlog-special-filters filter-block">
+          <label className="playlog-special-toggle">
+            <input
+              type="checkbox"
+              checked={playlogBestOnly}
+              onChange={(event) => setPlaylogBestOnly(event.target.checked)}
+            />
+            <span>{t('playlogs.bestOnly')}</span>
+          </label>
+          <label className="playlog-special-toggle">
+            <input
+              type="checkbox"
+              checked={playlogNewRecordOnly}
+              onChange={(event) => setPlaylogNewRecordOnly(event.target.checked)}
+            />
+            <span>{t('playlogs.newRecordOnly')}</span>
+          </label>
+        </div>
+      </div>
+    </section>
+  );
+
   return (
-    <div className="explorer-layout">
+    <>
+      <div className="explorer-layout">
       <aside className="sidebar-column">
         {sidebarTopContent}
-        <section className="panel filter-panel">
-          <div className="panel-heading compact">
-            <div>
-              <h2>Filters</h2>
-            </div>
-          </div>
-          <div className="filter-grid">
-            <form
-              className="search-box search-submit-group filter-block"
-              onSubmit={(event) => {
-                event.preventDefault();
-                onApplyPlaylogQuery();
-              }}
-            >
-              <span>{t('playlogs.searchLabel')}</span>
-              <div className="search-submit-row">
-                <input
-                  type="search"
-                  value={playlogQueryDraft}
-                  onChange={(event) => setPlaylogQueryDraft(event.target.value)}
-                  placeholder={t('playlogs.searchPlaceholder')}
-                />
-                <button
-                  type="submit"
-                  className="search-submit-button"
-                  disabled={!isSearchDirty}
-                >
-                  {t('common.search')}
-                </button>
-              </div>
-            </form>
-
-            <div className="filter-block playlog-day-filter">
-              <label className="playlog-day-toggle">
-                <input
-                  type="checkbox"
-                  checked={isPlaylogDateFilterDisabled}
-                  onChange={(event) => setIsPlaylogDateFilterDisabled(event.target.checked)}
-                />
-                <span>{t('playlogs.showAll')}</span>
-              </label>
-              <label className="search-box">
-                <span>{t('playlogs.dayLabel')}</span>
-                <select
-                  value={selectedPlaylogDayKey ?? ''}
-                  onChange={(event) => handlePlaylogDayInputChange(event.target.value)}
-                  disabled={isPlaylogDateFilterDisabled || playlogDayOptions.length === 0}
-                >
-                  {playlogDayOptions.map((option) => (
-                    <option key={option.key} value={option.key}>
-                      {t('playlogs.dayOption', {
-                        date: formatDayLabel(option.key),
-                        credits: option.creditCount === null ? '-' : formatLocalizedNumber(option.creditCount),
-                      })}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <p className="playlog-day-filter-summary">{playlogDaySummary}</p>
-            </div>
-
-            <ToggleGroup
-              label={t('scores.chartType')}
-              options={chartTypes}
-              selected={playlogChartFilter}
-              onToggle={(value) => setPlaylogChartFilter((prev) => toggleArrayValue(prev, value))}
-              optionClassName={(value) => `chart-type-chip ${getChartTypeToneClass(value)}`}
-            />
-
-            <ToggleGroup
-              label={t('scores.difficulty')}
-              options={difficulties}
-              selected={playlogDifficultyFilter}
-              onToggle={(value) => setPlaylogDifficultyFilter((prev) => toggleArrayValue(prev, value))}
-              renderLabel={(value) => <DifficultyLabel difficulty={value} short />}
-              optionClassName={(value) => `difficulty-chip ${getDifficultyToneClass(value)}`}
-            />
-
-            <div className="filter-block">
-              <div className="range-grid compact">
-                <label>
-                  <span>{t('scores.achievementMin')}</span>
-                  <input
-                    type="number"
-                    value={playlogAchievementMin}
-                    min={0}
-                    max={101}
-                    step={0.0001}
-                    onChange={(event) => setPlaylogAchievementMin(Number(event.target.value))}
-                  />
-                </label>
-                <label>
-                  <span>{t('scores.achievementMax')}</span>
-                  <input
-                    type="number"
-                    value={playlogAchievementMax}
-                    min={0}
-                    max={101}
-                    step={0.0001}
-                    onChange={(event) => setPlaylogAchievementMax(Number(event.target.value))}
-                  />
-                </label>
-              </div>
-            </div>
-
-            <div className="playlog-special-filters filter-block">
-              <label className="playlog-special-toggle">
-                <input
-                  type="checkbox"
-                  checked={playlogBestOnly}
-                  onChange={(event) => setPlaylogBestOnly(event.target.checked)}
-                />
-                <span>{t('playlogs.bestOnly')}</span>
-              </label>
-              <label className="playlog-special-toggle">
-                <input
-                  type="checkbox"
-                  checked={playlogNewRecordOnly}
-                  onChange={(event) => setPlaylogNewRecordOnly(event.target.checked)}
-                />
-                <span>{t('playlogs.newRecordOnly')}</span>
-              </label>
-            </div>
-          </div>
-        </section>
+        {filterPanel}
       </aside>
 
       <div className="table-column">
@@ -400,6 +406,37 @@ export function PlaylogExplorerSection({
           </div>
         </section>
       </div>
-    </div>
+      </div>
+
+      <button
+        type="button"
+        className="mobile-filter-fab"
+        onClick={() => setIsFilterModalOpen(true)}
+      >
+        {t('common.filters')}
+      </button>
+
+      {isFilterModalOpen ? (
+        <div className="modal-backdrop mobile-filter-backdrop" onClick={() => setIsFilterModalOpen(false)}>
+          <section
+            className="modal-card panel mobile-filter-modal"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="detail-header">
+              <h2>{t('common.filters')}</h2>
+              <button
+                type="button"
+                className="modal-close-button"
+                onClick={() => setIsFilterModalOpen(false)}
+              >
+                {t('common.close')}
+              </button>
+            </div>
+            {sidebarTopContent}
+            {filterPanel}
+          </section>
+        </div>
+      ) : null}
+    </>
   );
 }
