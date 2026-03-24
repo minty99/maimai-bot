@@ -1,6 +1,7 @@
 import type { ChartType, DifficultyCategory, FcStatus, ScoreRank, SyncStatus } from '../types';
 
 export const SONG_INFO_STORAGE_KEY = 'maistats.song-info-url';
+export const SONG_DATABASE_STORAGE_KEY = 'maistats.song-database-url';
 export const RECORD_STORAGE_KEY = 'maistats.record-url';
 export const SCORE_FILTERS_STORAGE_KEY = 'maistats.score-filters';
 export const PLAYLOG_FILTERS_STORAGE_KEY = 'maistats.playlog-filters';
@@ -8,12 +9,12 @@ export const RANDOM_PICKER_FILTERS_STORAGE_KEY = 'maistats.random-picker-filters
 export const TABLE_LAYOUT_STORAGE_KEY = 'maistats.table-layout';
 export const THEME_STORAGE_KEY = 'maistats.theme';
 
-const ENV_SONG_INFO_URL = import.meta.env.SONG_INFO_SERVER_URL?.trim();
+const ENV_SONG_DATABASE_URL = import.meta.env.SONG_DATABASE_URL?.trim();
 const ENV_RECORD_COLLECTOR_URL =
   import.meta.env.RECORD_COLLECTOR_SERVER_URL?.trim();
 
-export const DEFAULT_SONG_INFO_URL =
-  ENV_SONG_INFO_URL || 'https://maimai-songs.muhwan.dev';
+export const DEFAULT_SONG_DATABASE_URL =
+  ENV_SONG_DATABASE_URL || 'https://maimai-charts.muhwan.dev';
 export const DEFAULT_RECORD_COLLECTOR_URL =
   ENV_RECORD_COLLECTOR_URL || 'http://localhost:3000';
 

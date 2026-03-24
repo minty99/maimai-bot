@@ -7,7 +7,7 @@ export default defineConfig(({ mode }) => {
   return {
     plugins: [cloudflare()],
     define: {
-      'import.meta.env.SONG_INFO_SERVER_URL': JSON.stringify(env.SONG_INFO_SERVER_URL ?? ''),
+      'import.meta.env.SONG_DATABASE_URL': JSON.stringify(env.SONG_DATABASE_URL ?? ''),
       'import.meta.env.RECORD_COLLECTOR_SERVER_URL': JSON.stringify(
         env.RECORD_COLLECTOR_SERVER_URL ?? '',
       ),
