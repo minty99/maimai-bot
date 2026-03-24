@@ -4,11 +4,8 @@ version.workspace = true
 edition.workspace = true
 
 [dependencies]
-axum.workspace = true
 chrono.workspace = true
-chrono-tz.workspace = true
 tokio = { workspace = true, features = ["rt-multi-thread", "macros", "signal"] }
-tower-http = { workspace = true, features = ["trace", "cors"] }
 tracing.workspace = true
 tracing-subscriber = { workspace = true, features = ["env-filter"] }
 serde.workspace = true

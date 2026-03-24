@@ -4,6 +4,13 @@ use std::collections::HashMap;
 use crate::{ChartType, DifficultyCategory, SongGenre};
 
 #[derive(Debug, Serialize, Deserialize)]
+pub struct SongDatabase {
+    #[serde(rename = "generatedAt")]
+    pub generated_at: String,
+    pub songs: Vec<SongCatalogSong>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
 pub struct SongCatalog {
     pub songs: Vec<SongCatalogSong>,
 }
@@ -95,41 +102,14 @@ impl SongInternalLevelIndex {
     pub fn from_catalog(catalog: SongCatalog) -> Self {
         let mut map = HashMap::new();
 
-        for song in catalog.songs {
-            let title = normalize_identity_component(&song.title);
-            let genre = normalize_genre_identity_component(song.genre.as_str());
-            let artist = normalize_identity_component(&song.artist);
+        populate_internal_level_map(&mut map, &catalog.songs);
 
-            for sheet in song.sheets {
-                let Ok(chart_type) = sheet.chart_type.parse::<ChartType>() else {
-                    continue;
-                };
+        Self { map }
+    }
 
-                let Some(internal_str) = &sheet.internal_level else {
-                    continue;
-                };
-
-                let Ok(internal_value) = internal_str.trim().parse::<f32>() else {
-                    continue;
-                };
-
-                let Ok(diff_category) = sheet.difficulty.parse::<DifficultyCategory>() else {
-                    continue;
-                };
-
-                map.insert(
-                    SongChartLookupKey {
-                        title: title.clone(),
-                        genre: genre.clone(),
-                        artist: artist.clone(),
-                        chart_type,
-                        diff_category,
-                    },
-                    internal_value,
-                );
-            }
-        }
-
+    pub fn from_database(database: SongDatabase) -> Self {
+        let mut map = HashMap::new();
+        populate_internal_level_map(&mut map, &database.songs);
         Self { map }
     }
 }
@@ -143,6 +123,46 @@ fn normalize_genre_identity_component(s: &str) -> String {
         .ok()
         .map(|genre| genre.to_string())
         .unwrap_or_else(|| s.trim().to_string())
+}
+
+fn populate_internal_level_map(
+    map: &mut HashMap<SongChartLookupKey, f32>,
+    songs: &[SongCatalogSong],
+) {
+    for song in songs {
+        let title = normalize_identity_component(&song.title);
+        let genre = normalize_genre_identity_component(song.genre.as_str());
+        let artist = normalize_identity_component(&song.artist);
+
+        for sheet in &song.sheets {
+            let Ok(chart_type) = sheet.chart_type.parse::<ChartType>() else {
+                continue;
+            };
+
+            let Some(internal_str) = &sheet.internal_level else {
+                continue;
+            };
+
+            let Ok(internal_value) = internal_str.trim().parse::<f32>() else {
+                continue;
+            };
+
+            let Ok(diff_category) = sheet.difficulty.parse::<DifficultyCategory>() else {
+                continue;
+            };
+
+            map.insert(
+                SongChartLookupKey {
+                    title: title.clone(),
+                    genre: genre.clone(),
+                    artist: artist.clone(),
+                    chart_type,
+                    diff_category,
+                },
+                internal_value,
+            );
+        }
+    }
 }
 
 #[cfg(test)]
