@@ -24,19 +24,6 @@ pub(crate) fn youtube_search_url(
     )
 }
 
-pub(crate) fn plain_chart_label(
-    chart_type: ChartType,
-    difficulty: DifficultyCategory,
-    level_with_internal: &str,
-) -> String {
-    format!(
-        "[{}] {} {}",
-        chart_type,
-        difficulty.as_str(),
-        level_with_internal
-    )
-}
-
 pub(crate) fn linked_chart_label(
     title: &str,
     chart_type: ChartType,
@@ -51,15 +38,6 @@ pub(crate) fn linked_chart_label(
         url,
         level_with_internal
     )
-}
-
-pub(crate) fn youtube_link_emoji(
-    title: &str,
-    chart_type: ChartType,
-    difficulty: DifficultyCategory,
-) -> String {
-    let url = youtube_search_url(title, chart_type, difficulty);
-    format!("[🔗]({url})")
 }
 
 pub(crate) fn linked_short_difficulty(
