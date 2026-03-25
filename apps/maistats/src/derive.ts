@@ -17,6 +17,27 @@ import { daysSince, parseMaimaiPlayedAtToUnix } from './app/maimaiTime';
 
 const EMPTY_ALIASES: SongAliases = { en: [], ko: [] };
 
+function buildScoreSearchText(
+  title: string,
+  aliases: SongAliases,
+  version: string | null,
+  level: string | null,
+  locale: string,
+): string {
+  const enAliases = Array.isArray(aliases.en) ? aliases.en : [];
+  const koAliases = Array.isArray(aliases.ko) ? aliases.ko : [];
+
+  return [
+    title,
+    ...enAliases,
+    ...koAliases,
+    version ?? '',
+    level ?? '',
+  ]
+    .join(' ')
+    .toLocaleLowerCase(locale);
+}
+
 export function chartKey(
   title: string,
   genre: string,
@@ -215,6 +236,7 @@ export function buildScoreRows(
     const key = chartKey(title, genre, artist, chartType, difficulty);
     const matchedSheet = sheet ?? findMatchingSheet(songInfo, chartType, difficulty);
     const score = scoreByKey.get(key) ?? null;
+    const aliases = songAliases(songInfo);
     const estimatedInternalLevel = estimateInternalLevel(matchedSheet?.level);
     const internalLevel = matchedSheet?.internal_level ?? estimatedInternalLevel;
     const isInternalLevelEstimated =
@@ -227,7 +249,7 @@ export function buildScoreRows(
       title,
       genre,
       artist,
-      aliases: songAliases(songInfo),
+      aliases,
       chartType,
       difficulty,
       achievementX10000: score?.achievement_x10000 ?? null,
@@ -244,6 +266,13 @@ export function buildScoreRows(
       isInternalLevelEstimated,
       version: matchedSheet?.version ?? null,
       imageName: songInfo?.image_name ?? null,
+      searchText: buildScoreSearchText(
+        title,
+        aliases,
+        matchedSheet?.version ?? null,
+        matchedSheet?.level ?? null,
+        locale,
+      ),
       latestPlayedAtUnix,
       latestPlayedAtLabel: score?.last_played_at ?? toDateLabel(latestPlayedAtUnix, locale),
       daysSinceLastPlayed: daysSince(latestPlayedAtUnix),

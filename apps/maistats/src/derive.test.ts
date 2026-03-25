@@ -27,6 +27,7 @@ function buildScoreRow(): ScoreRow {
     isInternalLevelEstimated: false,
     version: 'DX',
     imageName: null,
+    searchText: 'song dx 14+',
     latestPlayedAtUnix: 100,
     latestPlayedAtLabel: null,
     daysSinceLastPlayed: 1,

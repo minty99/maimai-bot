@@ -227,6 +227,7 @@ export interface ScoreRow {
   isInternalLevelEstimated: boolean;
   version: string | null;
   imageName: string | null;
+  searchText: string;
   latestPlayedAtUnix: number | null;
   latestPlayedAtLabel: string | null;
   daysSinceLastPlayed: number | null;

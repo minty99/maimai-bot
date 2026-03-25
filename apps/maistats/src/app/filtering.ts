@@ -74,10 +74,20 @@ export function buildFilteredScoreRows({
   const oldSet = new Set(
     versionOptions.filter((version) => !latestSet.has(version)),
   );
+  const normalizedQuery = query.trim().toLocaleLowerCase(locale);
+  const filterByFc = fcFilter.length > 0 && !fcFilter.includes(ALL_FILTER_PRESET_ID);
+  const includeNullFc = filterByFc && fcFilter.includes(NA_FILTER_OPTION_ID);
+  const selectedFcStatuses = filterByFc
+    ? new Set(fcFilter.filter((value) => value !== NA_FILTER_OPTION_ID))
+    : null;
+  const filterBySync = syncFilter.length > 0 && !syncFilter.includes(ALL_FILTER_PRESET_ID);
+  const includeNullSync = filterBySync && syncFilter.includes(NA_FILTER_OPTION_ID);
+  const selectedSyncStatuses = filterBySync
+    ? new Set(syncFilter.filter((value) => value !== NA_FILTER_OPTION_ID))
+    : null;
 
   const isIncluded = (row: ScoreRow): boolean => {
-    const targetText = `${row.title} ${aliasValues(row.aliases, "en").join(" ")} ${aliasValues(row.aliases, "ko").join(" ")} ${row.version ?? ""} ${row.level ?? ""}`;
-    if (!includesText(targetText, query)) {
+    if (normalizedQuery && !row.searchText.includes(normalizedQuery)) {
       return false;
     }
 
@@ -103,30 +113,22 @@ export function buildFilteredScoreRows({
       }
     }
 
-    if (fcFilter.length > 0 && !fcFilter.includes(ALL_FILTER_PRESET_ID)) {
-      const includeNull = fcFilter.includes(NA_FILTER_OPTION_ID);
-      const selectedStatuses = new Set(
-        fcFilter.filter((value) => value !== NA_FILTER_OPTION_ID),
-      );
+    if (filterByFc) {
       if (row.fc === null) {
-        if (!includeNull) {
+        if (!includeNullFc) {
           return false;
         }
-      } else if (!selectedStatuses.has(row.fc)) {
+      } else if (!selectedFcStatuses?.has(row.fc)) {
         return false;
       }
     }
 
-    if (syncFilter.length > 0 && !syncFilter.includes(ALL_FILTER_PRESET_ID)) {
-      const includeNull = syncFilter.includes(NA_FILTER_OPTION_ID);
-      const selectedStatuses = new Set(
-        syncFilter.filter((value) => value !== NA_FILTER_OPTION_ID),
-      );
+    if (filterBySync) {
       if (row.sync === null) {
-        if (!includeNull) {
+        if (!includeNullSync) {
           return false;
         }
-      } else if (!selectedStatuses.has(row.sync)) {
+      } else if (!selectedSyncStatuses?.has(row.sync)) {
         return false;
       }
     }

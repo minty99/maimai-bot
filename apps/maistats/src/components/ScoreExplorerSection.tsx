@@ -144,13 +144,15 @@ export function ScoreExplorerSection({
   const virtualizer = useVirtualizer({
     count: filteredScoreRows.length,
     getScrollElement: () => tableWrapRef.current,
+    getItemKey: (index) => filteredScoreRows[index]?.key ?? index,
     estimateSize: () => (showJackets ? 80 : 36),
     overscan: 10,
   });
 
   useEffect(() => {
     if (tableWrapRef.current) tableWrapRef.current.scrollTop = 0;
-  }, [filteredScoreRows, showJackets]);
+    virtualizer.measure();
+  }, [filteredScoreRows, showJackets, virtualizer]);
 
   const virtualItems = virtualizer.getVirtualItems();
   const colCount = showJackets ? 13 : 12;
@@ -476,7 +478,7 @@ export function ScoreExplorerSection({
                 {virtualItems.map((virtualRow) => {
                   const row = filteredScoreRows[virtualRow.index];
                   return (
-                    <tr key={row.key} data-index={virtualRow.index} ref={virtualizer.measureElement}>
+                    <tr key={row.key} data-index={virtualRow.index}>
                       {showJackets ? (
                         <td className="jacket-col">
                           <Jacket songInfoUrl={songInfoUrl} imageName={row.imageName} title={row.title} />
