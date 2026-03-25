@@ -28,7 +28,7 @@ on:
 
 jobs:
   validate:
-    if: (github.event_name == 'pull_request' || github.event_name == 'push') && secrets.MAIMAI_INTL_SEGA_ID != '' && secrets.MAIMAI_INTL_SEGA_PASSWORD != '' && secrets.MAIMAI_JP_SEGA_ID != '' && secrets.MAIMAI_JP_SEGA_PASSWORD != '' && secrets.USER_AGENT != ''
+    if: (github.event_name == 'pull_request' || github.event_name == 'push') && secrets.MAIMAI_INTL_SEGA_ID != '' && secrets.MAIMAI_INTL_SEGA_PASSWORD != '' && secrets.USER_AGENT != ''
     runs-on: ubuntu-latest
 
     steps:
@@ -46,8 +46,6 @@ jobs:
           SONG_DATA_PATH: /tmp/song_data
           MAIMAI_INTL_SEGA_ID: ${{ secrets.MAIMAI_INTL_SEGA_ID }}
           MAIMAI_INTL_SEGA_PASSWORD: ${{ secrets.MAIMAI_INTL_SEGA_PASSWORD }}
-          MAIMAI_JP_SEGA_ID: ${{ secrets.MAIMAI_JP_SEGA_ID }}
-          MAIMAI_JP_SEGA_PASSWORD: ${{ secrets.MAIMAI_JP_SEGA_PASSWORD }}
           USER_AGENT: ${{ secrets.USER_AGENT }}
         run: cargo run -p maistats-song-info
 
@@ -59,7 +57,7 @@ jobs:
           test -d "${SONG_DATA_PATH}/cover"
 
   publish:
-    if: (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && secrets.MAIMAI_INTL_SEGA_ID != '' && secrets.MAIMAI_INTL_SEGA_PASSWORD != '' && secrets.MAIMAI_JP_SEGA_ID != '' && secrets.MAIMAI_JP_SEGA_PASSWORD != '' && secrets.USER_AGENT != '' && secrets.R2_BUCKET_NAME != '' && secrets.R2_ENDPOINT != '' && secrets.R2_ACCESS_KEY_ID != '' && secrets.R2_SECRET_ACCESS_KEY != '' && secrets.R2_PUBLIC_BASE_URL != ''
+    if: (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && secrets.MAIMAI_INTL_SEGA_ID != '' && secrets.MAIMAI_INTL_SEGA_PASSWORD != '' && secrets.USER_AGENT != '' && secrets.R2_BUCKET_NAME != '' && secrets.R2_ENDPOINT != '' && secrets.R2_ACCESS_KEY_ID != '' && secrets.R2_SECRET_ACCESS_KEY != '' && secrets.R2_PUBLIC_BASE_URL != ''
     runs-on: ubuntu-latest
 
     steps:
@@ -80,8 +78,6 @@ jobs:
           SONG_DATA_PATH: /tmp/song_data
           MAIMAI_INTL_SEGA_ID: ${{ secrets.MAIMAI_INTL_SEGA_ID }}
           MAIMAI_INTL_SEGA_PASSWORD: ${{ secrets.MAIMAI_INTL_SEGA_PASSWORD }}
-          MAIMAI_JP_SEGA_ID: ${{ secrets.MAIMAI_JP_SEGA_ID }}
-          MAIMAI_JP_SEGA_PASSWORD: ${{ secrets.MAIMAI_JP_SEGA_PASSWORD }}
           USER_AGENT: ${{ secrets.USER_AGENT }}
         run: cargo run -p maistats-song-info
 
