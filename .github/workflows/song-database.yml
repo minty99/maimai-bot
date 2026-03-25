@@ -28,20 +28,30 @@ on:
 
 jobs:
   validate:
-    if: (github.event_name == 'pull_request' || github.event_name == 'push') && secrets.MAIMAI_INTL_SEGA_ID != '' && secrets.MAIMAI_INTL_SEGA_PASSWORD != '' && secrets.USER_AGENT != ''
+    if: ${{ github.event_name == 'pull_request' || github.event_name == 'push' }}
     runs-on: ubuntu-latest
+    env:
+      HAS_GENERATE_SECRETS: ${{ secrets.MAIMAI_INTL_SEGA_ID != '' && secrets.MAIMAI_INTL_SEGA_PASSWORD != '' && secrets.USER_AGENT != '' }}
 
     steps:
+      - name: Skip when required secrets are missing
+        if: ${{ env.HAS_GENERATE_SECRETS != 'true' }}
+        run: echo "Skipping validation because required song database secrets are not configured."
+
       - name: Checkout
+        if: ${{ env.HAS_GENERATE_SECRETS == 'true' }}
         uses: actions/checkout@v4
 
       - name: Set up Rust
+        if: ${{ env.HAS_GENERATE_SECRETS == 'true' }}
         uses: dtolnay/rust-toolchain@stable
 
       - name: Cache cargo artifacts
+        if: ${{ env.HAS_GENERATE_SECRETS == 'true' }}
         uses: Swatinem/rust-cache@v2
 
       - name: Generate song database
+        if: ${{ env.HAS_GENERATE_SECRETS == 'true' }}
         env:
           SONG_DATA_PATH: /tmp/song_data
           MAIMAI_INTL_SEGA_ID: ${{ secrets.MAIMAI_INTL_SEGA_ID }}
@@ -50,6 +60,7 @@ jobs:
         run: cargo run -p maistats-song-info
 
       - name: Validate generated artifacts
+        if: ${{ env.HAS_GENERATE_SECRETS == 'true' }}
         env:
           SONG_DATA_PATH: /tmp/song_data
         run: |
@@ -57,23 +68,34 @@ jobs:
           test -d "${SONG_DATA_PATH}/cover"
 
   publish:
-    if: (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && secrets.MAIMAI_INTL_SEGA_ID != '' && secrets.MAIMAI_INTL_SEGA_PASSWORD != '' && secrets.USER_AGENT != '' && secrets.R2_BUCKET_NAME != '' && secrets.R2_ENDPOINT != '' && secrets.R2_ACCESS_KEY_ID != '' && secrets.R2_SECRET_ACCESS_KEY != '' && secrets.R2_PUBLIC_BASE_URL != ''
+    if: ${{ github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' }}
     runs-on: ubuntu-latest
+    env:
+      HAS_PUBLISH_SECRETS: ${{ secrets.MAIMAI_INTL_SEGA_ID != '' && secrets.MAIMAI_INTL_SEGA_PASSWORD != '' && secrets.USER_AGENT != '' && secrets.R2_BUCKET_NAME != '' && secrets.R2_ENDPOINT != '' && secrets.R2_ACCESS_KEY_ID != '' && secrets.R2_SECRET_ACCESS_KEY != '' && secrets.R2_PUBLIC_BASE_URL != '' }}
 
     steps:
+      - name: Skip when required secrets are missing
+        if: ${{ env.HAS_PUBLISH_SECRETS != 'true' }}
+        run: echo "Skipping publish because required song database secrets are not configured."
+
       - name: Checkout
+        if: ${{ env.HAS_PUBLISH_SECRETS == 'true' }}
         uses: actions/checkout@v4
 
       - name: Set up Rust
+        if: ${{ env.HAS_PUBLISH_SECRETS == 'true' }}
         uses: dtolnay/rust-toolchain@stable
 
       - name: Cache cargo artifacts
+        if: ${{ env.HAS_PUBLISH_SECRETS == 'true' }}
         uses: Swatinem/rust-cache@v2
 
       - name: Install AWS CLI
+        if: ${{ env.HAS_PUBLISH_SECRETS == 'true' }}
         run: sudo apt-get update && sudo apt-get install -y awscli
 
       - name: Download existing covers from R2
+        if: ${{ env.HAS_PUBLISH_SECRETS == 'true' }}
         env:
           SONG_DATA_PATH: /tmp/song_data
           R2_BUCKET_NAME: ${{ secrets.R2_BUCKET_NAME }}
@@ -88,6 +110,7 @@ jobs:
             --endpoint-url "${R2_ENDPOINT}"
 
       - name: Generate song database
+        if: ${{ env.HAS_PUBLISH_SECRETS == 'true' }}
         env:
           SONG_DATA_PATH: /tmp/song_data
           MAIMAI_INTL_SEGA_ID: ${{ secrets.MAIMAI_INTL_SEGA_ID }}
@@ -96,6 +119,7 @@ jobs:
         run: cargo run -p maistats-song-info
 
       - name: Upload to R2
+        if: ${{ env.HAS_PUBLISH_SECRETS == 'true' }}
         env:
           SONG_DATA_PATH: /tmp/song_data
           R2_BUCKET_NAME: ${{ secrets.R2_BUCKET_NAME }}
@@ -105,6 +129,7 @@ jobs:
         run: bash ./.github/scripts/upload-song-database.sh
 
       - name: Smoke check public data.json
+        if: ${{ env.HAS_PUBLISH_SECRETS == 'true' }}
         env:
           R2_PUBLIC_BASE_URL: ${{ secrets.R2_PUBLIC_BASE_URL }}
         run: curl -fsSL "${R2_PUBLIC_BASE_URL}/data.json" > /dev/null
