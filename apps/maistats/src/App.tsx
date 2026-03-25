@@ -46,7 +46,6 @@ import {
   coerceNumber,
   coerceStringArray,
   readStoredJson,
-  readStoredValue,
   StoredPlaylogFilters,
   StoredScoreFilters,
 } from './app/storage';
@@ -306,12 +305,7 @@ function App() {
     }
   }, [themePreference]);
 
-  const [songInfoUrl, setSongInfoUrl] = useState<string>(() =>
-    readStoredValue(
-      SONG_DATABASE_STORAGE_KEY,
-      readStoredValue(SONG_INFO_STORAGE_KEY, DEFAULT_SONG_DATABASE_URL),
-    ),
-  );
+  const [songInfoUrl, setSongInfoUrl] = useState<string>(DEFAULT_SONG_DATABASE_URL);
   const [recordCollectorUrl, setRecordCollectorUrl] = useState<string>(() => {
     const stored = localStorage.getItem(RECORD_STORAGE_KEY)?.trim();
     if (stored) return stored;
@@ -331,6 +325,11 @@ function App() {
   const [songMetadata, setSongMetadata] = useState<Map<string, SongInfoResponse>>(
     () => new Map(),
   );
+
+  useEffect(() => {
+    localStorage.removeItem(SONG_DATABASE_STORAGE_KEY);
+    localStorage.removeItem(SONG_INFO_STORAGE_KEY);
+  }, []);
   const [versionsResponse, setVersionsResponse] = useState<string[]>([]);
   const [pickerVersionOptions, setPickerVersionOptions] = useState<SongVersionResponse[]>([]);
   const [playerProfile, setPlayerProfile] = useState<PlayerProfile | null>(null);
@@ -731,10 +730,6 @@ function App() {
     playlogDifficultyFilter,
     playlogNewRecordOnly,
   ]);
-
-  useEffect(() => {
-    localStorage.setItem(SONG_DATABASE_STORAGE_KEY, songInfoUrl);
-  }, [songInfoUrl]);
 
   useEffect(() => {
     localStorage.setItem(RECORD_STORAGE_KEY, recordCollectorUrl);
