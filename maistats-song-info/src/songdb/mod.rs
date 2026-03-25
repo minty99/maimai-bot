@@ -23,6 +23,8 @@ use sheet_versions::SheetVersionMap;
 pub const SONG_DATA_SUBDIR: &str = "song_data";
 const MAIMAI_SONGS_URL: &str = "https://maimai.sega.jp/data/maimai_songs.json";
 const IMAGE_BASE_URL: &str = "https://maimaidx.jp/maimai-mobile/img/Music/";
+const OFFICIAL_MAIMAI_CIRCLE_JSON: &str =
+    include_str!("../examples/maimai/official/maimai_circle_offical.json");
 
 #[derive(Debug, Deserialize)]
 struct RawSong {
@@ -389,16 +391,20 @@ fn build_song_alias_map(
 }
 
 async fn fetch_maimai_songs(client: &reqwest::Client) -> eyre::Result<Vec<RawSong>> {
-    let response = client
-        .get(MAIMAI_SONGS_URL)
-        .send()
-        .await
-        .wrap_err("fetch maimai songs json")?;
-    let response = response
-        .error_for_status()
-        .wrap_err("maimai songs json status")?;
-    let body = response.text().await.wrap_err("read maimai songs json")?;
-    parse_maimai_songs_json(&body)
+    let _ = client;
+
+    // let response = client
+    //     .get(MAIMAI_SONGS_URL)
+    //     .send()
+    //     .await
+    //     .wrap_err("fetch maimai songs json")?;
+    // let response = response
+    //     .error_for_status()
+    //     .wrap_err("maimai songs json status")?;
+    // let body = response.text().await.wrap_err("read maimai songs json")?;
+    // parse_maimai_songs_json(&body)
+
+    parse_maimai_songs_json(OFFICIAL_MAIMAI_CIRCLE_JSON)
 }
 
 fn parse_maimai_songs_json(json: &str) -> eyre::Result<Vec<RawSong>> {
@@ -999,7 +1005,7 @@ mod tests {
 
     #[test]
     fn parses_official_maimai_songs_fixture() {
-        let fixture = include_str!("../examples/maimai/official/maimai_songs.json");
+        let fixture = include_str!("../examples/maimai/official/maimai_circle_offical.json");
         let raw_songs = parse_maimai_songs_json(fixture).expect("parse official songs fixture");
         let (songs, sheets) =
             load_official_rows_from_json(fixture).expect("extract official rows from fixture");
@@ -1210,7 +1216,7 @@ mod tests {
     fn filter_official_songs_by_title_skips_manual_override_titles() {
         let manual_override_rows = load_manual_override_rows().expect("load manual override rows");
         let raw_songs = parse_maimai_songs_json(include_str!(
-            "../examples/maimai/official/maimai_songs.json"
+            "../examples/maimai/official/maimai_circle_offical.json"
         ))
         .expect("parse fixture");
 
