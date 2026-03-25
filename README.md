@@ -124,8 +124,6 @@ cp .env.example .env
 - SongDB updater
   - `MAIMAI_INTL_SEGA_ID`
   - `MAIMAI_INTL_SEGA_PASSWORD`
-  - `MAIMAI_JP_SEGA_ID`
-  - `MAIMAI_JP_SEGA_PASSWORD`
   - `USER_AGENT`
 - R2 upload
   - `R2_PUBLIC_BASE_URL`

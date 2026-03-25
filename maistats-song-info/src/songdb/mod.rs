@@ -137,8 +137,6 @@ struct SheetKey<'a> {
 pub struct SongDbConfig {
     pub intl_sega_id: String,
     pub intl_sega_password: String,
-    pub jp_sega_id: String,
-    pub jp_sega_password: String,
     pub user_agent: String,
 }
 
@@ -147,8 +145,6 @@ impl fmt::Debug for SongDbConfig {
         f.debug_struct("SongDbConfig")
             .field("intl_sega_id", &"<redacted>")
             .field("intl_sega_password", &"<redacted>")
-            .field("jp_sega_id", &"<redacted>")
-            .field("jp_sega_password", &"<redacted>")
             .field("user_agent", &self.user_agent)
             .finish()
     }
@@ -162,17 +158,11 @@ impl SongDbConfig {
         let intl_sega_password = std::env::var("MAIMAI_INTL_SEGA_PASSWORD")
             .or_else(|_| std::env::var("SEGA_PASSWORD"))
             .wrap_err("missing env var: MAIMAI_INTL_SEGA_PASSWORD or SEGA_PASSWORD")?;
-        let jp_sega_id =
-            std::env::var("MAIMAI_JP_SEGA_ID").wrap_err("missing env var: MAIMAI_JP_SEGA_ID")?;
-        let jp_sega_password = std::env::var("MAIMAI_JP_SEGA_PASSWORD")
-            .wrap_err("missing env var: MAIMAI_JP_SEGA_PASSWORD")?;
         let user_agent = std::env::var("USER_AGENT").wrap_err("missing env var: USER_AGENT")?;
 
         Ok(Self {
             intl_sega_id,
             intl_sega_password,
-            jp_sega_id,
-            jp_sega_password,
             user_agent,
         })
     }
