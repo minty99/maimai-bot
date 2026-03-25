@@ -1910,9 +1910,7 @@ dependencies = [
 name = "maistats-song-info"
 version = "0.1.0"
 dependencies = [
- "axum",
  "chrono",
- "chrono-tz",
  "dotenvy",
  "eyre",
  "hex",
@@ -1925,7 +1923,6 @@ dependencies = [
  "sha2",
  "strum",
  "tokio",
- "tower-http",
  "tracing",
  "tracing-subscriber",
 ]

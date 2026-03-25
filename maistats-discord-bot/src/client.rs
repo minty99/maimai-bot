@@ -6,6 +6,9 @@ use models::{
 use reqwest::{Client, Url};
 use serde::{Deserialize, Serialize};
 use std::fmt;
+use std::sync::Arc;
+use std::time::Instant;
+use tokio::sync::RwLock;
 use tokio::time::{Duration, sleep};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -100,9 +103,10 @@ pub(crate) struct SongCatalogSong {
     pub(crate) sheets: Vec<SongCatalogSheet>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-struct SongCatalogResponse {
+#[derive(Debug, Clone)]
+struct CachedSongCatalog {
     songs: Vec<SongCatalogSong>,
+    fetched_at: Instant,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -128,9 +132,10 @@ pub(crate) struct SongMetadataSearchResponse {
 }
 
 #[derive(Debug, Clone)]
-pub struct SongInfoClient {
+pub struct SongDatabaseClient {
     client: Client,
     base_url: String,
+    cache: Arc<RwLock<Option<CachedSongCatalog>>>,
 }
 
 #[derive(Debug, Clone)]
@@ -188,77 +193,175 @@ pub(crate) fn normalize_record_collector_url(input: &str) -> Result<String> {
     Ok(url.as_str().trim_end_matches('/').to_string())
 }
 
-impl SongInfoClient {
+fn convert_song_catalog(database: models::SongDatabase) -> Result<Vec<SongCatalogSong>> {
+    database
+        .songs
+        .into_iter()
+        .map(|song| {
+            let sheets = song
+                .sheets
+                .into_iter()
+                .map(|sheet| {
+                    let chart_type = sheet
+                        .chart_type
+                        .parse::<ChartType>()
+                        .map_err(|_| eyre::eyre!("parse chart type"))?;
+                    let diff_category = sheet
+                        .difficulty
+                        .parse::<DifficultyCategory>()
+                        .map_err(|_| eyre::eyre!("parse difficulty"))?;
+                    let internal_level = sheet
+                        .internal_level
+                        .as_deref()
+                        .and_then(|value| value.trim().parse::<f32>().ok());
+
+                    Ok::<_, eyre::Error>(SongCatalogSheet {
+                        chart_type,
+                        diff_category,
+                        level: sheet.level,
+                        version: sheet.version_name,
+                        internal_level,
+                        region: sheet.region,
+                    })
+                })
+                .collect::<Result<Vec<_>>>()?;
+
+            Ok(SongCatalogSong {
+                title: song.title,
+                genre: song.genre.to_string(),
+                artist: song.artist,
+                image_name: song.image_name,
+                aliases: song.aliases,
+                sheets,
+            })
+        })
+        .collect()
+}
+
+impl SongDatabaseClient {
     pub fn new(base_url: String) -> Result<Self> {
         let client = build_client()?;
-        Ok(Self { client, base_url })
+        Ok(Self {
+            client,
+            base_url,
+            cache: Arc::new(RwLock::new(None)),
+        })
     }
 
     pub(crate) async fn list_song_catalog(&self) -> Result<Vec<SongCatalogSong>> {
-        let url = format!("{}/api/songs", self.base_url);
+        const SONG_DATABASE_CACHE_TTL: Duration = Duration::from_secs(600);
+
+        {
+            let cache = self.cache.read().await;
+            if let Some(cached) = cache.as_ref()
+                && cached.fetched_at.elapsed() < SONG_DATABASE_CACHE_TTL
+            {
+                return Ok(cached.songs.clone());
+            }
+        }
+
+        let url = format!("{}/data.json", self.base_url);
         let resp = self
             .client
             .get(&url)
             .send()
             .await
-            .wrap_err("list song catalog")?;
+            .wrap_err("fetch song database")?;
 
         if !resp.status().is_success() {
             return Err(eyre::eyre!(
-                "Failed to list song catalog: HTTP {}",
+                "Failed to fetch song database: HTTP {}",
                 resp.status()
             ));
         }
 
         let response = resp
-            .json::<SongCatalogResponse>()
+            .json::<models::SongDatabase>()
             .await
-            .wrap_err("parse song catalog response")?;
-        Ok(response.songs)
+            .wrap_err("parse song database response")?;
+        let songs = convert_song_catalog(response)?;
+
+        let mut cache = self.cache.write().await;
+        *cache = Some(CachedSongCatalog {
+            songs: songs.clone(),
+            fetched_at: Instant::now(),
+        });
+
+        Ok(songs)
     }
 
-    pub(crate) async fn get_cover(&self, image_name: &str) -> Result<Vec<u8>> {
-        let url = format!("{}/api/cover/{}", self.base_url, image_name);
-        let resp = self
-            .client
-            .get(&url)
-            .send()
-            .await
-            .wrap_err("fetch cover image")?;
-
-        if !resp.status().is_success() {
-            return Err(eyre::eyre!("Failed to fetch cover: HTTP {}", resp.status()));
-        }
-
-        resp.bytes()
-            .await
-            .map(|b| b.to_vec())
-            .wrap_err("read cover image bytes")
+    pub(crate) fn cover_url(&self, image_name: &str) -> String {
+        format!(
+            "{}/cover/{}",
+            self.base_url,
+            urlencoding::encode(image_name)
+        )
     }
 
     pub(crate) async fn search_song_metadata(
         &self,
         request: &SongMetadataSearchRequest,
     ) -> Result<SongMetadataSearchResponse> {
-        let url = format!("{}/api/songs/metadata", self.base_url);
+        let songs = self.list_song_catalog().await?;
+        let mut items = Vec::new();
 
-        let resp = self
-            .client
-            .post(&url)
-            .json(request)
-            .send()
-            .await
-            .wrap_err("search song metadata")?;
-        if !resp.status().is_success() {
-            return Err(eyre::eyre!(
-                "Failed to search song metadata: HTTP {}",
-                resp.status()
-            ));
+        for song in songs {
+            let matches_song = request
+                .title
+                .as_deref()
+                .is_none_or(|title| song.title == title)
+                && request
+                    .genre
+                    .as_deref()
+                    .is_none_or(|genre| song.genre == genre)
+                && request
+                    .artist
+                    .as_deref()
+                    .is_none_or(|artist| song.artist == artist);
+
+            if !matches_song {
+                continue;
+            }
+
+            for sheet in song.sheets {
+                if request
+                    .chart_type
+                    .as_deref()
+                    .is_some_and(|chart_type| sheet.chart_type.as_str() != chart_type)
+                {
+                    continue;
+                }
+                if request
+                    .diff_category
+                    .as_deref()
+                    .is_some_and(|diff_category| sheet.diff_category.as_str() != diff_category)
+                {
+                    continue;
+                }
+
+                items.push(SongMetadata {
+                    title: song.title.clone(),
+                    chart_type: sheet.chart_type,
+                    diff_category: sheet.diff_category,
+                    level: Some(sheet.level.clone()),
+                    internal_level: sheet.internal_level,
+                    image_name: song.image_name.clone(),
+                    version: sheet.version.clone(),
+                    genre: song.genre.clone(),
+                    artist: song.artist.clone(),
+                    aliases: song.aliases.clone(),
+                    region: sheet.region.clone(),
+                });
+            }
         }
 
-        resp.json::<SongMetadataSearchResponse>()
-            .await
-            .wrap_err("parse song metadata search response")
+        let total = items.len();
+
+        if let Some(limit) = request.limits {
+            items.truncate(limit);
+        }
+
+        Ok(SongMetadataSearchResponse { total, items })
     }
 
     pub(crate) async fn find_song_metadata(

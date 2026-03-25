@@ -17,7 +17,7 @@ The goal of this file is to keep future changes consistent with the current impl
 - Frontend app: `apps/maistats`
   - Vite + React app deployed to Cloudflare Pages
   - Uses root npm workspaces; prefer running npm commands from the repo root
-  - Consumes `maistats-song-info` and `maistats-record-collector` APIs via `SONG_INFO_SERVER_URL` and `RECORD_COLLECTOR_SERVER_URL`
+  - Consumes static song database assets and `maistats-record-collector` via `SONG_DATABASE_URL` and `RECORD_COLLECTOR_SERVER_URL`
 
 - CLI entrypoint: `src/main.rs` (clap). Key subcommands:
   - `auth check|login`
@@ -31,7 +31,7 @@ The goal of this file is to keep future changes consistent with the current impl
     - registers slash commands globally
     - sends a startup summary DM only to `DISCORD_DEV_USER_ID`
   - Per-user collector selection:
-    - `SONG_INFO_SERVER_URL` is shared globally
+    - `SONG_DATABASE_URL` is shared globally
     - each Discord user registers exactly one `maistats-record-collector` base URL with `/register <url>`
     - the mapping is persisted in the bot's own SQLite DB and survives restarts
   - Slash commands:

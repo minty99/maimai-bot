@@ -149,6 +149,29 @@ export interface SongInfoListResponse {
   songs: SongInfoResponse[];
 }
 
+export interface SongDatabaseChartResponse {
+  type: string;
+  difficulty: string;
+  level: string;
+  version?: string | null;
+  internalLevel?: string | null;
+  region: SongChartRegion;
+}
+
+export interface SongDatabaseSongResponse {
+  title: string;
+  genre: string;
+  artist: string;
+  imageName?: string | null;
+  aliases?: SongAliases;
+  sheets: SongDatabaseChartResponse[];
+}
+
+export interface SongDatabaseResponse {
+  generatedAt: string;
+  songs: SongDatabaseSongResponse[];
+}
+
 export interface SongVersionResponse {
   version_index: number;
   version_name: string;

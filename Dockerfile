@@ -1,5 +1,5 @@
 # Multi-stage build for maimai-bot workspace
-# Builds both backend and discord bot from a single builder stage
+# Builds the record collector and Discord bot from a single builder stage
 
 # ============================================
 # Builder Stage - Compiles entire workspace
@@ -22,31 +22,8 @@ COPY maistats-record-collector/ ./maistats-record-collector/
 COPY maistats-song-info/ ./maistats-song-info/
 COPY maistats-discord-bot/ ./maistats-discord-bot/
 
-# Build entire workspace (both binaries)
+# Build entire workspace
 RUN cargo build --release
-
-# ============================================
-# Target: maistats-song-info
-# ============================================
-FROM ubuntu:noble as maistats-song-info
-
-RUN apt-get update && apt-get install -y \
-    ca-certificates \
-    libssl3 \
-    curl \
-    && rm -rf /var/lib/apt/lists/*
-
-WORKDIR /app
-
-# Copy song info binary
-COPY --from=builder /app/target/release/maistats-song-info /usr/local/bin/maistats-song-info
-
-# Create data directory
-RUN mkdir -p /app/data
-
-EXPOSE 3001
-
-CMD ["maistats-song-info"]
 
 # ============================================
 # Target: maistats-record-collector

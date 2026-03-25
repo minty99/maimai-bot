@@ -12,7 +12,6 @@ on:
       - rust-toolchain.toml
       - .env.example
       - crates/**
-      - maistats-song-info/**
       - maistats-record-collector/**
       - maistats-discord-bot/**
   workflow_dispatch:  # 수동 트리거 허용
@@ -29,16 +28,6 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - image_name: maistats-song-info
-            target: maistats-song-info
-            arch: arm64
-            platform: linux/arm64
-            runner: ubuntu-24.04-arm
-          # - image_name: maistats-song-info
-          #   target: maistats-song-info
-          #   arch: amd64
-          #   platform: linux/amd64
-          #   runner: ubuntu-latest
           - image_name: maistats-record-collector
             target: maistats-record-collector
             arch: arm64
@@ -104,7 +93,6 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - image_name: maistats-song-info
           - image_name: maistats-record-collector
           - image_name: maistats-discord-bot
     permissions:

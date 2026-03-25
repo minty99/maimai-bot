@@ -160,7 +160,7 @@ export function SettingsPage({
           <div className="settings-field-group">
             <div className="home-connect-row">
               <label className="home-url-field">
-                <span>Song Info URL</span>
+                <span>Song Database URL</span>
                 <input
                   type="url"
                   value={songInfoUrlDraft}

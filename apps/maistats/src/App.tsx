@@ -9,12 +9,13 @@ import {
 import { HomePage } from './components/HomePage';
 import {
   CHART_TYPES,
-  DEFAULT_SONG_INFO_URL,
+  DEFAULT_SONG_DATABASE_URL,
   DIFFICULTIES,
   PLAYLOG_FILTERS_STORAGE_KEY,
   PlaylogSortKey,
   RECORD_STORAGE_KEY,
   SCORE_FILTERS_STORAGE_KEY,
+  SONG_DATABASE_STORAGE_KEY,
   SONG_INFO_STORAGE_KEY,
   TABLE_LAYOUT_STORAGE_KEY,
   THEME_STORAGE_KEY,
@@ -306,7 +307,10 @@ function App() {
   }, [themePreference]);
 
   const [songInfoUrl, setSongInfoUrl] = useState<string>(() =>
-    readStoredValue(SONG_INFO_STORAGE_KEY, DEFAULT_SONG_INFO_URL),
+    readStoredValue(
+      SONG_DATABASE_STORAGE_KEY,
+      readStoredValue(SONG_INFO_STORAGE_KEY, DEFAULT_SONG_DATABASE_URL),
+    ),
   );
   const [recordCollectorUrl, setRecordCollectorUrl] = useState<string>(() => {
     const stored = localStorage.getItem(RECORD_STORAGE_KEY)?.trim();
@@ -548,7 +552,7 @@ function App() {
 
       setScoreRecords(payload.ratedScores);
       setSongMetadata(payload.songMetadata);
-      const availableVersions = filterAvailableVersions(payload.versions?.versions ?? []);
+      const availableVersions = filterAvailableVersions(payload.versions ?? []);
       setVersionsResponse(availableVersions.map((version) => version.version_name));
       setPickerVersionOptions(availableVersions);
       setPlayerProfile(payload.playerProfile);
@@ -729,7 +733,7 @@ function App() {
   ]);
 
   useEffect(() => {
-    localStorage.setItem(SONG_INFO_STORAGE_KEY, songInfoUrl);
+    localStorage.setItem(SONG_DATABASE_STORAGE_KEY, songInfoUrl);
   }, [songInfoUrl]);
 
   useEffect(() => {

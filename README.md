@@ -1,10 +1,10 @@
 # maistats
 
-`maistats`는 **maimaidx-eng.com** 데이터를 수집하고, 곡 메타데이터와 개인 플레이 기록을 각각 분리해서 제공하는 monorepo입니다. 저장소에는 Rust 서버 3개와 Vite/React 프런트엔드 1개가 들어 있습니다.
+`maistats`는 **maimaidx-eng.com** 데이터를 수집하고, 정적 곡 데이터와 개인 플레이 기록을 각각 분리해서 제공하는 monorepo입니다. 저장소에는 Rust 서비스 3개와 Vite/React 프런트엔드 1개가 들어 있습니다.
 
 핵심 배포 모델은 다음과 같습니다.
 
-- `maistats-song-info`: 개발자가 공용으로 호스팅
+- `maistats-song-info`: 개발자가 공용으로 생성/배포
 - `maistats-discord-bot`: 개발자가 공용으로 호스팅
 - `apps/maistats`: 개발자가 공용으로 호스팅
 - `maistats-record-collector`: 각 사용자가 자기 SEGA ID로 직접 호스팅
@@ -15,19 +15,15 @@
 
 ### `maistats-song-info`
 
-공용 곡 정보 서버입니다.
+공용 정적 곡 데이터 생성기입니다.
 
-- 내부 `songdb` 서브시스템으로 곡 목록, 버전, 내부 레벨, 재킷 이미지를 준비합니다.
+- 내부 `songdb` 서브시스템으로 곡 목록, 내부 레벨, 재킷 이미지를 준비합니다.
 - 내부 레벨은 maimai DX NET의 레벨별 곡 목록 페이지를 읽어 매일 다시 추론합니다.
-- `data/song_data/data.json`을 메모리로 로드해 API로 제공합니다.
-- SongDB 관련 env가 설정돼 있으면 시작 시 업데이트를 시도하고, 이후 매일 **07:30 KST**에 다시 갱신합니다.
-- 대표 엔드포인트:
-  - `GET /health`
-  - `GET /health/ready`
-  - `GET /api/songs`
-  - `GET /api/songs/versions`
-  - `POST /api/songs/metadata`
-  - `GET /api/cover/:image_name`
+- 실행 시 `data/song_data/data.json`과 `data/song_data/cover/`를 생성합니다.
+- GitHub Actions가 매일 **07:30 KST**에 실행되어 R2로 업로드합니다.
+- 공개 경로:
+  - `https://maimai-charts.muhwan.dev/data.json`
+  - `https://maimai-charts.muhwan.dev/cover/<image_name>`
 
 ### `maistats-record-collector`
 
@@ -53,7 +49,7 @@
 
 공용 Discord 봇입니다.
 
-- 전역 Song Info 서버를 참조합니다.
+- 전역 Song Database URL을 참조합니다.
 - 각 Discord 사용자는 `/register <url>`로 자기 Record Collector URL을 등록합니다.
 - 봇 자체 SQLite에 `Discord user -> record collector URL` 매핑을 저장합니다.
 - 시작 시 slash command를 전역 등록하고, 개발자 계정에만 startup 요약 DM을 보냅니다.
@@ -70,7 +66,7 @@
 공용 웹 프런트엔드입니다.
 
 - Vite + React 기반입니다.
-- 기본적으로 Song Info 서버와 Record Collector 서버를 각각 다른 origin으로 붙습니다.
+- 기본적으로 Song Database와 Record Collector 서버를 각각 다른 origin으로 붙습니다.
 - Settings 화면에서 연결 URL을 직접 바꿀 수 있어, 공용 프런트엔드에서 각자 self-hosted collector에 붙는 방식으로 사용할 수 있습니다.
 - 주요 화면:
   - Scores
@@ -84,7 +80,7 @@
 ```text
 .
 |-- apps/maistats/                # Vite + React frontend
-|-- maistats-song-info/           # shared song metadata server
+|-- maistats-song-info/           # shared static song database generator
 |-- maistats-record-collector/    # per-user self-hosted record server
 |-- maistats-discord-bot/         # shared Discord bot
 `-- crates/
@@ -100,7 +96,7 @@
 - npm
 - SEGA ID 계정
 - Discord Bot Token 및 개발자 Discord User ID
-- Song Info 갱신까지 사용할 경우 SongDB 관련 인증 정보
+- Song Database 생성/업로드까지 사용할 경우 SongDB 관련 인증 정보
 
 ## 환경 변수
 
@@ -118,20 +114,24 @@ cp .env.example .env
   - `RECORD_COLLECTOR_PORT`
   - `DATA_DIR`
   - `DATABASE_URL`
-- Song Info
-  - `SONG_INFO_PORT`
+- Song Database
   - `SONG_DATA_PATH`
 - Discord Bot
   - `DISCORD_BOT_TOKEN`
   - `DISCORD_DEV_USER_ID`
-  - `SONG_INFO_SERVER_URL`
+  - `SONG_DATABASE_URL`
   - `DISCORD_BOT_DATABASE_URL`
 - SongDB updater
   - `MAIMAI_INTL_SEGA_ID`
   - `MAIMAI_INTL_SEGA_PASSWORD`
-  - `MAIMAI_JP_SEGA_ID`
-  - `MAIMAI_JP_SEGA_PASSWORD`
   - `USER_AGENT`
+- R2 upload
+  - `R2_PUBLIC_BASE_URL`
+  - `R2_CLOUDFLARE_API_TOKEN`
+  - `R2_BUCKET_NAME`
+  - `R2_ACCESS_KEY_ID`
+  - `R2_SECRET_ACCESS_KEY`
+  - `R2_ENDPOINT`
 
 프런트엔드는 별도 `.env`를 사용합니다.
 
@@ -139,7 +139,7 @@ cp .env.example .env
 cp apps/maistats/.env.example apps/maistats/.env
 ```
 
-- `SONG_INFO_SERVER_URL`
+- `SONG_DATABASE_URL`
 - `RECORD_COLLECTOR_SERVER_URL`
 
 프런트엔드의 `RECORD_COLLECTOR_SERVER_URL`은 기본값일 뿐입니다. 실제 배포에서는 사용자가 Settings에서 자기 collector URL로 덮어쓰는 흐름을 전제로 합니다.
@@ -152,13 +152,13 @@ cp apps/maistats/.env.example apps/maistats/.env
 npm ci
 ```
 
-### 1. Song Info 서버 실행
+### 1. Song Database 생성
 
 ```bash
 cargo run -p maistats-song-info
 ```
 
-기본 주소: `http://localhost:3001`
+생성 결과: `data/song_data/data.json`, `data/song_data/cover/`
 
 ### 2. Record Collector 서버 실행
 
@@ -202,9 +202,9 @@ npm run dev:maistats
 - Record Collector
   - SQLite DB: 기본값 `data/maimai.sqlite3`
   - 임시 cookie file: OS temp 디렉터리 아래 `maistats-cookies-<pid>.json`
-- Song Info
+- Song Database
   - 곡 JSON: 기본값 `data/song_data/data.json`
-  - 재킷 이미지: 기본값 `data/song_data/`
+  - 재킷 이미지: 기본값 `data/song_data/cover/`
 - Discord Bot
   - 봇 DB: 기본값 `data/maistats-discord-bot.sqlite3`
 
@@ -221,6 +221,7 @@ npm run build:maistats
 
 ## 배포 메모
 
-- Rust 서비스는 각각 독립 바이너리로 배포합니다.
+- `maistats-song-info`는 독립 바이너리로 실행해 정적 산출물을 만들고 GitHub Actions가 R2로 업로드합니다.
+- `maistats-record-collector`와 `maistats-discord-bot`은 독립 바이너리로 배포합니다.
 - 프런트엔드 `apps/maistats`는 Cloudflare용 Vite 설정을 사용합니다.
 - CI/배포 워크플로는 `.github/workflows/` 아래에 있습니다.
