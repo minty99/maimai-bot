@@ -73,6 +73,20 @@ jobs:
       - name: Install AWS CLI
         run: sudo apt-get update && sudo apt-get install -y awscli
 
+      - name: Download existing covers from R2
+        env:
+          SONG_DATA_PATH: /tmp/song_data
+          R2_BUCKET_NAME: ${{ secrets.R2_BUCKET_NAME }}
+          R2_ENDPOINT: ${{ secrets.R2_ENDPOINT }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+        run: |
+          mkdir -p "${SONG_DATA_PATH}/cover"
+          aws s3 sync \
+            "s3://${R2_BUCKET_NAME}/cover/" \
+            "${SONG_DATA_PATH}/cover/" \
+            --endpoint-url "${R2_ENDPOINT}"
+
       - name: Generate song database
         env:
           SONG_DATA_PATH: /tmp/song_data
