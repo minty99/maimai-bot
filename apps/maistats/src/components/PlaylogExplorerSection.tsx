@@ -1,4 +1,4 @@
-import { useState, type Dispatch, type ReactNode, type SetStateAction } from 'react';
+import { useEffect, useState, type Dispatch, type ReactNode, type SetStateAction } from 'react';
 
 import type { PlaylogSortKey } from '../app/constants';
 import { useI18n } from '../app/i18n';
@@ -25,9 +25,7 @@ interface PlaylogExplorerSectionProps {
   showJackets: boolean;
   setShowJackets: Dispatch<SetStateAction<boolean>>;
   appliedPlaylogQuery: string;
-  playlogQueryDraft: string;
-  setPlaylogQueryDraft: Dispatch<SetStateAction<string>>;
-  onApplyPlaylogQuery: () => void;
+  onApplyPlaylogQuery: (query: string) => void;
   chartTypes: ChartType[];
   playlogChartFilter: ChartType[];
   setPlaylogChartFilter: Dispatch<SetStateAction<ChartType[]>>;
@@ -70,8 +68,6 @@ export function PlaylogExplorerSection({
   showJackets,
   setShowJackets,
   appliedPlaylogQuery,
-  playlogQueryDraft,
-  setPlaylogQueryDraft,
   onApplyPlaylogQuery,
   chartTypes,
   playlogChartFilter,
@@ -106,7 +102,14 @@ export function PlaylogExplorerSection({
 }: PlaylogExplorerSectionProps) {
   const { formatNumber: formatLocalizedNumber, locale, t } = useI18n();
   const [isFilterModalOpen, setIsFilterModalOpen] = useState(false);
-  const isSearchDirty = playlogQueryDraft.trim() !== appliedPlaylogQuery.trim();
+  const [playlogQueryDraft, setPlaylogQueryDraft] = useState(appliedPlaylogQuery);
+
+  useEffect(() => {
+    setPlaylogQueryDraft(appliedPlaylogQuery);
+  }, [appliedPlaylogQuery]);
+
+  const trimmedDraft = playlogQueryDraft.trim();
+  const isSearchDirty = trimmedDraft !== appliedPlaylogQuery;
 
   const handlePlaylogDayInputChange = (value: string) => {
     if (!value) {
@@ -143,7 +146,7 @@ export function PlaylogExplorerSection({
           className="search-box search-submit-group filter-block"
           onSubmit={(event) => {
             event.preventDefault();
-            onApplyPlaylogQuery();
+            onApplyPlaylogQuery(trimmedDraft);
           }}
         >
           <span>{t('playlogs.searchLabel')}</span>

@@ -38,9 +38,7 @@ interface ScoreExplorerSectionProps {
   showJackets: boolean;
   setShowJackets: Dispatch<SetStateAction<boolean>>;
   appliedQuery: string;
-  queryDraft: string;
-  setQueryDraft: Dispatch<SetStateAction<string>>;
-  onApplyQuery: () => void;
+  onApplyQuery: (query: string) => void;
   chartTypes: ChartType[];
   chartFilter: ChartType[];
   setChartFilter: Dispatch<SetStateAction<ChartType[]>>;
@@ -91,8 +89,6 @@ export function ScoreExplorerSection({
   showJackets,
   setShowJackets,
   appliedQuery,
-  queryDraft,
-  setQueryDraft,
   onApplyQuery,
   chartTypes,
   chartFilter,
@@ -139,7 +135,14 @@ export function ScoreExplorerSection({
   const { locale, t } = useI18n();
   const tableWrapRef = useRef<HTMLDivElement | null>(null);
   const [isFilterModalOpen, setIsFilterModalOpen] = useState(false);
-  const isSearchDirty = queryDraft.trim() !== appliedQuery.trim();
+  const [queryDraft, setQueryDraft] = useState(appliedQuery);
+
+  useEffect(() => {
+    setQueryDraft(appliedQuery);
+  }, [appliedQuery]);
+
+  const trimmedDraft = queryDraft.trim();
+  const isSearchDirty = trimmedDraft !== appliedQuery;
 
   const virtualizer = useVirtualizer({
     count: filteredScoreRows.length,
@@ -175,7 +178,7 @@ export function ScoreExplorerSection({
           className="search-box search-submit-group filter-block"
           onSubmit={(event) => {
             event.preventDefault();
-            onApplyQuery();
+            onApplyQuery(trimmedDraft);
           }}
         >
           <span>{t('scores.searchLabel')}</span>
