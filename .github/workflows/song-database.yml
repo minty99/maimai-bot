@@ -56,6 +56,7 @@ jobs:
           SONG_DATA_PATH: /tmp/song_data
           MAIMAI_INTL_SEGA_ID: ${{ secrets.MAIMAI_INTL_SEGA_ID }}
           MAIMAI_INTL_SEGA_PASSWORD: ${{ secrets.MAIMAI_INTL_SEGA_PASSWORD }}
+          SKIP_COVER_DOWNLOAD: "true"
           USER_AGENT: ${{ secrets.USER_AGENT }}
         run: cargo run -p maistats-song-info
 
@@ -65,7 +66,6 @@ jobs:
           SONG_DATA_PATH: /tmp/song_data
         run: |
           test -f "${SONG_DATA_PATH}/data.json"
-          test -d "${SONG_DATA_PATH}/cover"
 
   publish:
     if: ${{ github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' }}

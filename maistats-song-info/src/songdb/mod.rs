@@ -138,6 +138,7 @@ pub struct SongDbConfig {
     pub intl_sega_id: String,
     pub intl_sega_password: String,
     pub user_agent: String,
+    pub skip_cover_download: bool,
 }
 
 impl fmt::Debug for SongDbConfig {
@@ -146,6 +147,7 @@ impl fmt::Debug for SongDbConfig {
             .field("intl_sega_id", &"<redacted>")
             .field("intl_sega_password", &"<redacted>")
             .field("user_agent", &self.user_agent)
+            .field("skip_cover_download", &self.skip_cover_download)
             .finish()
     }
 }
@@ -159,11 +161,13 @@ impl SongDbConfig {
             .or_else(|_| std::env::var("SEGA_PASSWORD"))
             .wrap_err("missing env var: MAIMAI_INTL_SEGA_PASSWORD or SEGA_PASSWORD")?;
         let user_agent = std::env::var("USER_AGENT").wrap_err("missing env var: USER_AGENT")?;
+        let skip_cover_download = parse_env_flag("SKIP_COVER_DOWNLOAD");
 
         Ok(Self {
             intl_sega_id,
             intl_sega_password,
             user_agent,
+            skip_cover_download,
         })
     }
 }
@@ -246,9 +250,13 @@ impl SongDatabase {
             &overridden_titles,
         );
 
-        tracing::info!("Downloading covers...");
-        let cover_dir = song_data_dir.join("cover");
-        download_cover_images(&client, &songs, &cover_dir).await?;
+        if config.skip_cover_download {
+            tracing::info!("Skipping cover downloads because SKIP_COVER_DOWNLOAD is enabled");
+        } else {
+            tracing::info!("Downloading covers...");
+            let cover_dir = song_data_dir.join("cover");
+            download_cover_images(&client, &songs, &cover_dir).await?;
+        }
 
         Ok(SongDatabase {
             songs,
@@ -740,6 +748,21 @@ fn sha256_hex(value: &str) -> String {
     hex::encode(digest)
 }
 
+fn parse_env_flag(name: &str) -> bool {
+    std::env::var(name)
+        .ok()
+        .as_deref()
+        .map(flag_value_is_truthy)
+        .unwrap_or(false)
+}
+
+fn flag_value_is_truthy(value: &str) -> bool {
+    matches!(
+        value.trim().to_ascii_lowercase().as_str(),
+        "1" | "true" | "yes" | "on"
+    )
+}
+
 async fn download_image(client: &reqwest::Client, image_url: &str) -> eyre::Result<Vec<u8>> {
     const MAX_RETRIES: u32 = 3;
 
@@ -1126,6 +1149,20 @@ mod tests {
             .expect("manual override song entry exists");
         let expected = format!("{}.png", sha256_hex(&override_song.image_url));
         assert_eq!(override_song.image_name, expected);
+    }
+
+    #[test]
+    fn flag_value_is_truthy_handles_supported_values() {
+        for value in ["1", "true", "TRUE", " yes ", "On"] {
+            assert!(flag_value_is_truthy(value), "expected truthy: {value}");
+        }
+    }
+
+    #[test]
+    fn flag_value_is_truthy_rejects_other_values() {
+        for value in ["", "0", "false", "off", "random"] {
+            assert!(!flag_value_is_truthy(value), "expected falsy: {value}");
+        }
     }
 
     #[test]
