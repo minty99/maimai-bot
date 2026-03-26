@@ -1,4 +1,5 @@
 import { useState, type Dispatch, type ReactNode, type SetStateAction } from 'react';
+import { SearchInput } from './SearchInput';
 
 import type { PlaylogSortKey } from '../app/constants';
 import { useI18n } from '../app/i18n';
@@ -25,9 +26,7 @@ interface PlaylogExplorerSectionProps {
   showJackets: boolean;
   setShowJackets: Dispatch<SetStateAction<boolean>>;
   appliedPlaylogQuery: string;
-  playlogQueryDraft: string;
-  setPlaylogQueryDraft: Dispatch<SetStateAction<string>>;
-  onApplyPlaylogQuery: () => void;
+  onApplyPlaylogQuery: (query: string) => void;
   chartTypes: ChartType[];
   playlogChartFilter: ChartType[];
   setPlaylogChartFilter: Dispatch<SetStateAction<ChartType[]>>;
@@ -70,8 +69,6 @@ export function PlaylogExplorerSection({
   showJackets,
   setShowJackets,
   appliedPlaylogQuery,
-  playlogQueryDraft,
-  setPlaylogQueryDraft,
   onApplyPlaylogQuery,
   chartTypes,
   playlogChartFilter,
@@ -106,7 +103,6 @@ export function PlaylogExplorerSection({
 }: PlaylogExplorerSectionProps) {
   const { formatNumber: formatLocalizedNumber, locale, t } = useI18n();
   const [isFilterModalOpen, setIsFilterModalOpen] = useState(false);
-  const isSearchDirty = playlogQueryDraft.trim() !== appliedPlaylogQuery.trim();
 
   const handlePlaylogDayInputChange = (value: string) => {
     if (!value) {
@@ -139,30 +135,12 @@ export function PlaylogExplorerSection({
         </div>
       </div>
       <div className="filter-grid">
-        <form
-          className="search-box search-submit-group filter-block"
-          onSubmit={(event) => {
-            event.preventDefault();
-            onApplyPlaylogQuery();
-          }}
-        >
-          <span>{t('playlogs.searchLabel')}</span>
-          <div className="search-submit-row">
-            <input
-              type="search"
-              value={playlogQueryDraft}
-              onChange={(event) => setPlaylogQueryDraft(event.target.value)}
-              placeholder={t('playlogs.searchPlaceholder')}
-            />
-            <button
-              type="submit"
-              className="search-submit-button"
-              disabled={!isSearchDirty}
-            >
-              {t('common.search')}
-            </button>
-          </div>
-        </form>
+        <SearchInput
+          label={t('playlogs.searchLabel')}
+          placeholder={t('playlogs.searchPlaceholder')}
+          appliedQuery={appliedPlaylogQuery}
+          onApplyQuery={onApplyPlaylogQuery}
+        />
 
         <div className="filter-block playlog-day-filter">
           <label className="playlog-day-toggle">

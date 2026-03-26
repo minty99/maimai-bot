@@ -6,6 +6,7 @@ import {
   type ReactNode,
   type SetStateAction,
 } from 'react';
+import { SearchInput } from './SearchInput';
 import { useVirtualizer } from '@tanstack/react-virtual';
 
 import { useI18n } from '../app/i18n';
@@ -38,9 +39,7 @@ interface ScoreExplorerSectionProps {
   showJackets: boolean;
   setShowJackets: Dispatch<SetStateAction<boolean>>;
   appliedQuery: string;
-  queryDraft: string;
-  setQueryDraft: Dispatch<SetStateAction<string>>;
-  onApplyQuery: () => void;
+  onApplyQuery: (query: string) => void;
   chartTypes: ChartType[];
   chartFilter: ChartType[];
   setChartFilter: Dispatch<SetStateAction<ChartType[]>>;
@@ -91,8 +90,6 @@ export function ScoreExplorerSection({
   showJackets,
   setShowJackets,
   appliedQuery,
-  queryDraft,
-  setQueryDraft,
   onApplyQuery,
   chartTypes,
   chartFilter,
@@ -139,7 +136,6 @@ export function ScoreExplorerSection({
   const { locale, t } = useI18n();
   const tableWrapRef = useRef<HTMLDivElement | null>(null);
   const [isFilterModalOpen, setIsFilterModalOpen] = useState(false);
-  const isSearchDirty = queryDraft.trim() !== appliedQuery.trim();
 
   const virtualizer = useVirtualizer({
     count: filteredScoreRows.length,
@@ -171,30 +167,12 @@ export function ScoreExplorerSection({
         </button>
       </div>
       <div className="filter-grid">
-        <form
-          className="search-box search-submit-group filter-block"
-          onSubmit={(event) => {
-            event.preventDefault();
-            onApplyQuery();
-          }}
-        >
-          <span>{t('scores.searchLabel')}</span>
-          <div className="search-submit-row">
-            <input
-              type="search"
-              value={queryDraft}
-              onChange={(event) => setQueryDraft(event.target.value)}
-              placeholder={t('scores.searchPlaceholder')}
-            />
-            <button
-              type="submit"
-              className="search-submit-button"
-              disabled={!isSearchDirty}
-            >
-              {t('common.search')}
-            </button>
-          </div>
-        </form>
+        <SearchInput
+          label={t('scores.searchLabel')}
+          placeholder={t('scores.searchPlaceholder')}
+          appliedQuery={appliedQuery}
+          onApplyQuery={onApplyQuery}
+        />
 
         <ToggleGroup
           label={t('scores.chartType')}
