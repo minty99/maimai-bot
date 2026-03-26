@@ -1,4 +1,5 @@
-import { useEffect, useState, type Dispatch, type ReactNode, type SetStateAction } from 'react';
+import { useState, type Dispatch, type ReactNode, type SetStateAction } from 'react';
+import { SearchInput } from './SearchInput';
 
 import type { PlaylogSortKey } from '../app/constants';
 import { useI18n } from '../app/i18n';
@@ -102,14 +103,6 @@ export function PlaylogExplorerSection({
 }: PlaylogExplorerSectionProps) {
   const { formatNumber: formatLocalizedNumber, locale, t } = useI18n();
   const [isFilterModalOpen, setIsFilterModalOpen] = useState(false);
-  const [playlogQueryDraft, setPlaylogQueryDraft] = useState(appliedPlaylogQuery);
-
-  useEffect(() => {
-    setPlaylogQueryDraft(appliedPlaylogQuery);
-  }, [appliedPlaylogQuery]);
-
-  const trimmedDraft = playlogQueryDraft.trim();
-  const isSearchDirty = trimmedDraft !== appliedPlaylogQuery;
 
   const handlePlaylogDayInputChange = (value: string) => {
     if (!value) {
@@ -142,30 +135,12 @@ export function PlaylogExplorerSection({
         </div>
       </div>
       <div className="filter-grid">
-        <form
-          className="search-box search-submit-group filter-block"
-          onSubmit={(event) => {
-            event.preventDefault();
-            onApplyPlaylogQuery(trimmedDraft);
-          }}
-        >
-          <span>{t('playlogs.searchLabel')}</span>
-          <div className="search-submit-row">
-            <input
-              type="search"
-              value={playlogQueryDraft}
-              onChange={(event) => setPlaylogQueryDraft(event.target.value)}
-              placeholder={t('playlogs.searchPlaceholder')}
-            />
-            <button
-              type="submit"
-              className="search-submit-button"
-              disabled={!isSearchDirty}
-            >
-              {t('common.search')}
-            </button>
-          </div>
-        </form>
+        <SearchInput
+          label={t('playlogs.searchLabel')}
+          placeholder={t('playlogs.searchPlaceholder')}
+          appliedQuery={appliedPlaylogQuery}
+          onApplyQuery={onApplyPlaylogQuery}
+        />
 
         <div className="filter-block playlog-day-filter">
           <label className="playlog-day-toggle">
