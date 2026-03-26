@@ -73,8 +73,7 @@ pub mod intl {
             return Ok(());
         }
 
-        let post_url = login_page_url
-            .join("/common_auth/login/sid/")
+        let post_url = extract_login_post_url(&login_page_url, &login_page_html)
             .wrap_err("resolve login POST url")?;
 
         let resp = client
@@ -87,7 +86,9 @@ pub mod intl {
             ])
             .send()
             .await
-            .wrap_err("POST SEGA ID login")?;
+            .wrap_err("POST SEGA ID login")?
+            .error_for_status()
+            .wrap_err("SEGA ID login returned non-success status")?;
 
         let final_url = resp.url().clone();
         let body = resp.text().await.wrap_err("read post-login response")?;
@@ -127,5 +128,119 @@ pub mod intl {
             return true;
         }
         false
+    }
+
+    fn extract_login_post_url(login_page_url: &Url, login_page_html: &str) -> eyre::Result<Url> {
+        if let Some(action) = find_form_action(login_page_html, "sidForm") {
+            return login_page_url
+                .join(&action)
+                .wrap_err("join sidForm action with login page url");
+        }
+
+        login_page_url
+            .join("/common_auth/login/sid")
+            .wrap_err("fallback to known SEGA ID login path")
+    }
+
+    fn find_form_action(html: &str, form_id: &str) -> Option<String> {
+        let form_id_attr = format!("id=\"{form_id}\"");
+        let id_idx = html.find(&form_id_attr)?;
+        let form_idx = html[..id_idx].rfind("<form")?;
+        let tag_end = html[id_idx..].find('>')? + id_idx;
+        let tag = &html[form_idx..=tag_end];
+
+        extract_attr_value(tag, "action")
+    }
+
+    fn extract_attr_value(tag: &str, attr_name: &str) -> Option<String> {
+        for quote in ['"', '\''] {
+            let needle = format!("{attr_name}={quote}");
+            if let Some(attr_idx) = tag.find(&needle) {
+                let start = attr_idx + needle.len();
+                let end = tag[start..].find(quote)? + start;
+                return Some(tag[start..end].to_string());
+            }
+        }
+        None
+    }
+
+    #[cfg(test)]
+    mod tests {
+        use reqwest::Url;
+
+        use super::{
+            extract_attr_value, extract_login_post_url, find_form_action,
+            looks_like_login_or_expired,
+        };
+
+        #[test]
+        fn extracts_sid_form_action_from_login_page() {
+            let html = r#"
+                <html>
+                    <body>
+                        <form action="/common_auth/login/sid" method="post" id="sidForm">
+                            <input name="sid" />
+                        </form>
+                    </body>
+                </html>
+            "#;
+
+            assert_eq!(
+                find_form_action(html, "sidForm").as_deref(),
+                Some("/common_auth/login/sid")
+            );
+        }
+
+        #[test]
+        fn resolves_login_post_url_without_trailing_slash() {
+            let html = r#"
+                <form action="/common_auth/login/sid" method="post" id="sidForm"></form>
+            "#;
+            let login_page_url = Url::parse(
+                "https://lng-tgk-aime-gw.am-all.net/common_auth/login?site_id=maimaidxex",
+            )
+            .expect("valid url");
+
+            let post_url = extract_login_post_url(&login_page_url, html).expect("post url");
+
+            assert_eq!(
+                post_url.as_str(),
+                "https://lng-tgk-aime-gw.am-all.net/common_auth/login/sid"
+            );
+        }
+
+        #[test]
+        fn falls_back_to_known_login_path_when_action_missing() {
+            let login_page_url = Url::parse(
+                "https://lng-tgk-aime-gw.am-all.net/common_auth/login?site_id=maimaidxex",
+            )
+            .expect("valid url");
+
+            let post_url = extract_login_post_url(&login_page_url, "<form id=\"sidForm\"></form>")
+                .expect("post url");
+
+            assert_eq!(
+                post_url.as_str(),
+                "https://lng-tgk-aime-gw.am-all.net/common_auth/login/sid"
+            );
+        }
+
+        #[test]
+        fn extracts_single_quoted_attribute_values() {
+            let tag = "<form action='/common_auth/login/sid' id='sidForm'>";
+            assert_eq!(
+                extract_attr_value(tag, "action").as_deref(),
+                Some("/common_auth/login/sid")
+            );
+        }
+
+        #[test]
+        fn detects_error_page_as_unauthenticated() {
+            let url =
+                Url::parse("https://maimaidx-eng.com/maimai-mobile/error/").expect("valid url");
+            let body = "<title>ERROR CODE: 500</title>The connection time has been expired";
+
+            assert!(looks_like_login_or_expired(&url, body));
+        }
     }
 }
