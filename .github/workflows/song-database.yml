@@ -92,7 +92,24 @@ jobs:
 
       - name: Install AWS CLI
         if: ${{ env.HAS_PUBLISH_SECRETS == 'true' }}
-        run: sudo apt-get update && sudo apt-get install -y awscli
+        run: |
+          arch="$(uname -m)"
+          case "${arch}" in
+            x86_64) awscli_arch="x86_64" ;;
+            aarch64|arm64) awscli_arch="aarch64" ;;
+            *)
+              echo "Unsupported architecture for AWS CLI installer: ${arch}" >&2
+              exit 1
+              ;;
+          esac
+
+          workdir="$(mktemp -d)"
+          trap 'rm -rf "${workdir}"' EXIT
+
+          curl -fsSL "https://awscli.amazonaws.com/awscli-exe-linux-${awscli_arch}.zip" -o "${workdir}/awscliv2.zip"
+          unzip -q "${workdir}/awscliv2.zip" -d "${workdir}"
+          sudo "${workdir}/aws/install" --update
+          aws --version
 
       - name: Download existing covers from R2
         if: ${{ env.HAS_PUBLISH_SECRETS == 'true' }}
