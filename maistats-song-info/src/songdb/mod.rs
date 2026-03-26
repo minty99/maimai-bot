@@ -255,7 +255,11 @@ impl SongDatabase {
         } else {
             tracing::info!("Downloading covers...");
             let cover_dir = song_data_dir.join("cover");
-            download_cover_images(&client, &songs, &cover_dir).await?;
+            if let Err(err) = download_cover_images(&client, &songs, &cover_dir).await {
+                tracing::warn!(
+                    "cover download step failed; continuing song database build without complete covers: {err:#}"
+                );
+            }
         }
 
         Ok(SongDatabase {
@@ -832,7 +836,7 @@ async fn download_cover_images(
                         downloaded_count += 1;
                     }
                     Err(e) => {
-                        tracing::error!(
+                        tracing::warn!(
                             "Failed to write cover '{}' to '{}': {:#}",
                             song.identity.title,
                             cover_path.display(),
@@ -842,7 +846,7 @@ async fn download_cover_images(
                     }
                 },
                 Err(e) => {
-                    tracing::error!(
+                    tracing::warn!(
                         "Failed to download cover for '{}': {:#}",
                         song.identity.title,
                         e
