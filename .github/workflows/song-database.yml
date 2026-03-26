@@ -23,7 +23,7 @@ on:
       - crates/**
       - maistats-song-info/**
   schedule:
-    - cron: "30 22 * * *"
+    - cron: "30 1 * * *"
   workflow_dispatch:
 
 jobs:
@@ -56,6 +56,7 @@ jobs:
           SONG_DATA_PATH: /tmp/song_data
           MAIMAI_INTL_SEGA_ID: ${{ secrets.MAIMAI_INTL_SEGA_ID }}
           MAIMAI_INTL_SEGA_PASSWORD: ${{ secrets.MAIMAI_INTL_SEGA_PASSWORD }}
+          SKIP_COVER_DOWNLOAD: "true"
           USER_AGENT: ${{ secrets.USER_AGENT }}
         run: cargo run -p maistats-song-info
 
@@ -65,7 +66,6 @@ jobs:
           SONG_DATA_PATH: /tmp/song_data
         run: |
           test -f "${SONG_DATA_PATH}/data.json"
-          test -d "${SONG_DATA_PATH}/cover"
 
   publish:
     if: ${{ github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' }}
@@ -92,7 +92,24 @@ jobs:
 
       - name: Install AWS CLI
         if: ${{ env.HAS_PUBLISH_SECRETS == 'true' }}
-        run: sudo apt-get update && sudo apt-get install -y awscli
+        run: |
+          arch="$(uname -m)"
+          case "${arch}" in
+            x86_64) awscli_arch="x86_64" ;;
+            aarch64|arm64) awscli_arch="aarch64" ;;
+            *)
+              echo "Unsupported architecture for AWS CLI installer: ${arch}" >&2
+              exit 1
+              ;;
+          esac
+
+          workdir="$(mktemp -d)"
+          trap 'rm -rf "${workdir}"' EXIT
+
+          curl -fsSL "https://awscli.amazonaws.com/awscli-exe-linux-${awscli_arch}.zip" -o "${workdir}/awscliv2.zip"
+          unzip -q "${workdir}/awscliv2.zip" -d "${workdir}"
+          sudo "${workdir}/aws/install" --update
+          aws --version
 
       - name: Download existing covers from R2
         if: ${{ env.HAS_PUBLISH_SECRETS == 'true' }}
