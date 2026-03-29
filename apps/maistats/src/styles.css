@@ -3157,6 +3157,11 @@ tbody tr:last-child td {
   gap: 8px;
 }
 
+.score-special-filters {
+  display: grid;
+  gap: 8px;
+}
+
 .playlog-special-toggle {
   display: inline-flex;
   align-items: center;
@@ -3165,7 +3170,21 @@ tbody tr:last-child td {
   font-weight: 600;
 }
 
+.score-special-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
 .playlog-special-toggle input {
+  width: 16px;
+  height: 16px;
+  margin: 0;
+}
+
+.score-special-toggle input {
   width: 16px;
   height: 16px;
   margin: 0;
