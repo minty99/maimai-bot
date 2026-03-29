@@ -1,12 +1,13 @@
 use eyre::{Result, WrapErr};
 use models::{
     ChartType, DifficultyCategory, ParsedPlayerProfile, PlayRecordApiResponse, SongAliases,
-    SongChartRegion, SongDetailScoreApiResponse,
+    SongChartRegion, SongDetailScoreApiResponse, VersionApiResponse, is_minor_or_more_outdated,
 };
 use reqwest::{Client, Url};
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use std::fmt;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex, OnceLock};
 use std::time::Instant;
 use tokio::sync::RwLock;
 use tokio::time::{Duration, sleep};
@@ -144,6 +145,58 @@ pub struct RecordCollectorClient {
     base_url: String,
 }
 
+pub(crate) const BOT_VERSION: &str = env!("CARGO_PKG_VERSION");
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum RecordCollectorVersionIssue {
+    VersionMismatch,
+    InvalidResponse,
+    Unreachable,
+}
+
+#[derive(Debug, Clone)]
+pub(crate) struct RecordCollectorVersionStatus {
+    collector_version: Option<String>,
+    issue: Option<RecordCollectorVersionIssue>,
+}
+
+#[derive(Debug, Clone)]
+struct CachedRecordCollectorVersionStatus {
+    status: RecordCollectorVersionStatus,
+    fetched_at: Instant,
+}
+
+const VERSION_STATUS_CACHE_TTL: Duration = Duration::from_secs(300);
+static VERSION_STATUS_CACHE: OnceLock<Mutex<HashMap<String, CachedRecordCollectorVersionStatus>>> =
+    OnceLock::new();
+
+impl RecordCollectorVersionStatus {
+    pub(crate) fn compatible(collector_version: String) -> Self {
+        Self {
+            collector_version: Some(collector_version),
+            issue: None,
+        }
+    }
+
+    pub(crate) fn outdated(
+        collector_version: Option<String>,
+        issue: RecordCollectorVersionIssue,
+    ) -> Self {
+        Self {
+            collector_version,
+            issue: Some(issue),
+        }
+    }
+
+    pub(crate) fn collector_version(&self) -> Option<&str> {
+        self.collector_version.as_deref()
+    }
+
+    pub(crate) fn issue(&self) -> Option<RecordCollectorVersionIssue> {
+        self.issue
+    }
+}
+
 fn build_client() -> Result<Client> {
     Client::builder()
         .timeout(Duration::from_secs(30))
@@ -151,11 +204,15 @@ fn build_client() -> Result<Client> {
         .wrap_err("build http client")
 }
 
+fn version_status_cache() -> &'static Mutex<HashMap<String, CachedRecordCollectorVersionStatus>> {
+    VERSION_STATUS_CACHE.get_or_init(|| Mutex::new(HashMap::new()))
+}
+
 fn normalize_record_collector_path(path: &str) -> String {
     let trimmed = path.trim_end_matches('/');
     let trimmed = if trimmed.is_empty() { "/" } else { trimmed };
 
-    for suffix in ["/health/ready", "/api/player"] {
+    for suffix in ["/health/ready", "/api/player", "/api/version"] {
         if let Some(prefix) = trimmed.strip_suffix(suffix) {
             return if prefix.is_empty() {
                 "/".to_string()
@@ -399,6 +456,10 @@ impl RecordCollectorClient {
         Ok(Self { client, base_url })
     }
 
+    pub(crate) fn base_url(&self) -> &str {
+        &self.base_url
+    }
+
     pub(crate) async fn health_check(&self) -> Result<()> {
         let url = format!("{}/health/ready", self.base_url);
         let resp = self
@@ -423,6 +484,61 @@ impl RecordCollectorClient {
 
     pub(crate) async fn get_player_profile(&self) -> Result<ParsedPlayerProfile> {
         self.get_with_retry("/api/player").await
+    }
+
+    pub(crate) async fn get_version_status(&self) -> RecordCollectorVersionStatus {
+        if let Ok(mut cache) = version_status_cache().lock() {
+            cache.retain(|_, cached| cached.fetched_at.elapsed() <= VERSION_STATUS_CACHE_TTL);
+            if let Some(cached) = cache.get(&self.base_url).cloned() {
+                return cached.status;
+            }
+        }
+
+        let status = match self
+            .get_with_retry::<VersionApiResponse>("/api/version")
+            .await
+        {
+            Ok(response) => match is_minor_or_more_outdated(BOT_VERSION, &response.version) {
+                Ok(true) => RecordCollectorVersionStatus::outdated(
+                    Some(response.version),
+                    RecordCollectorVersionIssue::VersionMismatch,
+                ),
+                Ok(false) => RecordCollectorVersionStatus::compatible(response.version),
+                Err(err) => {
+                    tracing::warn!(
+                        "record collector {} returned invalid version {:?}: {err:#}",
+                        self.base_url,
+                        response.version
+                    );
+                    RecordCollectorVersionStatus::outdated(
+                        Some(response.version),
+                        RecordCollectorVersionIssue::InvalidResponse,
+                    )
+                }
+            },
+            Err(err) => {
+                tracing::warn!(
+                    "failed to load record collector version from {}: {err:#}",
+                    self.base_url
+                );
+                RecordCollectorVersionStatus::outdated(
+                    None,
+                    RecordCollectorVersionIssue::Unreachable,
+                )
+            }
+        };
+
+        if let Ok(mut cache) = version_status_cache().lock() {
+            cache.insert(
+                self.base_url.clone(),
+                CachedRecordCollectorVersionStatus {
+                    status: status.clone(),
+                    fetched_at: Instant::now(),
+                },
+            );
+        }
+
+        status
     }
 
     pub async fn get_recent(&self, limit: usize) -> Result<Vec<PlayRecordApiResponse>> {
@@ -516,6 +632,16 @@ mod tests {
     fn normalize_record_collector_url_strips_player_endpoint_but_keeps_prefix() {
         let normalized = normalize_record_collector_url(
             " https://collector.example:3000/maistats/api/player?foo=bar#frag ",
+        )
+        .expect("url should normalize");
+
+        assert_eq!(normalized, "https://collector.example:3000/maistats");
+    }
+
+    #[test]
+    fn normalize_record_collector_url_strips_version_endpoint_but_keeps_prefix() {
+        let normalized = normalize_record_collector_url(
+            " https://collector.example:3000/maistats/api/version?foo=bar#frag ",
         )
         .expect("url should normalize");
 

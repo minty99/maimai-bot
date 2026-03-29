@@ -1,6 +1,8 @@
 use eyre::WrapErr;
 use poise::serenity_prelude as serenity;
 use poise::{CreateReply, FrameworkOptions};
+use std::collections::HashMap;
+use std::sync::{Arc, Mutex};
 use tracing::{info, warn};
 
 mod chart_links;
@@ -23,6 +25,7 @@ pub(crate) struct BotData {
     pub(crate) discord_http: std::sync::Arc<serenity::Http>,
     pub(crate) song_database_client: SongDatabaseClient,
     pub(crate) status_emojis: MaimaiStatusEmojis,
+    pub(crate) version_warning_cache: Arc<Mutex<HashMap<String, i64>>>,
 }
 
 #[tokio::main]
@@ -60,6 +63,7 @@ async fn main() -> eyre::Result<()> {
         discord_http,
         song_database_client,
         status_emojis: MaimaiStatusEmojis::default(),
+        version_warning_cache: Arc::new(Mutex::new(HashMap::new())),
     };
 
     let framework = poise::Framework::builder()

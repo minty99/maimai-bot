@@ -241,6 +241,9 @@ const translations = defineTranslations({
     'api.enterUrl': 'URL을 입력하세요.',
     'api.connectionFailed': 'HTTP {{status}} 응답을 받았습니다.',
     'api.recordCollectorRequired': 'Record Collector URL이 비어 있습니다.',
+    'recordCollector.version.outdated': 'Record Collector 업데이트가 필요합니다. 앱 버전은 {{currentVersion}}, collector 버전은 {{collectorVersion}}입니다.',
+    'recordCollector.version.invalid': 'Record Collector가 유효하지 않은 semantic version({{collectorVersion}})을 반환했습니다. 서버를 업데이트하세요.',
+    'recordCollector.version.unreachable': 'Record Collector의 `/api/version`을 확인할 수 없습니다. {{currentVersion}} 이상 버전으로 서버를 업데이트하세요.',
   },
   en: {
     'nav.home': 'Home',
@@ -457,6 +460,9 @@ const translations = defineTranslations({
     'api.enterUrl': 'Please enter a URL.',
     'api.connectionFailed': 'Received HTTP {{status}} from the server.',
     'api.recordCollectorRequired': 'Record Collector URL is empty.',
+    'recordCollector.version.outdated': 'Your Record Collector needs an update. The app is on {{currentVersion}}, but the collector reports {{collectorVersion}}.',
+    'recordCollector.version.invalid': 'The Record Collector returned an invalid semantic version ({{collectorVersion}}). Please update the server.',
+    'recordCollector.version.unreachable': 'The frontend could not verify `/api/version` on the Record Collector. Please update the server to {{currentVersion}} or newer.',
   },
 });
 

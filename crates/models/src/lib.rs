@@ -4,6 +4,7 @@ pub mod game_domain;
 pub mod parser_models;
 pub mod song_catalog;
 pub mod storage_models;
+pub mod versioning;
 
 pub use api_models::{PlayRecordApiResponse, ScoreApiResponse, SongDetailScoreApiResponse};
 pub use game_domain::{
@@ -18,3 +19,4 @@ pub use song_catalog::{
     SongInternalLevelIndex,
 };
 pub use storage_models::{StoredPlayRecord, StoredScoreEntry};
+pub use versioning::{VersionApiResponse, is_minor_or_more_outdated};
