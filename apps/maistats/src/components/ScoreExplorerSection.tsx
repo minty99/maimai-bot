@@ -49,6 +49,8 @@ interface ScoreExplorerSectionProps {
   versionOptions: string[];
   versionSelection: string;
   setVersionSelection: Dispatch<SetStateAction<string>>;
+  playedOnly: boolean;
+  setPlayedOnly: Dispatch<SetStateAction<boolean>>;
   internalLevelPresetOptions: string[];
   selectedInternalLevelPresets: string[];
   onToggleInternalLevelPreset: (value: string) => void;
@@ -100,6 +102,8 @@ export function ScoreExplorerSection({
   versionOptions,
   versionSelection,
   setVersionSelection,
+  playedOnly,
+  setPlayedOnly,
   internalLevelPresetOptions,
   selectedInternalLevelPresets,
   onToggleInternalLevelPreset,
@@ -207,6 +211,17 @@ export function ScoreExplorerSection({
                 </option>
               ))}
             </select>
+          </label>
+        </div>
+
+        <div className="filter-block score-special-filters">
+          <label className="score-special-toggle">
+            <input
+              type="checkbox"
+              checked={playedOnly}
+              onChange={(event) => setPlayedOnly(event.target.checked)}
+            />
+            <span>{t('scores.playedOnly')}</span>
           </label>
         </div>
 

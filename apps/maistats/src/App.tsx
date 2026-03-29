@@ -384,6 +384,9 @@ function App() {
   const [daysMax, setDaysMax] = useState(() =>
     coerceNumber(savedScoreFilters?.daysMax, DEFAULT_SCORE_FILTERS.daysMax),
   );
+  const [playedOnly, setPlayedOnly] = useState(
+    savedScoreFilters?.playedOnly === true,
+  );
   const [internalLevelSelectionState, setInternalLevelSelectionState] = useState<
     DirectionalRangeSelectionState<Exclude<InternalLevelPresetId, 'ALL'>> | null
   >(null);
@@ -686,6 +689,7 @@ function App() {
       chartFilter,
       difficultyFilter,
       versionSelection,
+      playedOnly,
       fcFilter,
       syncFilter,
       achievementMin,
@@ -706,6 +710,7 @@ function App() {
     fcFilter,
     internalMax,
     internalMin,
+    playedOnly,
     syncFilter,
     versionSelection,
   ]);
@@ -998,6 +1003,7 @@ function App() {
     setInternalMax(DEFAULT_SCORE_FILTERS.internalMax);
     setDaysMin(DEFAULT_SCORE_FILTERS.daysMin);
     setDaysMax(DEFAULT_SCORE_FILTERS.daysMax);
+    setPlayedOnly(DEFAULT_SCORE_FILTERS.playedOnly);
     setInternalLevelSelectionState(null);
     setScoreAchievementSelectionState(null);
     setFcSelectionState(null);
@@ -1013,6 +1019,7 @@ function App() {
         chartFilter,
         difficultyFilter,
         versionSelection,
+        playedOnly,
         versionOptions,
         fcFilter,
         syncFilter,
@@ -1036,6 +1043,7 @@ function App() {
       internalMax,
       internalMin,
       locale,
+      playedOnly,
       query,
       scoreData,
       scoreSortDesc,
@@ -1367,6 +1375,8 @@ function App() {
               versionOptions={versionOptions}
               versionSelection={versionSelection}
               setVersionSelection={setVersionSelection}
+              playedOnly={playedOnly}
+              setPlayedOnly={setPlayedOnly}
               internalLevelPresetOptions={INTERNAL_LEVEL_PRESETS.map((preset) => preset.label)}
               selectedInternalLevelPresets={selectedInternalLevelPresets}
               onToggleInternalLevelPreset={handleInternalLevelPresetToggle}

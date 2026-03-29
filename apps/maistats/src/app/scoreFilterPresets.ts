@@ -18,6 +18,7 @@ export const NA_FILTER_OPTION_ID = 'N/A';
 
 export const DEFAULT_SCORE_FILTERS = {
   versionSelection: 'ALL',
+  playedOnly: false,
   achievementMin: 0,
   achievementMax: 101,
   internalMin: 1,

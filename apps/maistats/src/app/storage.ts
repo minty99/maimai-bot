@@ -4,6 +4,7 @@ export interface StoredScoreFilters {
   chartFilter?: ChartType[];
   difficultyFilter?: DifficultyCategory[];
   versionSelection?: string;
+  playedOnly?: boolean;
   // legacy multi-select key for backward compatibility
   versionFilter?: string[];
   rankFilter?: string[];

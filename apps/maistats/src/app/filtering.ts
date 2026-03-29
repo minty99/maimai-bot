@@ -37,6 +37,7 @@ interface BuildFilteredScoreRowsParams {
   chartFilter: ScoreRow["chartType"][];
   difficultyFilter: ScoreRow["difficulty"][];
   versionSelection: string;
+  playedOnly: boolean;
   versionOptions: string[];
   fcFilter: string[];
   syncFilter: string[];
@@ -57,6 +58,7 @@ export function buildFilteredScoreRows({
   chartFilter,
   difficultyFilter,
   versionSelection,
+  playedOnly,
   versionOptions,
   fcFilter,
   syncFilter,
@@ -76,6 +78,7 @@ export function buildFilteredScoreRows({
   );
 
   const isIncluded = (row: ScoreRow): boolean => {
+    const hasPlayRecord = row.playCount !== null && row.playCount > 0;
     const targetText = `${row.title} ${aliasValues(row.aliases, "en").join(" ")} ${aliasValues(row.aliases, "ko").join(" ")} ${row.version ?? ""} ${row.level ?? ""}`;
     if (!includesText(targetText, query)) {
       return false;
@@ -101,6 +104,10 @@ export function buildFilteredScoreRows({
       if (!row.version || row.version !== versionSelection) {
         return false;
       }
+    }
+
+    if (playedOnly && !hasPlayRecord) {
+      return false;
     }
 
     if (fcFilter.length > 0 && !fcFilter.includes(ALL_FILTER_PRESET_ID)) {
