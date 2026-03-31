@@ -1,9 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import {
+  describeRecordCollectorVersionStatus,
+  fetchRecordCollectorVersionStatus,
   fetchExplorerPayload,
   fetchRecentPlaylogs,
   type PlayerProfile,
+  type RecordCollectorVersionStatus,
   refreshSongScores,
 } from './api';
 import { HomePage } from './components/HomePage';
@@ -333,6 +336,8 @@ function App() {
   const [versionsResponse, setVersionsResponse] = useState<string[]>([]);
   const [pickerVersionOptions, setPickerVersionOptions] = useState<SongVersionResponse[]>([]);
   const [playerProfile, setPlayerProfile] = useState<PlayerProfile | null>(null);
+  const [recordCollectorVersionStatus, setRecordCollectorVersionStatus] =
+    useState<RecordCollectorVersionStatus | null>(null);
 
   const [query, setQuery] = useState('');
   const [chartFilter, setChartFilter] = useState<ChartType[]>(() => {
@@ -435,6 +440,8 @@ function App() {
 
   const loadAbortRef = useRef<AbortController | null>(null);
   const playlogLoadAbortRef = useRef<AbortController | null>(null);
+  const versionStatusAbortRef = useRef<AbortController | null>(null);
+  const skipNextVersionStatusEffectRef = useRef(false);
   const loadedExplorerKeyRef = useRef<string | null>(null);
   const loadedPlaylogsKeyRef = useRef<string | null>(null);
   const playlogRecordCountRef = useRef(0);
@@ -640,14 +647,48 @@ function App() {
     }
   }, [recordCollectorUrl]);
 
+  const loadRecordCollectorVersionStatus = useCallback(async (baseUrl: string) => {
+    const url = baseUrl.trim();
+    versionStatusAbortRef.current?.abort();
+
+    if (!url) {
+      setRecordCollectorVersionStatus(null);
+      return;
+    }
+
+    const controller = new AbortController();
+    versionStatusAbortRef.current = controller;
+
+    try {
+      const status = await fetchRecordCollectorVersionStatus(url, controller.signal);
+      if (!controller.signal.aborted) {
+        setRecordCollectorVersionStatus(status);
+      }
+    } catch (error) {
+      if (!(error instanceof DOMException && error.name === 'AbortError')) {
+        throw error;
+      }
+    }
+  }, []);
+
   useEffect(() => {
     void loadData();
 
     return () => {
       loadAbortRef.current?.abort();
       playlogLoadAbortRef.current?.abort();
+      versionStatusAbortRef.current?.abort();
     };
   }, [loadData]);
+
+  useEffect(() => {
+    if (skipNextVersionStatusEffectRef.current) {
+      skipNextVersionStatusEffectRef.current = false;
+      return;
+    }
+
+    void loadRecordCollectorVersionStatus(recordCollectorUrl);
+  }, [loadRecordCollectorVersionStatus, recordCollectorUrl]);
 
   useEffect(() => {
     if (activePage !== 'playlogs') {
@@ -1186,9 +1227,17 @@ function App() {
   };
 
   const handleApplyRecordCollectorUrl = useCallback((url: string) => {
-    setRecordCollectorUrl(url);
-    setRecordCollectorUrlDraft(url);
-  }, []);
+    const normalizedUrl = url.trim();
+    setRecordCollectorUrl(normalizedUrl);
+    setRecordCollectorUrlDraft(normalizedUrl);
+    if (normalizedUrl === recordCollectorUrl.trim()) {
+      void loadRecordCollectorVersionStatus(normalizedUrl);
+      return;
+    }
+
+    skipNextVersionStatusEffectRef.current = true;
+    void loadRecordCollectorVersionStatus(normalizedUrl);
+  }, [loadRecordCollectorVersionStatus, recordCollectorUrl]);
 
   const handleConnectUrl = handleApplyRecordCollectorUrl;
 
@@ -1229,6 +1278,9 @@ function App() {
       ? t(playlogLoadingError.key, playlogLoadingError.variables)
       : playlogLoadingError.message
     : null;
+  const recordCollectorVersionNotice = describeRecordCollectorVersionStatus(
+    recordCollectorVersionStatus,
+  );
   const navItems = useMemo<Array<{ page: AppPage; label: string; Icon: () => JSX.Element }>>(
     () => [
       { page: 'home', label: t('nav.home'), Icon: HomeIcon },
@@ -1342,6 +1394,12 @@ function App() {
       </aside>
 
       <main className="app-main">
+        {recordCollectorVersionNotice && activePage !== 'settings' ? (
+          <section className="warning-banner">
+            {t(recordCollectorVersionNotice.translationKey, recordCollectorVersionNotice.variables)}
+          </section>
+        ) : null}
+
         {activePage === 'home' ? (
           <HomePage
             sidebarTopContent={desktopSidebarTopContent}
@@ -1491,6 +1549,7 @@ function App() {
             recordCollectorUrlDraft={recordCollectorUrlDraft}
             setRecordCollectorUrlDraft={setRecordCollectorUrlDraft}
             recordCollectorUrl={recordCollectorUrl}
+            recordCollectorVersionStatus={recordCollectorVersionStatus}
             onApplySongInfoUrl={handleApplySongInfoUrl}
             onApplyRecordCollectorUrl={handleApplyRecordCollectorUrl}
           />

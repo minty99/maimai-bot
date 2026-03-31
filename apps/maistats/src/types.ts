@@ -42,6 +42,10 @@ export interface CollectorLogsResponse {
   total: number;
 }
 
+export interface CollectorVersionResponse {
+  version: string;
+}
+
 export interface ScoreApiResponse {
   title: string;
   genre: string;

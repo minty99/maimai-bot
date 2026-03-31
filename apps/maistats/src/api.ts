@@ -3,6 +3,7 @@ import { VERSION_ORDER } from './app/constants';
 import type {
   ApiErrorResponse,
   CollectorLogsResponse,
+  CollectorVersionResponse,
   PlayRecordApiResponse,
   ScoreApiResponse,
   SongDatabaseChartResponse,
@@ -11,6 +12,7 @@ import type {
   SongVersionResponse,
 } from './types';
 import { songIdentityKey } from './songIdentity';
+import { APP_VERSION, isMinorOrMoreOutdated } from './version';
 
 export class LocalizedApiError extends Error {
   constructor(
@@ -41,11 +43,51 @@ export interface ExplorerPayload {
   playerProfile: PlayerProfile | null;
 }
 
+export type RecordCollectorVersionIssue = 'version_mismatch' | 'invalid_response' | 'unreachable';
+
+export type RecordCollectorVersionStatus =
+  | {
+    currentVersion: string;
+    collectorVersion: string | null;
+    isOutdated: false;
+    issue: null;
+  }
+  | {
+    currentVersion: string;
+    collectorVersion: string;
+    isOutdated: true;
+    issue: 'version_mismatch';
+  }
+  | {
+    currentVersion: string;
+    collectorVersion: string | null;
+    isOutdated: true;
+    issue: 'invalid_response' | 'unreachable';
+  };
+
 const RECENT_LIMIT = 10000;
 const COLLECTOR_LOG_LIMIT = 1000;
 
 function normalizeBaseUrl(url: string): string {
-  return url.trim().replace(/\/+$/, '');
+  const trimmed = url.trim();
+  if (!trimmed) {
+    return '';
+  }
+
+  try {
+    const parsed = new URL(trimmed);
+    if (!['http:', 'https:'].includes(parsed.protocol)) {
+      return '';
+    }
+
+    parsed.pathname = parsed.pathname.replace(/\/+$/, '') || '/';
+    parsed.search = '';
+    parsed.hash = '';
+
+    return parsed.toString().replace(/\/$/, '');
+  } catch {
+    return '';
+  }
 }
 
 async function safeParseJson<T>(response: Response): Promise<T | null> {
@@ -312,6 +354,111 @@ export async function fetchPlayerProfile(
     return await getJson<PlayerProfile>(`${base}/api/player`, signal);
   } catch {
     return null;
+  }
+}
+
+export function describeRecordCollectorVersionStatus(
+  status: RecordCollectorVersionStatus | null,
+): { translationKey: TranslationKey; variables?: TranslationVariables } | null {
+  if (!status?.isOutdated) {
+    return null;
+  }
+
+  switch (status.issue) {
+    case 'version_mismatch':
+      return {
+        translationKey: 'recordCollector.version.outdated',
+        variables: {
+          currentVersion: status.currentVersion,
+          collectorVersion: status.collectorVersion,
+        },
+      };
+    case 'invalid_response':
+      return {
+        translationKey: 'recordCollector.version.invalid',
+        variables: {
+          currentVersion: status.currentVersion,
+          collectorVersion: status.collectorVersion ?? 'unknown',
+        },
+      };
+    case 'unreachable':
+      return {
+        translationKey: 'recordCollector.version.unreachable',
+        variables: {
+          currentVersion: status.currentVersion,
+        },
+      };
+    default: {
+      const exhaustive: never = status;
+      return exhaustive;
+    }
+  }
+}
+
+function compatibleVersionStatus(collectorVersion: string): RecordCollectorVersionStatus {
+  return {
+    currentVersion: APP_VERSION,
+    collectorVersion,
+    isOutdated: false,
+    issue: null,
+  };
+}
+
+function versionMismatchStatus(collectorVersion: string): RecordCollectorVersionStatus {
+  return {
+    currentVersion: APP_VERSION,
+    collectorVersion,
+    isOutdated: true,
+    issue: 'version_mismatch',
+  };
+}
+
+function outdatedVersionStatus(
+  issue: Exclude<RecordCollectorVersionIssue, 'version_mismatch'>,
+  collectorVersion: string | null,
+): RecordCollectorVersionStatus {
+  return {
+    currentVersion: APP_VERSION,
+    collectorVersion,
+    isOutdated: true,
+    issue,
+  };
+}
+
+export async function fetchRecordCollectorVersionStatus(
+  baseUrl: string,
+  signal?: AbortSignal,
+): Promise<RecordCollectorVersionStatus | null> {
+  const base = normalizeBaseUrl(baseUrl);
+  if (!base) {
+    return baseUrl.trim() ? outdatedVersionStatus('unreachable', null) : null;
+  }
+
+  try {
+    const httpResponse = await fetch(`${base}/api/version`, { signal });
+    if (!httpResponse.ok) {
+      throw new Error(`HTTP ${httpResponse.status}`);
+    }
+
+    const response = await safeParseJson<CollectorVersionResponse>(httpResponse);
+    if (!response || typeof response.version !== 'string') {
+      return outdatedVersionStatus('invalid_response', null);
+    }
+
+    const outdated = isMinorOrMoreOutdated(APP_VERSION, response.version);
+
+    if (outdated === null) {
+      return outdatedVersionStatus('invalid_response', response.version);
+    }
+
+    return outdated
+      ? versionMismatchStatus(response.version)
+      : compatibleVersionStatus(response.version);
+  } catch (error) {
+    if (error instanceof DOMException && error.name === 'AbortError') {
+      throw error;
+    }
+    return outdatedVersionStatus('unreachable', null);
   }
 }
 

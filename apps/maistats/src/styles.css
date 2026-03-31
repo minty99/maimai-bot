@@ -1962,6 +1962,16 @@ tbody tr:last-child td {
   font-size: 13px;
 }
 
+.warning-banner {
+  padding: 10px 14px;
+  border-radius: 2px;
+  border: 1px solid rgba(224, 144, 0, 0.24);
+  background: rgba(224, 144, 0, 0.08);
+  color: var(--accent);
+  font-weight: 600;
+  font-size: 13px;
+}
+
 .footer-note {
   color: var(--muted);
   font-size: 13px;
@@ -2779,6 +2789,12 @@ tbody tr:last-child td {
   background: rgba(76, 200, 116, 0.06);
   border: 1px solid rgba(76, 200, 116, 0.2);
   color: var(--diff-basic);
+}
+
+.home-status-warning {
+  background: rgba(224, 144, 0, 0.08);
+  border: 1px solid rgba(224, 144, 0, 0.2);
+  color: var(--accent);
 }
 
 .home-steps {

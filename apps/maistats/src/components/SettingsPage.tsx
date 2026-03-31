@@ -3,9 +3,11 @@ import type { Dispatch, ReactNode, SetStateAction } from 'react';
 
 import {
   checkRecordCollectorHealth,
+  describeRecordCollectorVersionStatus,
   fetchCollectorLogs,
   formatApiErrorMessage,
   LocalizedApiError,
+  type RecordCollectorVersionStatus,
 } from '../api';
 import type { CollectorLogEntry } from '../types';
 import { useI18n, type LanguagePreference } from '../app/i18n';
@@ -24,6 +26,7 @@ interface SettingsPageProps {
   recordCollectorUrlDraft: string;
   setRecordCollectorUrlDraft: Dispatch<SetStateAction<string>>;
   recordCollectorUrl: string;
+  recordCollectorVersionStatus: RecordCollectorVersionStatus | null;
   onApplySongInfoUrl: () => void;
   onApplyRecordCollectorUrl: (url: string) => void;
 }
@@ -40,6 +43,7 @@ export function SettingsPage({
   recordCollectorUrlDraft,
   setRecordCollectorUrlDraft,
   recordCollectorUrl,
+  recordCollectorVersionStatus,
   onApplySongInfoUrl,
   onApplyRecordCollectorUrl,
 }: SettingsPageProps) {
@@ -110,6 +114,12 @@ export function SettingsPage({
       logsAbortRef.current?.abort();
     };
   }, [loadCollectorLogs]);
+
+  const visibleVersionStatus =
+    recordCollectorUrlDraft.trim() === recordCollectorUrl.trim()
+      ? recordCollectorVersionStatus
+      : null;
+  const versionNotice = describeRecordCollectorVersionStatus(visibleVersionStatus);
 
   const handleConnectRc = useCallback(async () => {
     const url = recordCollectorUrlDraft.trim();
@@ -215,6 +225,11 @@ export function SettingsPage({
             {rcConnectedPlayer && (
               <div className="home-status home-status-success">
                 <span>{t('settings.recordCollector.success', { name: rcConnectedPlayer })}</span>
+              </div>
+            )}
+            {versionNotice && (
+              <div className="home-status home-status-warning">
+                <span>{t(versionNotice.translationKey, versionNotice.variables)}</span>
               </div>
             )}
           </div>

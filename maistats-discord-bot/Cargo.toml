@@ -14,7 +14,7 @@ dotenvy = { workspace = true }
 eyre = { workspace = true }
 image = "0.25.9"
 imageproc = "0.25.0"
-models = { version = "0.1.0", path = "../crates/models" }
+models = { path = "../crates/models" }
 ordered-float = { workspace = true }
 poise = { workspace = true }
 reqwest = { workspace = true }

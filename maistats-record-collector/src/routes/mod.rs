@@ -6,6 +6,7 @@ mod recent;
 mod responses;
 mod scores;
 mod today;
+mod version;
 
 use axum::{
     Router,
@@ -27,6 +28,7 @@ pub(crate) fn create_routes(state: AppState) -> Router {
         .route("/api/recent", get(recent::get_recent))
         .route("/api/logs", get(logs::get_logs))
         .route("/api/today", get(today::get_today))
+        .route("/api/version", get(version::get_version))
         .layer(
             TraceLayer::new_for_http()
                 .make_span_with(DefaultMakeSpan::new().level(tracing::Level::INFO))

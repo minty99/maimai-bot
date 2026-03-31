@@ -8,8 +8,8 @@ use tracing::warn;
 use crate::BotData;
 use crate::chart_links::{linked_chart_label, linked_short_difficulty};
 use crate::client::{
-    ApiError, RecordCollectorClient, SongCatalogSheet, SongCatalogSong, SongDatabaseClient,
-    SongMetadata, normalize_record_collector_url,
+    ApiError, BOT_VERSION, RecordCollectorClient, RecordCollectorVersionIssue, SongCatalogSheet,
+    SongCatalogSong, SongDatabaseClient, SongMetadata, normalize_record_collector_url,
 };
 use crate::db;
 use crate::embeds::{
@@ -20,6 +20,22 @@ use crate::emoji::{format_fc, format_rank, format_sync};
 
 type Context<'a> = poise::Context<'a, BotData, Box<dyn std::error::Error + Send + Sync>>;
 type Error = Box<dyn std::error::Error + Send + Sync>;
+const VERSION_WARNING_INTERVAL_SECONDS: i64 = 24 * 60 * 60;
+
+#[derive(Debug, Clone)]
+struct PendingRecordCollectorWarning {
+    cache_key: String,
+    message: String,
+}
+
+struct RegisteredRecordCollectorContext {
+    client: RecordCollectorClient,
+    pending_warning: Option<PendingRecordCollectorWarning>,
+}
+
+fn version_warning_cache_key(user_id: serenity::UserId, record_collector_url: &str) -> String {
+    format!("{}::{record_collector_url}", user_id)
+}
 
 /// Show basic setup steps for maistats
 #[poise::command(slash_command, rename = "how-to-use")]
@@ -101,13 +117,23 @@ pub(crate) async fn register(
     .await
     .wrap_err("save registration")?;
 
-    ctx.send(CreateReply::default().ephemeral(true).embed(
-        embed_base("Registration saved").description(format!(
-            "**Player**: {}\n**Record collector**: {}",
-            player_profile.user_name, normalized_url
-        )),
-    ))
+    let (title, description) =
+        registration_success_message(&player_profile.user_name, &normalized_url);
+
+    ctx.send(
+        CreateReply::default()
+            .ephemeral(true)
+            .embed(embed_base(title).description(description)),
+    )
     .await?;
+
+    let pending_warning = prepare_record_collector_update_warning(
+        ctx.author().id,
+        &normalized_url,
+        &record_collector_client,
+    )
+    .await;
+    send_pending_record_collector_update_warning(ctx, pending_warning).await?;
 
     Ok(())
 }
@@ -120,9 +146,11 @@ pub(crate) async fn mai_score(
 ) -> Result<(), Error> {
     ctx.defer().await?;
 
-    let Some(record_collector_client) = registered_record_collector_client(ctx).await? else {
+    let Some(collector_context) = registered_record_collector_client(ctx).await? else {
         return Ok(());
     };
+    let record_collector_client = collector_context.client;
+    let pending_warning = collector_context.pending_warning;
 
     let requested_title = search.trim();
     if requested_title.is_empty() {
@@ -132,6 +160,7 @@ pub(crate) async fn mai_score(
                 .embed(embed_base("No records found").description("Please provide a title.")),
         )
         .await?;
+        send_pending_record_collector_update_warning(ctx, pending_warning).await?;
         return Ok(());
     }
 
@@ -146,6 +175,7 @@ pub(crate) async fn mai_score(
                 .embed(embed_base("No song found").description("No matching title or alias.")),
         )
         .await?;
+        send_pending_record_collector_update_warning(ctx, pending_warning).await?;
         return Ok(());
     }
 
@@ -156,6 +186,7 @@ pub(crate) async fn mai_score(
                 .embed(build_duplicate_song_candidates_embed(&matched_songs)),
         )
         .await?;
+        send_pending_record_collector_update_warning(ctx, pending_warning).await?;
         return Ok(());
     }
 
@@ -183,10 +214,12 @@ pub(crate) async fn mai_score(
                                 .embed(embed_maintenance()),
                         )
                         .await?;
+                        send_pending_record_collector_update_warning(ctx, pending_warning).await?;
                         return Ok(());
                     }
                     "NOT_FOUND" => {
                         send_no_records_found_reply(ctx, &resolved_song).await?;
+                        send_pending_record_collector_update_warning(ctx, pending_warning).await?;
                         return Ok(());
                     }
                     _ => {}
@@ -201,6 +234,7 @@ pub(crate) async fn mai_score(
                         .embed(embed_maintenance()),
                 )
                 .await?;
+                send_pending_record_collector_update_warning(ctx, pending_warning).await?;
                 return Ok(());
             }
             return Err(e.wrap_err("fetch song detail scores").into());
@@ -209,6 +243,7 @@ pub(crate) async fn mai_score(
 
     if detailed_scores.is_empty() {
         send_no_records_found_reply(ctx, &resolved_song).await?;
+        send_pending_record_collector_update_warning(ctx, pending_warning).await?;
         return Ok(());
     }
 
@@ -283,6 +318,7 @@ pub(crate) async fn mai_score(
         ..Default::default()
     })
     .await?;
+    send_pending_record_collector_update_warning(ctx, pending_warning).await?;
 
     Ok(())
 }
@@ -435,9 +471,11 @@ fn build_song_info_embed(song: &SongCatalogSong) -> serenity::CreateEmbed {
 pub(crate) async fn mai_recent(ctx: Context<'_>) -> Result<(), Error> {
     ctx.defer().await?;
 
-    let Some(record_collector_client) = registered_record_collector_client(ctx).await? else {
+    let Some(collector_context) = registered_record_collector_client(ctx).await? else {
         return Ok(());
     };
+    let record_collector_client = collector_context.client;
+    let pending_warning = collector_context.pending_warning;
 
     let display_name = load_player_display_name(&record_collector_client).await;
     let play_records = record_collector_client
@@ -448,6 +486,7 @@ pub(crate) async fn mai_recent(ctx: Context<'_>) -> Result<(), Error> {
     if play_records.is_empty() {
         ctx.send(CreateReply::default().embed(embed_base("No recent records found")))
             .await?;
+        send_pending_record_collector_update_warning(ctx, pending_warning).await?;
         return Ok(());
     }
 
@@ -520,6 +559,7 @@ pub(crate) async fn mai_recent(ctx: Context<'_>) -> Result<(), Error> {
         ..Default::default()
     })
     .await?;
+    send_pending_record_collector_update_warning(ctx, pending_warning).await?;
 
     Ok(())
 }
@@ -536,9 +576,11 @@ fn latest_credit_len(tracks: &[Option<i64>]) -> usize {
 pub(crate) async fn mai_today(ctx: Context<'_>) -> Result<(), Error> {
     ctx.defer().await?;
 
-    let Some(record_collector_client) = registered_record_collector_client(ctx).await? else {
+    let Some(collector_context) = registered_record_collector_client(ctx).await? else {
         return Ok(());
     };
+    let record_collector_client = collector_context.client;
+    let pending_warning = collector_context.pending_warning;
 
     let offset = UtcOffset::from_hms(9, 0, 0).unwrap_or(UtcOffset::UTC);
     let now_jst = OffsetDateTime::now_utc().to_offset(offset);
@@ -582,6 +624,7 @@ pub(crate) async fn mai_today(ctx: Context<'_>) -> Result<(), Error> {
     let embed = build_mai_today_embed(&display_name, &start, &end, credits, tracks, new_records);
 
     ctx.send(CreateReply::default().embed(embed)).await?;
+    send_pending_record_collector_update_warning(ctx, pending_warning).await?;
     Ok(())
 }
 
@@ -601,7 +644,7 @@ async fn send_registration_validation_error(
 
 async fn registered_record_collector_client(
     ctx: Context<'_>,
-) -> Result<Option<RecordCollectorClient>, Error> {
+) -> Result<Option<RegisteredRecordCollectorContext>, Error> {
     let Some(registration) = db::get_registration(&ctx.data().db_pool, ctx.author().id)
         .await
         .wrap_err("load user registration")?
@@ -632,7 +675,106 @@ async fn registered_record_collector_client(
         }
     };
 
-    Ok(Some(client))
+    let pending_warning = prepare_record_collector_update_warning(
+        registration.discord_user_id,
+        &registration.record_collector_server_url,
+        &client,
+    )
+    .await;
+
+    Ok(Some(RegisteredRecordCollectorContext {
+        client,
+        pending_warning,
+    }))
+}
+
+fn registration_success_message(player_name: &str, normalized_url: &str) -> (&'static str, String) {
+    (
+        "Registration saved",
+        [
+            format!("**Player**: {player_name}"),
+            format!("**Record collector**: {normalized_url}"),
+        ]
+        .join("\n"),
+    )
+}
+
+async fn prepare_record_collector_update_warning(
+    discord_user_id: serenity::UserId,
+    record_collector_server_url: &str,
+    client: &RecordCollectorClient,
+) -> Option<PendingRecordCollectorWarning> {
+    let version_status = client.get_version_status().await;
+    let issue = version_status.issue()?;
+
+    let cache_key = version_warning_cache_key(discord_user_id, record_collector_server_url);
+    Some(PendingRecordCollectorWarning {
+        cache_key,
+        message: build_record_collector_update_message(
+            client.base_url(),
+            issue,
+            version_status.collector_version(),
+        ),
+    })
+}
+
+async fn send_pending_record_collector_update_warning(
+    ctx: Context<'_>,
+    pending_warning: Option<PendingRecordCollectorWarning>,
+) -> Result<(), Error> {
+    let Some(pending_warning) = pending_warning else {
+        return Ok(());
+    };
+
+    let now_unix = OffsetDateTime::now_utc().unix_timestamp();
+    if let Ok(mut cache) = ctx.data().version_warning_cache.lock() {
+        cache.retain(|_, last_sent_at| now_unix - *last_sent_at < VERSION_WARNING_INTERVAL_SECONDS);
+        let warned_recently = cache.contains_key(&pending_warning.cache_key);
+        if warned_recently {
+            return Ok(());
+        }
+    }
+
+    ctx.send(CreateReply::default().ephemeral(true).embed(
+        embed_base("Record collector update required").description(pending_warning.message),
+    ))
+    .await?;
+
+    if let Ok(mut cache) = ctx.data().version_warning_cache.lock() {
+        cache.insert(pending_warning.cache_key, now_unix);
+    }
+
+    Ok(())
+}
+
+fn build_record_collector_update_message(
+    record_collector_url: &str,
+    issue: RecordCollectorVersionIssue,
+    collector_version: Option<&str>,
+) -> String {
+    match issue {
+        RecordCollectorVersionIssue::VersionMismatch => format!(
+            "Your record collector is outdated.\n\
+             Bot version: `{BOT_VERSION}`\n\
+             Collector version: `{}`\n\
+             Please update the server before relying on the bot.",
+            collector_version.unwrap_or("unknown")
+        ),
+        RecordCollectorVersionIssue::InvalidResponse => format!(
+            "Your record collector returned an invalid semantic version from `/api/version`.\n\
+             Bot version: `{BOT_VERSION}`\n\
+             Collector version: `{}`\n\
+             Please update the server.",
+            collector_version.unwrap_or("unknown")
+        ),
+        RecordCollectorVersionIssue::Unreachable => format!(
+            "The bot could not verify `{}/api/version`.\n\
+            Collectors that do not expose this endpoint are treated as outdated.\n\
+             Expected version: `{BOT_VERSION}`\n\
+             Please update the server.",
+            record_collector_url.trim_end_matches('/')
+        ),
+    }
 }
 
 async fn load_player_display_name(record_collector_client: &RecordCollectorClient) -> String {
