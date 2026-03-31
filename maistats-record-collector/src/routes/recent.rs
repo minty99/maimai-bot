@@ -21,11 +21,15 @@ fn default_limit() -> i64 {
     50
 }
 
+fn requested_limit(limit: i64) -> i64 {
+    limit.max(1)
+}
+
 pub(crate) async fn get_recent(
     State(state): State<AppState>,
     Query(params): Query<RecentQuery>,
 ) -> Result<Json<Vec<PlayRecordApiResponse>>> {
-    let limit = params.limit.clamp(1, 500);
+    let limit = requested_limit(params.limit);
 
     let rows = sqlx::query_as::<_, StoredPlayRecord>(
         "SELECT played_at_unixtime, played_at, track, title, genre, artist, chart_type, diff_category, 
@@ -45,4 +49,21 @@ pub(crate) async fn get_recent(
     }
 
     Ok(Json(responses))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::requested_limit;
+
+    #[test]
+    fn requested_limit_keeps_large_values() {
+        assert_eq!(requested_limit(501), 501);
+        assert_eq!(requested_limit(5_000), 5_000);
+    }
+
+    #[test]
+    fn requested_limit_clamps_non_positive_values_to_one() {
+        assert_eq!(requested_limit(0), 1);
+        assert_eq!(requested_limit(-10), 1);
+    }
 }
