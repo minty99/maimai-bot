@@ -114,7 +114,7 @@ export type ScoreSortKey =
   | 'title'
   | 'achievement'
   | 'rating'
-  | 'level'
+  | 'internal'
   | 'dxRatio'
   | 'playCount'
   | 'lastPlayed'
@@ -126,7 +126,7 @@ export type PlaylogSortKey =
   | 'playedAt'
   | 'achievement'
   | 'rating'
-  | 'level'
+  | 'internal'
   | 'dxRatio'
   | 'playCount'
   | 'title';
