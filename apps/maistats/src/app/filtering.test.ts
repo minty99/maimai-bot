@@ -148,6 +148,35 @@ describe('buildFilteredScoreRows', () => {
     expect(rows).toHaveLength(1);
     expect(rows[0]?.key).toBe('played');
   });
+
+  it('sorts score rows by level order', () => {
+    const rows = buildFilteredScoreRows({
+      scoreData: [
+        buildScoreRow('high', { level: '14', internalLevel: 14.0 }),
+        buildScoreRow('low', { level: '13', internalLevel: 13.0 }),
+        buildScoreRow('mid', { level: '13+', internalLevel: 13.7 }),
+      ],
+      locale: 'ko-KR',
+      query: '',
+      chartFilter: ['DX'],
+      difficultyFilter: ['MASTER'],
+      versionSelection: 'ALL',
+      playedOnly: false,
+      versionOptions: [],
+      fcFilter: [],
+      syncFilter: [],
+      achievementMin: 0,
+      achievementMax: 101,
+      internalMin: 1,
+      internalMax: 15.5,
+      daysMin: 0,
+      daysMax: 2000,
+      scoreSortKey: 'level',
+      scoreSortDesc: false,
+    });
+
+    expect(rows.map((row) => row.key)).toEqual(['low', 'mid', 'high']);
+  });
 });
 
 describe('buildFilteredPlaylogRows', () => {
@@ -170,5 +199,37 @@ describe('buildFilteredPlaylogRows', () => {
 
     expect(rows).toHaveLength(1);
     expect(rows[0]?.key).toBe('100-2');
+  });
+
+  it('sorts playlog rows by level order', () => {
+    const rows = buildFilteredPlaylogRows({
+      playlogData: [
+        buildPlaylogRow('high'),
+        buildPlaylogRow('low'),
+        buildPlaylogRow('mid'),
+      ].map((row) => {
+        if (row.key === 'high') {
+          return { ...row, level: '14', internalLevel: 14.0 };
+        }
+        if (row.key === 'mid') {
+          return { ...row, level: '13+', internalLevel: 13.7 };
+        }
+        return { ...row, level: '13', internalLevel: 13.0 };
+      }),
+      locale: 'ko-KR',
+      playlogQuery: '',
+      playlogChartFilter: ['DX'],
+      playlogDifficultyFilter: ['MASTER'],
+      playlogAchievementMin: 0,
+      playlogAchievementMax: 101,
+      playlogBestOnly: false,
+      playlogNewRecordOnly: false,
+      playlogSortKey: 'level',
+      playlogSortDesc: false,
+      playlogDayStartUnix: null,
+      playlogDayEndUnix: null,
+    });
+
+    expect(rows.map((row) => row.key)).toEqual(['low', 'mid', 'high']);
   });
 });

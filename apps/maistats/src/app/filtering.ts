@@ -8,6 +8,7 @@ import {
 } from "./constants";
 import {
   aliasValues,
+  compareLevelOrder,
   compareNullableNumber,
   includesText,
   sortByOrder,
@@ -181,8 +182,13 @@ export function buildFilteredScoreRows({
       case "rating":
         result = compareNullableNumber(left.rating, right.rating);
         break;
-      case "internal":
-        result = compareNullableNumber(left.internalLevel, right.internalLevel);
+      case "level":
+        result = compareLevelOrder(
+          left.level,
+          left.internalLevel,
+          right.level,
+          right.internalLevel,
+        );
         break;
       case "dxRatio":
         result = compareNullableNumber(left.dxRatio, right.dxRatio);
@@ -352,6 +358,14 @@ export function buildFilteredPlaylogRows({
         break;
       case "rating":
         result = compareNullableNumber(left.rating, right.rating);
+        break;
+      case "level":
+        result = compareLevelOrder(
+          left.level,
+          left.internalLevel,
+          right.level,
+          right.internalLevel,
+        );
         break;
       case "dxRatio":
         result = compareNullableNumber(left.dxRatio, right.dxRatio);

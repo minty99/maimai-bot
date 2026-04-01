@@ -301,7 +301,14 @@ export function PlaylogExplorerSection({
                     </button>
                   </th>
                   <th className="chart-col">{t('common.chart')}</th>
-                  <th className="level-col">{t('common.levelShort')}</th>
+                  <th className="sortable level-col">
+                    <button type="button" className="th-sort-button" onClick={() => onSortBy('level')}>
+                      <span>{t('common.levelShort')}</span>
+                      <span className="sort-indicator">
+                        {sortIndicator(playlogSortKey === 'level', playlogSortDesc)}
+                      </span>
+                    </button>
+                  </th>
                   <th className="sortable achievement-col">
                     <button type="button" className="th-sort-button" onClick={() => onSortBy('achievement')}>
                       <span>{t('common.achievementShort')}</span>

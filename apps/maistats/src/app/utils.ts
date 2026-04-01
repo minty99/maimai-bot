@@ -45,6 +45,49 @@ export function compareNullableNumber(a: number | null, b: number | null): numbe
   return a - b;
 }
 
+function parseDisplayedLevel(level: string | null | undefined): number | null {
+  const normalized = level?.trim();
+  if (!normalized) {
+    return null;
+  }
+
+  const match = /^(\d+)(\+|\?)?$/.exec(normalized);
+  if (!match) {
+    const parsed = Number(normalized);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+
+  const base = Number(match[1]);
+  if (!Number.isFinite(base)) {
+    return null;
+  }
+
+  const suffix = match[2] ?? '';
+  if (suffix === '+') {
+    return base + 0.6;
+  }
+  if (suffix === '?') {
+    return base + 0.7;
+  }
+  return base;
+}
+
+export function compareLevelOrder(
+  leftLevel: string | null | undefined,
+  leftInternalLevel: number | null,
+  rightLevel: string | null | undefined,
+  rightInternalLevel: number | null,
+): number {
+  const leftParsedLevel = parseDisplayedLevel(leftLevel);
+  const rightParsedLevel = parseDisplayedLevel(rightLevel);
+  const parsedLevelResult = compareNullableNumber(leftParsedLevel, rightParsedLevel);
+  if (parsedLevelResult !== 0) {
+    return parsedLevelResult;
+  }
+
+  return compareNullableNumber(leftInternalLevel, rightInternalLevel);
+}
+
 export function sortByOrder<T extends string>(
   values: T[],
   orderMap: Map<string, number>,

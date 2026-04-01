@@ -392,10 +392,10 @@ export function ScoreExplorerSection({
                   </th>
                   <th className="chart-col">{t('common.chart')}</th>
                   <th className="sortable level-col">
-                    <button type="button" className="th-sort-button" onClick={() => onSortBy('internal')}>
+                    <button type="button" className="th-sort-button" onClick={() => onSortBy('level')}>
                       <span>{t('common.levelShort')}</span>
                       <span className="sort-indicator">
-                        {sortIndicator(scoreSortKey === 'internal', scoreSortDesc)}
+                        {sortIndicator(scoreSortKey === 'level', scoreSortDesc)}
                       </span>
                     </button>
                   </th>
