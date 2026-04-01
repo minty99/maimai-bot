@@ -126,6 +126,7 @@ export type PlaylogSortKey =
   | 'playedAt'
   | 'achievement'
   | 'rating'
+  | 'internal'
   | 'dxRatio'
   | 'playCount'
   | 'title';

@@ -353,6 +353,9 @@ export function buildFilteredPlaylogRows({
       case "rating":
         result = compareNullableNumber(left.rating, right.rating);
         break;
+      case "internal":
+        result = compareNullableNumber(left.internalLevel, right.internalLevel);
+        break;
       case "dxRatio":
         result = compareNullableNumber(left.dxRatio, right.dxRatio);
         break;
