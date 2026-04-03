@@ -20,7 +20,7 @@ OPENAI_API_KEY = ""
 OFFICIAL_JSON_URL = "https://maimai.sega.jp/data/maimai_songs.json"
 GCM_KO_ALIAS_URL = "https://raw.githubusercontent.com/lomotos10/GCM-bot/main/data/aliases/ko/maimai.tsv"
 OPENAI_RESPONSES_URL = "https://api.openai.com/v1/responses"
-DEFAULT_MODEL = "gpt-5.4-nano"
+DEFAULT_MODEL = "gpt-5.4-mini"
 DEFAULT_OUTPUT_PATH = Path("maimai_ko_aliases.tsv")
 DEFAULT_JSON_OUTPUT_PATH = Path("maimai_ko_aliases.json")
 DEFAULT_COMPARE_OUTPUT_PATH = Path("maimai_ko_aliases_compare.txt")
@@ -282,7 +282,11 @@ def build_openai_payload(
         "- Prefer aliases that can be typed with plain Hangul, spaces, and digits.\n"
         "- Do not include the original Japanese title as an alias.\n"
         "- Do not use Latin-letter romanization.\n"
-        "- Do not invent fandom nicknames or unrelated abbreviations.\n"
+        "- You should generate natural Korean words.\n"
+        "  - For example, `きゅびずむ` should be `큐비즘`, not `큐비즈무`. You should use proper last consonant instead of directly using Japanese character's pronounciation."
+        "- If there are alphabets in original title, then preserve it. For example, you should call `소녀A`, not `소녀에이`."
+        "- If there are hanja-based words in original title and it is normally used by Korean people, then preserve it as hanja-based word in Korean. Don't try to use pure Korean word if hanja-based word is more natural."
+        "- If there are natural alias in Korean, then don't try to generate original pronounciation of Japanese characters in Korean. Existence of natural alias is enough. Direct pronounciation is a kind of fallback."
         "- Remove duplicates.\n"
         "- If a natural Korean alias is not possible, return an empty array."
     )
