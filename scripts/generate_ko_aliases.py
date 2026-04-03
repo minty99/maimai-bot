@@ -18,11 +18,9 @@ from typing import Any
 OPENAI_API_KEY = ""
 
 OFFICIAL_JSON_URL = "https://maimai.sega.jp/data/maimai_songs.json"
-GCM_KO_ALIAS_URL = (
-    "https://raw.githubusercontent.com/lomotos10/GCM-bot/main/data/aliases/ko/maimai.tsv"
-)
+GCM_KO_ALIAS_URL = "https://raw.githubusercontent.com/lomotos10/GCM-bot/main/data/aliases/ko/maimai.tsv"
 OPENAI_RESPONSES_URL = "https://api.openai.com/v1/responses"
-DEFAULT_MODEL = "gpt-5.4-nano"
+DEFAULT_MODEL = "gpt-5.4-mini"
 DEFAULT_OUTPUT_PATH = Path("maimai_ko_aliases.tsv")
 DEFAULT_JSON_OUTPUT_PATH = Path("maimai_ko_aliases.json")
 DEFAULT_COMPARE_OUTPUT_PATH = Path("maimai_ko_aliases_compare.txt")
@@ -80,17 +78,23 @@ def main() -> int:
 
     official_titles = load_official_song_titles(args.official_json_url)
     gcm_aliases = parse_alias_tsv(fetch_text(args.gcm_ko_alias_url))
-    target_titles = [song for song in official_titles if is_japanese_or_cjk_title(song.title)]
+    target_titles = [
+        song for song in official_titles if is_japanese_or_cjk_title(song.title)
+    ]
     if args.limit is not None:
         target_titles = target_titles[: args.limit]
 
     existing_rows = load_alias_rows(args.out) if args.out.exists() else {}
     target_title_set = {song.title for song in target_titles}
     existing_rows = {
-        title: aliases for title, aliases in existing_rows.items() if title in target_title_set
+        title: aliases
+        for title, aliases in existing_rows.items()
+        if title in target_title_set
     }
     pending_titles = [song for song in target_titles if song.title not in existing_rows]
-    references = select_reference_examples(target_titles, gcm_aliases, args.reference_limit)
+    references = select_reference_examples(
+        target_titles, gcm_aliases, args.reference_limit
+    )
 
     print(f"official unique titles: {len(official_titles)}")
     print(f"jp/cjk titles: {len(target_titles)}")
@@ -111,7 +115,9 @@ def main() -> int:
 
     generated_rows = dict(existing_rows)
     total_batches = (len(pending_titles) + args.batch_size - 1) // args.batch_size
-    for batch_index, start in enumerate(range(0, len(pending_titles), args.batch_size), start=1):
+    for batch_index, start in enumerate(
+        range(0, len(pending_titles), args.batch_size), start=1
+    ):
         batch = pending_titles[start : start + args.batch_size]
         print(
             f"[batch {batch_index}/{total_batches}] generating aliases for "
@@ -127,7 +133,9 @@ def main() -> int:
         )
         generated_rows.update(batch_rows)
         write_alias_tsv(args.out, target_titles, generated_rows)
-        completed_count = sum(1 for song in target_titles if song.title in generated_rows)
+        completed_count = sum(
+            1 for song in target_titles if song.title in generated_rows
+        )
         write_progress_json(
             args.progress_out,
             model=args.model,
@@ -141,7 +149,9 @@ def main() -> int:
         if start + args.batch_size < len(pending_titles) and args.sleep_seconds > 0:
             time.sleep(args.sleep_seconds)
 
-    write_generated_alias_json(args.json_out, target_titles, generated_rows, gcm_aliases)
+    write_generated_alias_json(
+        args.json_out, target_titles, generated_rows, gcm_aliases
+    )
     write_comparison_text(args.compare_out, target_titles, generated_rows, gcm_aliases)
 
     print(f"wrote {len(generated_rows)} rows to {args.out}")
@@ -167,7 +177,9 @@ def load_official_song_titles(url: str) -> list[OfficialSongTitle]:
             continue
         seen_titles.add(title)
         titles.append(
-            OfficialSongTitle(title=title, title_kana=str(row.get("title_kana", "")).strip())
+            OfficialSongTitle(
+                title=title, title_kana=str(row.get("title_kana", "")).strip()
+            )
         )
     return titles
 
@@ -223,7 +235,9 @@ def generate_alias_batch(
     max_retries: int,
 ) -> dict[str, list[str]]:
     expected_titles = [song.title for song in batch]
-    request_payload = build_openai_payload(model=model, batch=batch, references=references)
+    request_payload = build_openai_payload(
+        model=model, batch=batch, references=references
+    )
 
     for attempt in range(1, max_retries + 1):
         try:
@@ -268,7 +282,11 @@ def build_openai_payload(
         "- Prefer aliases that can be typed with plain Hangul, spaces, and digits.\n"
         "- Do not include the original Japanese title as an alias.\n"
         "- Do not use Latin-letter romanization.\n"
-        "- Do not invent fandom nicknames or unrelated abbreviations.\n"
+        "- You should generate natural Korean words.\n"
+        "  - For example, `きゅびずむ` should be `큐비즘`, not `큐비즈무`. You should use proper last consonant instead of directly using Japanese character's pronounciation."
+        "- If there are alphabets in original title, then preserve it. For example, you should call `소녀A`, not `소녀에이`."
+        "- If there are hanja-based words in original title and it is normally used by Korean people, then preserve it as hanja-based word in Korean. Don't try to use pure Korean word if hanja-based word is more natural."
+        "- If there are natural alias in Korean, then don't try to generate original pronounciation of Japanese characters in Korean. Existence of natural alias is enough. Direct pronounciation is a kind of fallback."
         "- Remove duplicates.\n"
         "- If a natural Korean alias is not possible, return an empty array."
     )
@@ -278,7 +296,9 @@ def build_openai_payload(
             "The title_kana field is from the official JP JSON and can help infer pronunciation."
         ),
         "style_reference_from_current_gcm_bot_ko_aliases": references,
-        "songs": [{"title": song.title, "title_kana": song.title_kana} for song in batch],
+        "songs": [
+            {"title": song.title, "title_kana": song.title_kana} for song in batch
+        ],
     }
 
     return {
@@ -338,14 +358,20 @@ def validate_generated_aliases(
         if not title:
             raise RuntimeError("structured response item had an empty title")
         if not isinstance(aliases, list):
-            raise RuntimeError(f"structured response aliases for '{title}' was not a list")
-        rows_by_title[title] = sanitize_aliases(title, [str(alias) for alias in aliases])
+            raise RuntimeError(
+                f"structured response aliases for '{title}' was not a list"
+            )
+        rows_by_title[title] = sanitize_aliases(
+            title, [str(alias) for alias in aliases]
+        )
 
     expected_title_set = set(expected_titles)
     missing = [title for title in expected_titles if title not in rows_by_title]
     extras = [title for title in rows_by_title if title not in expected_title_set]
     if missing or extras:
-        raise RuntimeError(f"response title mismatch; missing={missing[:5]}, extras={extras[:5]}")
+        raise RuntimeError(
+            f"response title mismatch; missing={missing[:5]}, extras={extras[:5]}"
+        )
 
     return {title: rows_by_title[title] for title in expected_titles}
 
@@ -379,7 +405,9 @@ def normalize_alias(alias: str) -> str:
 
 
 def write_alias_tsv(
-    output_path: Path, ordered_titles: list[OfficialSongTitle], rows: dict[str, list[str]]
+    output_path: Path,
+    ordered_titles: list[OfficialSongTitle],
+    rows: dict[str, list[str]],
 ) -> None:
     lines: list[str] = []
     for song in ordered_titles:
@@ -409,7 +437,9 @@ def write_progress_json(
         "last_batch_titles": last_batch_titles,
         "updated_at_epoch_seconds": int(time.time()),
     }
-    output_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    output_path.write_text(
+        json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
+    )
 
 
 def write_generated_alias_json(
@@ -428,7 +458,10 @@ def write_generated_alias_json(
                 "generated_aliases": generated_rows.get(song.title, []),
             }
         )
-    output_path.write_text(json.dumps({"items": items}, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    output_path.write_text(
+        json.dumps({"items": items}, ensure_ascii=False, indent=2) + "\n",
+        encoding="utf-8",
+    )
 
 
 def write_comparison_text(
@@ -542,7 +575,9 @@ def fetch_json(url: str) -> Any:
     return json.loads(fetch_text(url))
 
 
-def post_json(url: str, payload: dict[str, Any], headers: dict[str, str]) -> dict[str, Any]:
+def post_json(
+    url: str, payload: dict[str, Any], headers: dict[str, str]
+) -> dict[str, Any]:
     request_body = json.dumps(payload).encode("utf-8")
     response_body = request(url, data=request_body, headers=headers)
     parsed = json.loads(response_body)
@@ -553,7 +588,9 @@ def post_json(url: str, payload: dict[str, Any], headers: dict[str, str]) -> dic
     return parsed
 
 
-def request(url: str, data: bytes | None = None, headers: dict[str, str] | None = None) -> bytes:
+def request(
+    url: str, data: bytes | None = None, headers: dict[str, str] | None = None
+) -> bytes:
     req = urllib.request.Request(url=url, data=data, headers=headers or {})
     try:
         with urllib.request.urlopen(req, timeout=120) as response:
