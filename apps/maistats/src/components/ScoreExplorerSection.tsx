@@ -31,6 +31,7 @@ import { LevelCell } from './LevelCell';
 import type { SongDetailTarget } from './TableActionCells';
 import { AchievementHistoryButton, SongTitleButton } from './TableActionCells';
 import { ToggleGroup } from './ToggleGroup';
+import { FilterFabButton } from './FilterFabButton';
 
 interface ScoreExplorerSectionProps {
   sidebarTopContent?: ReactNode;
@@ -160,6 +161,15 @@ export function ScoreExplorerSection({
       ? virtualizer.getTotalSize() - virtualItems[virtualItems.length - 1].end
       : 0;
 
+  const renderSearchControl = () => (
+    <SearchInput
+      label={t('scores.searchLabel')}
+      placeholder={t('scores.searchPlaceholder')}
+      appliedQuery={appliedQuery}
+      onApplyQuery={onApplyQuery}
+    />
+  );
+
   const filterPanel = (
     <section className="panel filter-panel">
       <div className="panel-heading compact">
@@ -171,13 +181,6 @@ export function ScoreExplorerSection({
         </button>
       </div>
       <div className="filter-grid">
-        <SearchInput
-          label={t('scores.searchLabel')}
-          placeholder={t('scores.searchPlaceholder')}
-          appliedQuery={appliedQuery}
-          onApplyQuery={onApplyQuery}
-        />
-
         <ToggleGroup
           label={t('scores.chartType')}
           options={chartTypes}
@@ -346,198 +349,198 @@ export function ScoreExplorerSection({
   return (
     <>
       <div className="explorer-layout">
-      <aside className="sidebar-column">
-        {sidebarTopContent}
-        {filterPanel}
-      </aside>
+        <aside className="sidebar-column">
+          {sidebarTopContent}
+          <section className="panel search-panel">
+            {renderSearchControl()}
+          </section>
+          {filterPanel}
+        </aside>
 
-      <div className="table-column">
-        <section className="panel explorer-table-panel">
-          <div className="panel-heading">
-            <div>
-              <h2>{t('scores.chartsTitle')}</h2>
-              <p>{t('scores.chartsDescription')}</p>
-            </div>
-            <div className="panel-heading-actions">
-              <div className="view-mode-switch" role="group" aria-label={t('scores.layout')}>
-                <button
-                  type="button"
-                  className={showJackets ? 'active' : ''}
-                  onClick={() => setShowJackets(true)}
-                >
-                  {t('common.jacket')}
-                </button>
-                <button
-                  type="button"
-                  className={!showJackets ? 'active' : ''}
-                  onClick={() => setShowJackets(false)}
-                >
-                  {t('common.compact')}
-                </button>
+        <div className="table-column">
+          <section className="panel mobile-search-panel">
+            {renderSearchControl()}
+          </section>
+          <section className="panel explorer-table-panel">
+            <div className="panel-heading">
+              <div>
+                <h2>{t('scores.chartsTitle')}</h2>
+                <p>{t('scores.chartsDescription')}</p>
               </div>
-              <span className="panel-count">{scoreCountLabel}</span>
+              <div className="panel-heading-actions">
+                <div className="view-mode-switch" role="group" aria-label={t('scores.layout')}>
+                  <button
+                    type="button"
+                    className={showJackets ? 'active' : ''}
+                    onClick={() => setShowJackets(true)}
+                  >
+                    {t('common.jacket')}
+                  </button>
+                  <button
+                    type="button"
+                    className={!showJackets ? 'active' : ''}
+                    onClick={() => setShowJackets(false)}
+                  >
+                    {t('common.compact')}
+                  </button>
+                </div>
+                <span className="panel-count">{scoreCountLabel}</span>
+              </div>
             </div>
-          </div>
-          <div className="table-wrap" ref={tableWrapRef}>
-            {isLoading ? <div className="table-loading-state">{t('common.loadingCharts')}</div> : null}
-            <table className="score-table compact-table">
-              <thead>
-                <tr>
-                  {showJackets ? <th className="jacket-col">{t('common.jacket')}</th> : null}
-                  <th className="sortable title-col">
-                    <button type="button" className="th-sort-button" onClick={() => onSortBy('title')}>
-                      <span>{t('common.title')}</span>
-                      <span className="sort-indicator">{sortIndicator(scoreSortKey === 'title', scoreSortDesc)}</span>
-                    </button>
-                  </th>
-                  <th className="chart-col">{t('common.chart')}</th>
-                  <th className="sortable level-col">
-                    <button type="button" className="th-sort-button" onClick={() => onSortBy('internal')}>
-                      <span>{t('common.levelShort')}</span>
-                      <span className="sort-indicator">
-                        {sortIndicator(scoreSortKey === 'internal', scoreSortDesc)}
-                      </span>
-                    </button>
-                  </th>
-                  <th className="sortable achievement-col">
-                    <button type="button" className="th-sort-button" onClick={() => onSortBy('achievement')}>
-                      <span>{t('common.achievementShort')}</span>
-                      <span className="sort-indicator">
-                        {sortIndicator(scoreSortKey === 'achievement', scoreSortDesc)}
-                      </span>
-                    </button>
-                  </th>
-                  <th className="sortable rating-col">
-                    <button type="button" className="th-sort-button" onClick={() => onSortBy('rating')}>
-                      <span>{t('common.rating')}</span>
-                      <span className="sort-indicator">
-                        {sortIndicator(scoreSortKey === 'rating', scoreSortDesc)}
-                      </span>
-                    </button>
-                  </th>
-                  <th className="rank-col">{t('common.rank')}</th>
-                  <th className="sortable fc-col">
-                    <button type="button" className="th-sort-button" onClick={() => onSortBy('fc')}>
-                      <span>FC</span>
-                      <span className="sort-indicator">{sortIndicator(scoreSortKey === 'fc', scoreSortDesc)}</span>
-                    </button>
-                  </th>
-                  <th className="sortable sync-col">
-                    <button type="button" className="th-sort-button" onClick={() => onSortBy('sync')}>
-                      <span>{t('common.sync')}</span>
-                      <span className="sort-indicator">{sortIndicator(scoreSortKey === 'sync', scoreSortDesc)}</span>
-                    </button>
-                  </th>
-                  <th className="sortable dx-col">
-                    <button type="button" className="th-sort-button" onClick={() => onSortBy('dxRatio')}>
-                      <span>{t('common.dx')}</span>
-                      <span className="sort-indicator">
-                        {sortIndicator(scoreSortKey === 'dxRatio', scoreSortDesc)}
-                      </span>
-                    </button>
-                  </th>
-                  <th className="sortable last-played-col">
-                    <button type="button" className="th-sort-button" onClick={() => onSortBy('lastPlayed')}>
-                      <span>{t('common.lastPlayed')}</span>
-                      <span className="sort-indicator">
-                        {sortIndicator(scoreSortKey === 'lastPlayed', scoreSortDesc)}
-                      </span>
-                    </button>
-                  </th>
-                  <th className="sortable play-count-col">
-                    <button type="button" className="th-sort-button" onClick={() => onSortBy('playCount')}>
-                      <span>{t('common.playCount')}</span>
-                      <span className="sort-indicator">
-                        {sortIndicator(scoreSortKey === 'playCount', scoreSortDesc)}
-                      </span>
-                    </button>
-                  </th>
-                  <th className="sortable version-col">
-                    <button type="button" className="th-sort-button" onClick={() => onSortBy('version')}>
-                      <span>{t('common.version')}</span>
-                      <span className="sort-indicator">{sortIndicator(scoreSortKey === 'version', scoreSortDesc)}</span>
-                    </button>
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {paddingTop > 0 && (
-                  <tr style={{ height: paddingTop }}>
-                    <td colSpan={colCount} />
+            <div className="table-wrap" ref={tableWrapRef}>
+              {isLoading ? <div className="table-loading-state">{t('common.loadingCharts')}</div> : null}
+              <table className="score-table compact-table">
+                <thead>
+                  <tr>
+                    {showJackets ? <th className="jacket-col">{t('common.jacket')}</th> : null}
+                    <th className="sortable title-col">
+                      <button type="button" className="th-sort-button" onClick={() => onSortBy('title')}>
+                        <span>{t('common.title')}</span>
+                        <span className="sort-indicator">{sortIndicator(scoreSortKey === 'title', scoreSortDesc)}</span>
+                      </button>
+                    </th>
+                    <th className="chart-col">{t('common.chart')}</th>
+                    <th className="sortable level-col">
+                      <button type="button" className="th-sort-button" onClick={() => onSortBy('internal')}>
+                        <span>{t('common.levelShort')}</span>
+                        <span className="sort-indicator">
+                          {sortIndicator(scoreSortKey === 'internal', scoreSortDesc)}
+                        </span>
+                      </button>
+                    </th>
+                    <th className="sortable achievement-col">
+                      <button type="button" className="th-sort-button" onClick={() => onSortBy('achievement')}>
+                        <span>{t('common.achievementShort')}</span>
+                        <span className="sort-indicator">
+                          {sortIndicator(scoreSortKey === 'achievement', scoreSortDesc)}
+                        </span>
+                      </button>
+                    </th>
+                    <th className="sortable rating-col">
+                      <button type="button" className="th-sort-button" onClick={() => onSortBy('rating')}>
+                        <span>{t('common.rating')}</span>
+                        <span className="sort-indicator">
+                          {sortIndicator(scoreSortKey === 'rating', scoreSortDesc)}
+                        </span>
+                      </button>
+                    </th>
+                    <th className="rank-col">{t('common.rank')}</th>
+                    <th className="sortable fc-col">
+                      <button type="button" className="th-sort-button" onClick={() => onSortBy('fc')}>
+                        <span>FC</span>
+                        <span className="sort-indicator">{sortIndicator(scoreSortKey === 'fc', scoreSortDesc)}</span>
+                      </button>
+                    </th>
+                    <th className="sortable sync-col">
+                      <button type="button" className="th-sort-button" onClick={() => onSortBy('sync')}>
+                        <span>{t('common.sync')}</span>
+                        <span className="sort-indicator">{sortIndicator(scoreSortKey === 'sync', scoreSortDesc)}</span>
+                      </button>
+                    </th>
+                    <th className="sortable dx-col">
+                      <button type="button" className="th-sort-button" onClick={() => onSortBy('dxRatio')}>
+                        <span>{t('common.dx')}</span>
+                        <span className="sort-indicator">
+                          {sortIndicator(scoreSortKey === 'dxRatio', scoreSortDesc)}
+                        </span>
+                      </button>
+                    </th>
+                    <th className="sortable last-played-col">
+                      <button type="button" className="th-sort-button" onClick={() => onSortBy('lastPlayed')}>
+                        <span>{t('common.lastPlayed')}</span>
+                        <span className="sort-indicator">
+                          {sortIndicator(scoreSortKey === 'lastPlayed', scoreSortDesc)}
+                        </span>
+                      </button>
+                    </th>
+                    <th className="sortable play-count-col">
+                      <button type="button" className="th-sort-button" onClick={() => onSortBy('playCount')}>
+                        <span>{t('common.playCount')}</span>
+                        <span className="sort-indicator">
+                          {sortIndicator(scoreSortKey === 'playCount', scoreSortDesc)}
+                        </span>
+                      </button>
+                    </th>
+                    <th className="sortable version-col">
+                      <button type="button" className="th-sort-button" onClick={() => onSortBy('version')}>
+                        <span>{t('common.version')}</span>
+                        <span className="sort-indicator">{sortIndicator(scoreSortKey === 'version', scoreSortDesc)}</span>
+                      </button>
+                    </th>
                   </tr>
-                )}
-                {virtualItems.map((virtualRow) => {
-                  const row = filteredScoreRows[virtualRow.index];
-                  return (
-                    <tr key={row.key} data-index={virtualRow.index} ref={virtualizer.measureElement}>
-                      {showJackets ? (
-                        <td className="jacket-col">
-                          <Jacket songInfoUrl={songInfoUrl} imageName={row.imageName} title={row.title} />
-                        </td>
-                      ) : null}
-                      <td className="title-col">
-                        <div className="title-cell">
-                          <SongTitleButton
-                            target={row}
-                            title={row.title}
-                            subtitle={showJackets ? formatAliasSummary(row.aliases) : null}
-                            onOpenSongDetail={onOpenSongDetail}
-                          />
-                        </div>
-                      </td>
-                      <td className="chart-col">
-                        <ChartTypeLabel chartType={row.chartType} />
-                      </td>
-                      <td className="level-col">
-                        <LevelCell
-                          internalLevel={row.internalLevel}
-                          isInternalLevelEstimated={row.isInternalLevelEstimated}
-                          difficulty={row.difficulty}
-                        />
-                      </td>
-                      <td className="achievement-col">
-                        <AchievementHistoryButton
-                          achievementPercent={row.achievementPercent}
-                          onOpenHistory={() => onOpenHistory(row)}
-                        />
-                      </td>
-                      <td className="rating-col">{formatNumber(toIntegerRating(row.rating), locale)}</td>
-                      <td className="rank-col">{row.rank ?? '-'}</td>
-                      <td className="fc-col">{row.fc ?? '-'}</td>
-                      <td className="sync-col">{row.sync ?? '-'}</td>
-                      <td className="dx-col">
-                        {formatNumber(row.dxScore, locale)} / {formatNumber(row.dxScoreMax, locale)}
-                      </td>
-                      <td
-                        className="last-played-col"
-                        title={row.daysSinceLastPlayed === null ? undefined : t('units.daysAgo', { count: row.daysSinceLastPlayed })}
-                      >
-                        {row.latestPlayedAtLabel ?? toDateLabel(row.latestPlayedAtUnix, locale) ?? '-'}
-                      </td>
-                      <td className="play-count-col">{formatNumber(row.playCount, locale)}</td>
-                      <td className="version-col">{formatVersionLabel(row.version)}</td>
+                </thead>
+                <tbody>
+                  {paddingTop > 0 && (
+                    <tr style={{ height: paddingTop }}>
+                      <td colSpan={colCount} />
                     </tr>
-                  );
-                })}
-                {paddingBottom > 0 && (
-                  <tr style={{ height: paddingBottom }}>
-                    <td colSpan={colCount} />
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
-        </section>
-      </div>
+                  )}
+                  {virtualItems.map((virtualRow) => {
+                    const row = filteredScoreRows[virtualRow.index];
+                    return (
+                      <tr key={row.key} data-index={virtualRow.index} ref={virtualizer.measureElement}>
+                        {showJackets ? (
+                          <td className="jacket-col">
+                            <Jacket songInfoUrl={songInfoUrl} imageName={row.imageName} title={row.title} />
+                          </td>
+                        ) : null}
+                        <td className="title-col">
+                          <div className="title-cell">
+                            <SongTitleButton
+                              target={row}
+                              title={row.title}
+                              subtitle={showJackets ? formatAliasSummary(row.aliases) : null}
+                              onOpenSongDetail={onOpenSongDetail}
+                            />
+                          </div>
+                        </td>
+                        <td className="chart-col">
+                          <ChartTypeLabel chartType={row.chartType} />
+                        </td>
+                        <td className="level-col">
+                          <LevelCell
+                            internalLevel={row.internalLevel}
+                            isInternalLevelEstimated={row.isInternalLevelEstimated}
+                            difficulty={row.difficulty}
+                          />
+                        </td>
+                        <td className="achievement-col">
+                          <AchievementHistoryButton
+                            achievementPercent={row.achievementPercent}
+                            onOpenHistory={() => onOpenHistory(row)}
+                          />
+                        </td>
+                        <td className="rating-col">{formatNumber(toIntegerRating(row.rating), locale)}</td>
+                        <td className="rank-col">{row.rank ?? '-'}</td>
+                        <td className="fc-col">{row.fc ?? '-'}</td>
+                        <td className="sync-col">{row.sync ?? '-'}</td>
+                        <td className="dx-col">
+                          {formatNumber(row.dxScore, locale)} / {formatNumber(row.dxScoreMax, locale)}
+                        </td>
+                        <td
+                          className="last-played-col"
+                          title={row.daysSinceLastPlayed === null ? undefined : t('units.daysAgo', { count: row.daysSinceLastPlayed })}
+                        >
+                          {row.latestPlayedAtLabel ?? toDateLabel(row.latestPlayedAtUnix, locale) ?? '-'}
+                        </td>
+                        <td className="play-count-col">{formatNumber(row.playCount, locale)}</td>
+                        <td className="version-col">{formatVersionLabel(row.version)}</td>
+                      </tr>
+                    );
+                  })}
+                  {paddingBottom > 0 && (
+                    <tr style={{ height: paddingBottom }}>
+                      <td colSpan={colCount} />
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </section>
+        </div>
       </div>
 
-      <button
-        type="button"
-        className="mobile-filter-fab"
-        onClick={() => setIsFilterModalOpen(true)}
-      >
-        {t('common.filters')}
-      </button>
+      <FilterFabButton label={t('common.filters')} onClick={() => setIsFilterModalOpen(true)} />
 
       {isFilterModalOpen ? (
         <div className="modal-backdrop mobile-filter-backdrop" onClick={() => setIsFilterModalOpen(false)}>
@@ -546,7 +549,6 @@ export function ScoreExplorerSection({
             onClick={(event) => event.stopPropagation()}
           >
             <div className="detail-header">
-              <h2>{t('common.filters')}</h2>
               <button
                 type="button"
                 className="modal-close-button"
