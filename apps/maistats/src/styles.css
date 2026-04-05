@@ -1362,6 +1362,12 @@ table {
   table-layout: fixed;
 }
 
+.playlog-table {
+  width: max-content;
+  min-width: 100%;
+  table-layout: fixed;
+}
+
 thead {
   position: sticky;
   top: 0;
@@ -1769,6 +1775,11 @@ tbody tr:last-child td {
   width: 50ch;
 }
 
+.playlog-table .title-col {
+  min-width: 28ch;
+  width: 28ch;
+}
+
 .score-table .jacket-col,
 .playlog-table .jacket-col {
   width: 60px;
@@ -1858,7 +1869,10 @@ tbody tr:last-child td {
 
 .score-table th:not(.title-col),
 .score-table td:not(.title-col),
-.score-table th:not(.title-col) .th-sort-button {
+.score-table th:not(.title-col) .th-sort-button,
+.playlog-table th:not(.title-col),
+.playlog-table td:not(.title-col),
+.playlog-table th:not(.title-col) .th-sort-button {
   white-space: nowrap;
   overflow-wrap: normal;
   word-break: normal;
@@ -1867,7 +1881,11 @@ tbody tr:last-child td {
 .score-table th.title-col,
 .score-table td.title-col,
 .score-table .title-col .th-sort-button,
-.score-table .title-col .link-button {
+.score-table .title-col .link-button,
+.playlog-table th.title-col,
+.playlog-table td.title-col,
+.playlog-table .title-col .th-sort-button,
+.playlog-table .title-col .link-button {
   white-space: normal;
   overflow-wrap: anywhere;
   word-break: break-word;
