@@ -7,7 +7,7 @@ use eyre::WrapErr;
 use models::{ChartType, DifficultyCategory, ScoreApiResponse};
 use poise::serenity_prelude as serenity;
 use rand::seq::SliceRandom;
-use serenity::builder::{CreateMessage, CreateThread};
+use serenity::builder::{CreateMessage, CreateThread, EditThread};
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex, MutexGuard};
 
@@ -71,6 +71,8 @@ pub(crate) async fn start_session(
     record_collector_client: RecordCollectorClient,
     start_level_tenths: i16,
 ) -> Result<(), Error> {
+    ensure_start_channel_supported(ctx).await?;
+
     let pools =
         build_candidate_pools(&ctx.data().song_database_client, &record_collector_client).await?;
 
@@ -82,8 +84,6 @@ pub(crate) async fn start_session(
         )
         .into());
     };
-
-    lock_session_store(&ctx.data().updown_sessions).remove(&ctx.author().id);
 
     let root_message = ctx
         .channel_id()
@@ -129,7 +129,11 @@ pub(crate) async fn start_session(
         candidate_pools: Arc::new(pools),
     };
 
-    lock_session_store(&ctx.data().updown_sessions).insert(ctx.author().id, session);
+    let previous_session =
+        lock_session_store(&ctx.data().updown_sessions).insert(ctx.author().id, session);
+    if let Some(previous_session) = previous_session {
+        archive_session_thread(ctx.serenity_context(), previous_session.thread_channel_id).await;
+    }
 
     Ok(())
 }
@@ -172,6 +176,14 @@ async fn handle_reaction_add(
     if user_id == ctx.cache.current_user().id {
         return Ok(());
     }
+    if reaction
+        .member
+        .as_ref()
+        .is_some_and(|member| member.user.bot)
+        || ctx.cache.user(user_id).is_some_and(|user| user.bot)
+    {
+        return Ok(());
+    }
 
     let Some(delta) = reaction_delta(&reaction.emoji) else {
         return Ok(());
@@ -203,13 +215,26 @@ async fn handle_reaction_add(
                         return Err(err);
                     }
                 };
-            let _ = finish_session_progress(
+            if finish_session_progress(
                 &data.updown_sessions,
                 session.user_id,
                 session.pick_message_id,
                 session.current_level_tenths,
                 pick_message.id,
-            );
+            )
+            .is_none()
+            {
+                let _ = release_session_claim(
+                    &data.updown_sessions,
+                    session.user_id,
+                    session.pick_message_id,
+                );
+                tracing::warn!(
+                    "mai-updown session progress update was skipped after reroll for user {} in thread {}",
+                    session.user_id,
+                    session.thread_channel_id
+                );
+            }
         } else {
             let _ = release_session_claim(
                 &data.updown_sessions,
@@ -257,13 +282,26 @@ async fn handle_reaction_add(
                         return Err(err);
                     }
                 };
-            let _ = finish_session_progress(
+            if finish_session_progress(
                 &data.updown_sessions,
                 session.user_id,
                 session.pick_message_id,
                 found_level_tenths,
                 pick_message.id,
-            );
+            )
+            .is_none()
+            {
+                let _ = release_session_claim(
+                    &data.updown_sessions,
+                    session.user_id,
+                    session.pick_message_id,
+                );
+                tracing::warn!(
+                    "mai-updown session progress update was skipped after level move for user {} in thread {}",
+                    session.user_id,
+                    session.thread_channel_id
+                );
+            }
         }
         None => {
             let _ = release_session_claim(
@@ -318,6 +356,27 @@ async fn build_candidate_pools(
     }
 
     Ok(pools)
+}
+
+async fn ensure_start_channel_supported(ctx: PoiseContext<'_>) -> Result<(), Error> {
+    let channel = ctx
+        .channel_id()
+        .to_channel(ctx.serenity_context())
+        .await
+        .wrap_err("load mai-updown channel")?;
+
+    let Some(channel) = channel.guild() else {
+        return Ok(());
+    };
+
+    if channel.thread_metadata.is_some() {
+        return Err(eyre::eyre!(
+            "mai-updown can only be started from a regular server channel, not inside an existing thread."
+        )
+        .into());
+    }
+
+    Ok(())
 }
 
 fn append_song_candidates(
@@ -473,14 +532,21 @@ async fn send_pick_message(
         .wrap_err("send mai-updown pick message")?;
 
     for emoji in [REACTION_DOWN, REACTION_STAY, REACTION_UP] {
-        message
+        if let Err(err) = message
             .react(
                 cache_http.http(),
                 serenity::ReactionType::Unicode(emoji.to_string()),
             )
             .await
-            .inspect_err(|err| tracing::error!("{err:?}"))
-            .wrap_err("add mai-updown pick reaction")?;
+        {
+            tracing::error!("{err:?}");
+            if let Err(delete_err) = message.delete(cache_http.http()).await {
+                tracing::warn!(
+                    "failed to delete incomplete mai-updown pick message: {delete_err:#}"
+                );
+            }
+            return Err(eyre::eyre!("add mai-updown pick reaction: {err}").into());
+        }
     }
 
     Ok(message)
@@ -497,6 +563,21 @@ async fn announce_session_notice(
         .wrap_err("send mai-updown session notice")?;
 
     Ok(())
+}
+
+async fn archive_session_thread(
+    cache_http: impl serenity::CacheHttp,
+    thread_channel_id: serenity::ChannelId,
+) {
+    if let Err(err) = thread_channel_id
+        .edit_thread(cache_http, EditThread::new().archived(true))
+        .await
+    {
+        tracing::warn!(
+            "failed to archive previous mai-updown thread {}: {err:#}",
+            thread_channel_id
+        );
+    }
 }
 
 fn claim_session_by_pick_message(
