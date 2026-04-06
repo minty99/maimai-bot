@@ -725,6 +725,8 @@ async fn registered_record_collector_client(
         }
     };
 
+    client.trigger_poll().await;
+
     let pending_warning = prepare_record_collector_update_warning(
         registration.discord_user_id,
         &registration.record_collector_server_url,
