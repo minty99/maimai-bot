@@ -845,21 +845,24 @@ fn build_record_collector_update_message(
                 "Your record collector is outdated.\n\
                  Bot version: `{BOT_VERSION}`\n\
                  Collector version: `{collector_ver}`\n\
-                 Please update the server before relying on the bot.{changelog}"
+                 Please update the server before relying on the bot.\n\
+                 ```\ndocker compose up -d --pull always\n```{changelog}"
             )
         }
         RecordCollectorVersionIssue::InvalidResponse => format!(
             "Your record collector returned an invalid semantic version from `/api/version`.\n\
              Bot version: `{BOT_VERSION}`\n\
              Collector version: `{}`\n\
-             Please update the server.",
+             Please update the server.\n\
+             ```\ndocker compose up -d --pull always\n```",
             collector_version.unwrap_or("unknown")
         ),
         RecordCollectorVersionIssue::Unreachable => format!(
             "The bot could not verify `{}/api/version`.\n\
             Collectors that do not expose this endpoint are treated as outdated.\n\
              Expected version: `{BOT_VERSION}`\n\
-             Please update the server.",
+             Please update the server.\n\
+             ```\ndocker compose up -d --pull always\n```",
             record_collector_url.trim_end_matches('/')
         ),
     }
