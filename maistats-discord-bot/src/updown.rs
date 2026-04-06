@@ -9,7 +9,7 @@ use poise::serenity_prelude as serenity;
 use rand::seq::SliceRandom;
 use serenity::builder::{CreateMessage, CreateThread};
 use std::collections::HashMap;
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, MutexGuard};
 
 type Error = Box<dyn std::error::Error + Send + Sync>;
 type PoiseContext<'a> = poise::Context<'a, BotData, Error>;
@@ -29,7 +29,7 @@ pub(crate) struct UpdownSession {
     in_flight_pick_message_id: Option<serenity::MessageId>,
     thread_channel_id: serenity::ChannelId,
     current_level_tenths: i16,
-    record_collector_client: RecordCollectorClient,
+    candidate_pools: Arc<HashMap<i16, Vec<UpdownCandidate>>>,
 }
 
 #[derive(Debug, Clone)]
@@ -83,9 +83,7 @@ pub(crate) async fn start_session(
         .into());
     };
 
-    if let Ok(mut sessions) = ctx.data().updown_sessions.lock() {
-        sessions.remove(&ctx.author().id);
-    }
+    lock_session_store(&ctx.data().updown_sessions).remove(&ctx.author().id);
 
     let root_message = ctx
         .channel_id()
@@ -128,12 +126,10 @@ pub(crate) async fn start_session(
         in_flight_pick_message_id: None,
         thread_channel_id: thread.id,
         current_level_tenths: start_level_tenths,
-        record_collector_client,
+        candidate_pools: Arc::new(pools),
     };
 
-    if let Ok(mut sessions) = ctx.data().updown_sessions.lock() {
-        sessions.insert(ctx.author().id, session);
-    }
+    lock_session_store(&ctx.data().updown_sessions).insert(ctx.author().id, session);
 
     Ok(())
 }
@@ -143,8 +139,23 @@ pub(crate) async fn handle_event(
     event: &serenity::FullEvent,
     data: &BotData,
 ) -> Result<(), Error> {
-    if let serenity::FullEvent::ReactionAdd { add_reaction } = event {
-        handle_reaction_add(ctx, data, add_reaction).await?;
+    match event {
+        serenity::FullEvent::ReactionAdd { add_reaction } => {
+            handle_reaction_add(ctx, data, add_reaction).await?;
+        }
+        serenity::FullEvent::ThreadUpdate { new, .. } => {
+            if new
+                .thread_metadata
+                .as_ref()
+                .is_some_and(|metadata| metadata.archived)
+            {
+                remove_session_by_thread_id(&data.updown_sessions, new.id);
+            }
+        }
+        serenity::FullEvent::ThreadDelete { thread, .. } => {
+            remove_session_by_thread_id(&data.updown_sessions, thread.id);
+        }
+        _ => {}
     }
 
     Ok(())
@@ -172,30 +183,11 @@ async fn handle_reaction_add(
         return Ok(());
     };
 
-    let pools =
-        match build_candidate_pools(&data.song_database_client, &session.record_collector_client)
-            .await
-        {
-            Ok(pools) => pools,
-            Err(err) => {
-                let _ = release_session_claim(
-                    &data.updown_sessions,
-                    session.user_id,
-                    session.pick_message_id,
-                );
-                announce_session_notice(
-                    ctx,
-                    session.thread_channel_id,
-                    &format!("Failed to refresh the updown pool: {err}"),
-                )
-                .await?;
-                return Ok(());
-            }
-        };
+    let pools = &session.candidate_pools;
 
     if delta == 0 {
         if let Some((_pool_size, candidate)) =
-            choose_candidate_at_level(&pools, session.current_level_tenths)
+            choose_candidate_at_level(pools, session.current_level_tenths)
         {
             let pick_message =
                 match send_pick_message(ctx, data, session.thread_channel_id, &candidate, None)
@@ -239,7 +231,7 @@ async fn handle_reaction_add(
     }
 
     let requested_level = session.current_level_tenths + delta;
-    match choose_candidate_in_direction(&pools, session.current_level_tenths, delta) {
+    match choose_candidate_in_direction(pools, session.current_level_tenths, delta) {
         Some((found_level_tenths, _pool_size, candidate)) => {
             let note = if found_level_tenths == requested_level {
                 None
@@ -512,18 +504,14 @@ fn claim_session_by_pick_message(
     user_id: serenity::UserId,
     pick_message_id: serenity::MessageId,
 ) -> Option<UpdownSession> {
-    let mut sessions = session_store.lock().ok()?;
-    sessions
-        .values_mut()
-        .find(|session| {
-            session.user_id == user_id
-                && session.pick_message_id == pick_message_id
-                && session.in_flight_pick_message_id.is_none()
-        })
-        .map(|session| {
-            session.in_flight_pick_message_id = Some(pick_message_id);
-            session.clone()
-        })
+    let mut sessions = lock_session_store(session_store);
+    let session = sessions.get_mut(&user_id)?;
+    if session.pick_message_id != pick_message_id || session.in_flight_pick_message_id.is_some() {
+        return None;
+    }
+
+    session.in_flight_pick_message_id = Some(pick_message_id);
+    Some(session.clone())
 }
 
 fn finish_session_progress(
@@ -533,7 +521,7 @@ fn finish_session_progress(
     new_level_tenths: i16,
     new_pick_message_id: serenity::MessageId,
 ) -> Option<UpdownSession> {
-    let mut sessions = session_store.lock().ok()?;
+    let mut sessions = lock_session_store(session_store);
     let session = sessions.get_mut(&user_id)?;
     if session.pick_message_id != pick_message_id
         || session.in_flight_pick_message_id != Some(pick_message_id)
@@ -552,7 +540,7 @@ fn release_session_claim(
     user_id: serenity::UserId,
     pick_message_id: serenity::MessageId,
 ) -> Option<UpdownSession> {
-    let mut sessions = session_store.lock().ok()?;
+    let mut sessions = lock_session_store(session_store);
     let session = sessions.get_mut(&user_id)?;
     if session.pick_message_id != pick_message_id
         || session.in_flight_pick_message_id != Some(pick_message_id)
@@ -562,6 +550,30 @@ fn release_session_claim(
 
     session.in_flight_pick_message_id = None;
     Some(session.clone())
+}
+
+fn remove_session_by_thread_id(
+    session_store: &UpdownSessionStore,
+    thread_channel_id: serenity::ChannelId,
+) -> Option<UpdownSession> {
+    let mut sessions = lock_session_store(session_store);
+    let user_id = sessions.iter().find_map(|(user_id, session)| {
+        (session.thread_channel_id == thread_channel_id).then_some(*user_id)
+    })?;
+
+    sessions.remove(&user_id)
+}
+
+fn lock_session_store(
+    session_store: &UpdownSessionStore,
+) -> MutexGuard<'_, HashMap<serenity::UserId, UpdownSession>> {
+    match session_store.lock() {
+        Ok(sessions) => sessions,
+        Err(poisoned) => {
+            tracing::error!("mai-updown session store was poisoned; recovering");
+            poisoned.into_inner()
+        }
+    }
 }
 
 fn internal_level_tenths(value: f32) -> i16 {
