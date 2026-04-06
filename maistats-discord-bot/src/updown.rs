@@ -26,6 +26,7 @@ const REACTION_UP: &str = "⬆️";
 pub(crate) struct UpdownSession {
     user_id: serenity::UserId,
     pick_message_id: serenity::MessageId,
+    in_flight_pick_message_id: Option<serenity::MessageId>,
     thread_channel_id: serenity::ChannelId,
     current_level_tenths: i16,
     record_collector_client: RecordCollectorClient,
@@ -73,7 +74,8 @@ pub(crate) async fn start_session(
     let pools =
         build_candidate_pools(&ctx.data().song_database_client, &record_collector_client).await?;
 
-    let Some((pool_size, candidate)) = choose_candidate_at_level(&pools, start_level_tenths) else {
+    let Some((_pool_size, candidate)) = choose_candidate_at_level(&pools, start_level_tenths)
+    else {
         return Err(eyre::eyre!(
             "No eligible charts found at internal level **{}** with the current filters.",
             format_level_tenths(start_level_tenths)
@@ -116,8 +118,6 @@ pub(crate) async fn start_session(
         ctx.data(),
         thread.id,
         &candidate,
-        start_level_tenths,
-        pool_size,
         None,
     )
     .await?;
@@ -125,6 +125,7 @@ pub(crate) async fn start_session(
     let session = UpdownSession {
         user_id: ctx.author().id,
         pick_message_id: pick_message.id,
+        in_flight_pick_message_id: None,
         thread_channel_id: thread.id,
         current_level_tenths: start_level_tenths,
         record_collector_client,
@@ -165,13 +166,11 @@ async fn handle_reaction_add(
         return Ok(());
     };
 
-    let Some(session) = find_session_by_pick_message(&data.updown_sessions, reaction.message_id)
+    let Some(session) =
+        claim_session_by_pick_message(&data.updown_sessions, user_id, reaction.message_id)
     else {
         return Ok(());
     };
-    if session.user_id != user_id {
-        return Ok(());
-    }
 
     let pools =
         match build_candidate_pools(&data.song_database_client, &session.record_collector_client)
@@ -179,7 +178,12 @@ async fn handle_reaction_add(
         {
             Ok(pools) => pools,
             Err(err) => {
-                announce_session_closed(
+                let _ = release_session_claim(
+                    &data.updown_sessions,
+                    session.user_id,
+                    session.pick_message_id,
+                );
+                announce_session_notice(
                     ctx,
                     session.thread_channel_id,
                     &format!("Failed to refresh the updown pool: {err}"),
@@ -190,20 +194,24 @@ async fn handle_reaction_add(
         };
 
     if delta == 0 {
-        if let Some((pool_size, candidate)) =
+        if let Some((_pool_size, candidate)) =
             choose_candidate_at_level(&pools, session.current_level_tenths)
         {
-            let pick_message = send_pick_message(
-                ctx,
-                data,
-                session.thread_channel_id,
-                &candidate,
-                session.current_level_tenths,
-                pool_size,
-                None,
-            )
-            .await?;
-            let _ = set_session_progress(
+            let pick_message =
+                match send_pick_message(ctx, data, session.thread_channel_id, &candidate, None)
+                    .await
+                {
+                    Ok(message) => message,
+                    Err(err) => {
+                        let _ = release_session_claim(
+                            &data.updown_sessions,
+                            session.user_id,
+                            session.pick_message_id,
+                        );
+                        return Err(err);
+                    }
+                };
+            let _ = finish_session_progress(
                 &data.updown_sessions,
                 session.user_id,
                 session.pick_message_id,
@@ -211,7 +219,12 @@ async fn handle_reaction_add(
                 pick_message.id,
             );
         } else {
-            announce_session_closed(
+            let _ = release_session_claim(
+                &data.updown_sessions,
+                session.user_id,
+                session.pick_message_id,
+            );
+            announce_session_notice(
                 ctx,
                 session.thread_channel_id,
                 &format!(
@@ -227,7 +240,7 @@ async fn handle_reaction_add(
 
     let requested_level = session.current_level_tenths + delta;
     match choose_candidate_in_direction(&pools, session.current_level_tenths, delta) {
-        Some((found_level_tenths, pool_size, candidate)) => {
+        Some((found_level_tenths, _pool_size, candidate)) => {
             let note = if found_level_tenths == requested_level {
                 None
             } else {
@@ -238,17 +251,21 @@ async fn handle_reaction_add(
                 ))
             };
 
-            let pick_message = send_pick_message(
-                ctx,
-                data,
-                session.thread_channel_id,
-                &candidate,
-                found_level_tenths,
-                pool_size,
-                note,
-            )
-            .await?;
-            let _ = set_session_progress(
+            let pick_message =
+                match send_pick_message(ctx, data, session.thread_channel_id, &candidate, note)
+                    .await
+                {
+                    Ok(message) => message,
+                    Err(err) => {
+                        let _ = release_session_claim(
+                            &data.updown_sessions,
+                            session.user_id,
+                            session.pick_message_id,
+                        );
+                        return Err(err);
+                    }
+                };
+            let _ = finish_session_progress(
                 &data.updown_sessions,
                 session.user_id,
                 session.pick_message_id,
@@ -257,7 +274,12 @@ async fn handle_reaction_add(
             );
         }
         None => {
-            announce_session_closed(
+            let _ = release_session_claim(
+                &data.updown_sessions,
+                session.user_id,
+                session.pick_message_id,
+            );
+            announce_session_notice(
                 ctx,
                 session.thread_channel_id,
                 &format!(
@@ -384,12 +406,7 @@ fn build_session_intro_embed(
     ))
 }
 
-fn build_pick_embed(
-    data: &BotData,
-    candidate: &UpdownCandidate,
-    _level_tenths: i16,
-    _pool_size: usize,
-) -> serenity::CreateEmbed {
+fn build_pick_embed(data: &BotData, candidate: &UpdownCandidate) -> serenity::CreateEmbed {
     let level = format_level_with_internal(&candidate.level, Some(candidate.internal_level));
     let chart_line = linked_chart_label(
         &candidate.title,
@@ -451,12 +468,9 @@ async fn send_pick_message(
     data: &BotData,
     thread_channel_id: serenity::ChannelId,
     candidate: &UpdownCandidate,
-    level_tenths: i16,
-    pool_size: usize,
     note: Option<String>,
 ) -> Result<serenity::Message, Error> {
-    let mut builder =
-        CreateMessage::new().embed(build_pick_embed(data, candidate, level_tenths, pool_size));
+    let mut builder = CreateMessage::new().embed(build_pick_embed(data, candidate));
     if let Some(note) = note {
         builder = builder.content(note);
     }
@@ -480,7 +494,7 @@ async fn send_pick_message(
     Ok(message)
 }
 
-async fn announce_session_closed(
+async fn announce_session_notice(
     cache_http: impl serenity::CacheHttp,
     thread_channel_id: serenity::ChannelId,
     message: &str,
@@ -493,18 +507,26 @@ async fn announce_session_closed(
     Ok(())
 }
 
-fn find_session_by_pick_message(
+fn claim_session_by_pick_message(
     session_store: &UpdownSessionStore,
+    user_id: serenity::UserId,
     pick_message_id: serenity::MessageId,
 ) -> Option<UpdownSession> {
-    let sessions = session_store.lock().ok()?;
+    let mut sessions = session_store.lock().ok()?;
     sessions
-        .values()
-        .find(|session| session.pick_message_id == pick_message_id)
-        .cloned()
+        .values_mut()
+        .find(|session| {
+            session.user_id == user_id
+                && session.pick_message_id == pick_message_id
+                && session.in_flight_pick_message_id.is_none()
+        })
+        .map(|session| {
+            session.in_flight_pick_message_id = Some(pick_message_id);
+            session.clone()
+        })
 }
 
-fn set_session_progress(
+fn finish_session_progress(
     session_store: &UpdownSessionStore,
     user_id: serenity::UserId,
     pick_message_id: serenity::MessageId,
@@ -513,12 +535,32 @@ fn set_session_progress(
 ) -> Option<UpdownSession> {
     let mut sessions = session_store.lock().ok()?;
     let session = sessions.get_mut(&user_id)?;
-    if session.pick_message_id != pick_message_id {
+    if session.pick_message_id != pick_message_id
+        || session.in_flight_pick_message_id != Some(pick_message_id)
+    {
         return None;
     }
 
     session.current_level_tenths = new_level_tenths;
     session.pick_message_id = new_pick_message_id;
+    session.in_flight_pick_message_id = None;
+    Some(session.clone())
+}
+
+fn release_session_claim(
+    session_store: &UpdownSessionStore,
+    user_id: serenity::UserId,
+    pick_message_id: serenity::MessageId,
+) -> Option<UpdownSession> {
+    let mut sessions = session_store.lock().ok()?;
+    let session = sessions.get_mut(&user_id)?;
+    if session.pick_message_id != pick_message_id
+        || session.in_flight_pick_message_id != Some(pick_message_id)
+    {
+        return None;
+    }
+
+    session.in_flight_pick_message_id = None;
     Some(session.clone())
 }
 
