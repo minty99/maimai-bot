@@ -461,6 +461,23 @@ impl RecordCollectorClient {
         &self.base_url
     }
 
+    pub(crate) async fn trigger_poll(&self) {
+        let url = format!("{}/api/poll", self.base_url);
+        match self.client.post(&url).send().await {
+            Ok(resp) if resp.status().is_success() || resp.status().as_u16() == 202 => {}
+            Ok(resp) => {
+                tracing::warn!(
+                    "trigger_poll returned unexpected status {} from {}",
+                    resp.status(),
+                    self.base_url
+                );
+            }
+            Err(err) => {
+                tracing::warn!("trigger_poll failed for {}: {err:#}", self.base_url);
+            }
+        }
+    }
+
     pub(crate) async fn health_check(&self) -> Result<()> {
         let url = format!("{}/health/ready", self.base_url);
         let resp = self

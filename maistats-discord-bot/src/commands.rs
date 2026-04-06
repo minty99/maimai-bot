@@ -5,12 +5,22 @@ use poise::serenity_prelude as serenity;
 use time::{Duration as TimeDuration, OffsetDateTime, UtcOffset};
 use tracing::warn;
 
+use models::is_minor_or_more_outdated;
+
 use crate::BotData;
 use crate::chart_links::{linked_chart_label, linked_short_difficulty};
 use crate::client::{
     ApiError, BOT_VERSION, RecordCollectorClient, RecordCollectorVersionIssue, SongCatalogSheet,
     SongCatalogSong, SongDatabaseClient, SongMetadata, normalize_record_collector_url,
 };
+
+/// Changelog entries ordered newest-first.
+/// Add one entry here every time the workspace version is bumped.
+const CHANGELOG: &[(&str, &str)] = &[(
+    "1.1.0",
+    "Commands now trigger an immediate data poll before responding, \
+         so results always reflect your most recent play session.",
+)];
 use crate::db;
 use crate::embeds::{
     RecentRecordView, build_mai_recent_embeds, build_mai_today_embed, embed_base,
@@ -725,6 +735,8 @@ async fn registered_record_collector_client(
         }
     };
 
+    client.trigger_poll().await;
+
     let pending_warning = prepare_record_collector_update_warning(
         registration.discord_user_id,
         &registration.record_collector_server_url,
@@ -797,19 +809,45 @@ async fn send_pending_record_collector_update_warning(
     Ok(())
 }
 
+fn changelog_since(collector_version: &str) -> String {
+    let entries: Vec<_> = CHANGELOG
+        .iter()
+        .filter(|(entry_version, _)| {
+            // Keep entries that are newer than the collector's version.
+            // is_minor_or_more_outdated(entry, collector) == true means collector < entry.
+            is_minor_or_more_outdated(entry_version, collector_version).unwrap_or(false)
+        })
+        .collect();
+
+    if entries.is_empty() {
+        return String::new();
+    }
+
+    let lines = entries
+        .iter()
+        .map(|(v, desc)| format!("**{v}** — {desc}"))
+        .collect::<Vec<_>>()
+        .join("\n");
+
+    format!("\n\n**What's new:**\n{lines}")
+}
+
 fn build_record_collector_update_message(
     record_collector_url: &str,
     issue: RecordCollectorVersionIssue,
     collector_version: Option<&str>,
 ) -> String {
     match issue {
-        RecordCollectorVersionIssue::VersionMismatch => format!(
-            "Your record collector is outdated.\n\
-             Bot version: `{BOT_VERSION}`\n\
-             Collector version: `{}`\n\
-             Please update the server before relying on the bot.",
-            collector_version.unwrap_or("unknown")
-        ),
+        RecordCollectorVersionIssue::VersionMismatch => {
+            let collector_ver = collector_version.unwrap_or("unknown");
+            let changelog = changelog_since(collector_ver);
+            format!(
+                "Your record collector is outdated.\n\
+                 Bot version: `{BOT_VERSION}`\n\
+                 Collector version: `{collector_ver}`\n\
+                 Please update the server before relying on the bot.{changelog}"
+            )
+        }
         RecordCollectorVersionIssue::InvalidResponse => format!(
             "Your record collector returned an invalid semantic version from `/api/version`.\n\
              Bot version: `{BOT_VERSION}`\n\

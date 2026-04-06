@@ -11,6 +11,7 @@ The goal of this file is to keep future changes consistent with the current impl
 - **Dependency management**: use `cargo add` / `cargo remove` (avoid hand-editing `Cargo.toml`).
 - **Error handling**: use `eyre` (`eyre::Result`, `WrapErr`) consistently.
 - **Validation**: prefer `cargo fmt`, `cargo clippy`, `cargo test`.
+- **Version bumps**: when bumping `[workspace.package] version` in `Cargo.toml`, add a matching entry to the `CHANGELOG` constant in `maistats-discord-bot/src/commands.rs` (format: `("x.y.z", "one-line English description of what changed")`). The bot shows this changelog to users whose record collector is out of date.
 
 ## Runtime architecture (current)
 

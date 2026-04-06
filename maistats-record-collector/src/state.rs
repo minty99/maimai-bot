@@ -4,12 +4,17 @@ use crate::logging::LogBuffer;
 use sqlx::SqlitePool;
 use std::path::PathBuf;
 use std::sync::Arc;
+use tokio::sync::{Mutex, Notify};
 
 #[derive(Clone)]
 pub(crate) struct AppState {
     pub(crate) db_pool: SqlitePool,
     pub(crate) config: RecordCollectorConfig,
     pub(crate) log_buffer: Arc<LogBuffer>,
+    /// Held while a polling cycle is running; prevents concurrent cycles.
+    pub(crate) cycle_lock: Arc<Mutex<()>>,
+    /// Signalled after a cycle completes via /api/poll so the scheduler resets its timer.
+    pub(crate) timer_reset_notify: Arc<Notify>,
 }
 
 impl AppState {

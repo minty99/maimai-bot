@@ -14,8 +14,17 @@ pub(crate) fn start_background_polling(app_state: AppState) {
         info!("Background polling started: periodic playerData poll (every 10 minutes)");
 
         loop {
-            timer.tick().await;
+            tokio::select! {
+                _ = timer.tick() => {}
+                _ = app_state.timer_reset_notify.notified() => {
+                    // /api/poll just ran a cycle; reset the timer so the next
+                    // scheduled tick fires 10 minutes from now.
+                    timer.reset();
+                    continue;
+                }
+            }
 
+            let _guard = app_state.cycle_lock.lock().await;
             match run_cycle(&app_state).await {
                 Ok(report) => info!(
                     "Periodic poll finished: maintenance_skip={} seeded={} seeded_rows={} recent_present={}",

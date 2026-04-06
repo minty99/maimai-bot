@@ -1,6 +1,7 @@
 mod health;
 mod logs;
 mod player;
+mod poll;
 mod rating;
 mod recent;
 mod responses;
@@ -26,6 +27,7 @@ pub(crate) fn create_routes(state: AppState) -> Router {
         .route("/api/player", get(player::get_player))
         .route("/api/rating/targets", get(rating::get_rating_targets))
         .route("/api/recent", get(recent::get_recent))
+        .route("/api/poll", post(poll::trigger_poll))
         .route("/api/logs", get(logs::get_logs))
         .route("/api/today", get(today::get_today))
         .route("/api/version", get(version::get_version))

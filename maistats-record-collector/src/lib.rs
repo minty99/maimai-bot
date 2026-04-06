@@ -47,6 +47,8 @@ pub async fn run_server(log_buffer: Arc<logging::LogBuffer>) -> eyre::Result<()>
         db_pool,
         config: config.clone(),
         log_buffer,
+        cycle_lock: Arc::new(tokio::sync::Mutex::new(())),
+        timer_reset_notify: Arc::new(tokio::sync::Notify::new()),
     };
 
     tasks::polling::start_background_polling(app_state.clone());
