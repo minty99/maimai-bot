@@ -197,129 +197,70 @@ async fn handle_reaction_add(
 
     let pools = &session.candidate_pools;
 
-    if delta == 0 {
-        if let Some((_pool_size, candidate)) =
-            choose_candidate_at_level(pools, session.current_level_tenths)
-        {
-            let pick_message =
-                match send_pick_message(ctx, data, session.thread_channel_id, &candidate, None)
-                    .await
-                {
-                    Ok(message) => message,
-                    Err(err) => {
-                        let _ = release_session_claim(
-                            &data.updown_sessions,
-                            session.user_id,
-                            session.pick_message_id,
-                        );
-                        return Err(err);
-                    }
-                };
-            if finish_session_progress(
-                &data.updown_sessions,
-                session.user_id,
-                session.pick_message_id,
-                session.current_level_tenths,
-                pick_message.id,
-            )
-            .is_none()
-            {
-                let _ = release_session_claim(
-                    &data.updown_sessions,
-                    session.user_id,
-                    session.pick_message_id,
-                );
-                tracing::warn!(
-                    "mai-updown session progress update was skipped after reroll for user {} in thread {}",
-                    session.user_id,
-                    session.thread_channel_id
-                );
-            }
-        } else {
-            let _ = release_session_claim(
-                &data.updown_sessions,
-                session.user_id,
-                session.pick_message_id,
-            );
-            announce_session_notice(
-                ctx,
-                session.thread_channel_id,
-                &format!(
-                    "No eligible charts found at **{}** with the current filters. Keeping the current level.",
-                    format_level_tenths(session.current_level_tenths)
-                ),
-            )
-            .await?;
-        }
-
-        return Ok(());
-    }
-
-    let requested_level = session.current_level_tenths + delta;
-    match choose_candidate_in_direction(pools, session.current_level_tenths, delta) {
-        Some((found_level_tenths, _pool_size, candidate)) => {
-            let note = if found_level_tenths == requested_level {
-                None
-            } else {
-                Some(format!(
-                    "No eligible chart at **{}**. Jumped to **{}** instead.",
-                    format_level_tenths(requested_level),
-                    format_level_tenths(found_level_tenths)
-                ))
-            };
-
-            let pick_message =
-                match send_pick_message(ctx, data, session.thread_channel_id, &candidate, note)
-                    .await
-                {
-                    Ok(message) => message,
-                    Err(err) => {
-                        let _ = release_session_claim(
-                            &data.updown_sessions,
-                            session.user_id,
-                            session.pick_message_id,
-                        );
-                        return Err(err);
-                    }
-                };
-            if finish_session_progress(
-                &data.updown_sessions,
-                session.user_id,
-                session.pick_message_id,
-                found_level_tenths,
-                pick_message.id,
-            )
-            .is_none()
-            {
-                let _ = release_session_claim(
-                    &data.updown_sessions,
-                    session.user_id,
-                    session.pick_message_id,
-                );
-                tracing::warn!(
-                    "mai-updown session progress update was skipped after level move for user {} in thread {}",
-                    session.user_id,
-                    session.thread_channel_id
-                );
+    let (new_level_tenths, candidate, note) = if delta == 0 {
+        match choose_candidate_at_level(pools, session.current_level_tenths) {
+            Some((_pool_size, candidate)) => (session.current_level_tenths, candidate, None),
+            None => {
+                release_session_claim(&data.updown_sessions, &session);
+                announce_session_notice(
+                    ctx,
+                    session.thread_channel_id,
+                    &format!(
+                        "No eligible charts found at **{}** with the current filters. Keeping the current level.",
+                        format_level_tenths(session.current_level_tenths)
+                    ),
+                )
+                .await?;
+                return Ok(());
             }
         }
-        None => {
-            let _ = release_session_claim(
-                &data.updown_sessions,
-                session.user_id,
-                session.pick_message_id,
-            );
-            announce_session_notice(
-                ctx,
-                session.thread_channel_id,
-                &format!(
-                    "No eligible chart found before leaving the 1.0-15.0 range. Keeping **{}**.",
-                    format_level_tenths(session.current_level_tenths)
-                ),
-            )
-            .await?;
+    } else {
+        let requested_level = session.current_level_tenths + delta;
+        match choose_candidate_in_direction(pools, session.current_level_tenths, delta) {
+            Some((found_level_tenths, _pool_size, candidate)) => {
+                let note = if found_level_tenths == requested_level {
+                    None
+                } else {
+                    Some(format!(
+                        "No eligible chart at **{}**. Jumped to **{}** instead.",
+                        format_level_tenths(requested_level),
+                        format_level_tenths(found_level_tenths)
+                    ))
+                };
+                (found_level_tenths, candidate, note)
+            }
+            None => {
+                release_session_claim(&data.updown_sessions, &session);
+                announce_session_notice(
+                    ctx,
+                    session.thread_channel_id,
+                    &format!(
+                        "No eligible chart found before leaving the 1.0-15.0 range. Keeping **{}**.",
+                        format_level_tenths(session.current_level_tenths)
+                    ),
+                )
+                .await?;
+                return Ok(());
+            }
         }
-    }
+    };
+
+    let pick_message =
+        match send_pick_message(ctx, data, session.thread_channel_id, &candidate, note).await {
+            Ok(message) => message,
+            Err(err) => {
+                release_session_claim(&data.updown_sessions, &session);
+                return Err(err);
+            }
+        };
+
+    finish_session_progress(
+        &data.updown_sessions,
+        &session,
+        new_level_tenths,
+        pick_message.id,
+    );
+
     Ok(())
 }
 
@@ -597,40 +538,37 @@ fn claim_session_by_pick_message(
 
 fn finish_session_progress(
     session_store: &UpdownSessionStore,
-    user_id: serenity::UserId,
-    pick_message_id: serenity::MessageId,
+    claimed: &UpdownSession,
     new_level_tenths: i16,
     new_pick_message_id: serenity::MessageId,
-) -> Option<UpdownSession> {
+) {
     let mut sessions = lock_session_store(session_store);
-    let session = sessions.get_mut(&user_id)?;
-    if session.pick_message_id != pick_message_id
-        || session.in_flight_pick_message_id != Some(pick_message_id)
+    let Some(session) = sessions.get_mut(&claimed.user_id) else {
+        return;
+    };
+    if session.pick_message_id != claimed.pick_message_id
+        || session.in_flight_pick_message_id != Some(claimed.pick_message_id)
     {
-        return None;
+        return;
     }
 
     session.current_level_tenths = new_level_tenths;
     session.pick_message_id = new_pick_message_id;
     session.in_flight_pick_message_id = None;
-    Some(session.clone())
 }
 
-fn release_session_claim(
-    session_store: &UpdownSessionStore,
-    user_id: serenity::UserId,
-    pick_message_id: serenity::MessageId,
-) -> Option<UpdownSession> {
+fn release_session_claim(session_store: &UpdownSessionStore, claimed: &UpdownSession) {
     let mut sessions = lock_session_store(session_store);
-    let session = sessions.get_mut(&user_id)?;
-    if session.pick_message_id != pick_message_id
-        || session.in_flight_pick_message_id != Some(pick_message_id)
+    let Some(session) = sessions.get_mut(&claimed.user_id) else {
+        return;
+    };
+    if session.pick_message_id != claimed.pick_message_id
+        || session.in_flight_pick_message_id != Some(claimed.pick_message_id)
     {
-        return None;
+        return;
     }
 
     session.in_flight_pick_message_id = None;
-    Some(session.clone())
 }
 
 fn remove_session_by_thread_id(
@@ -648,13 +586,7 @@ fn remove_session_by_thread_id(
 fn lock_session_store(
     session_store: &UpdownSessionStore,
 ) -> MutexGuard<'_, HashMap<serenity::UserId, UpdownSession>> {
-    match session_store.lock() {
-        Ok(sessions) => sessions,
-        Err(poisoned) => {
-            tracing::error!("mai-updown session store was poisoned; recovering");
-            poisoned.into_inner()
-        }
-    }
+    session_store.lock().expect("session store lock")
 }
 
 fn internal_level_tenths(value: f32) -> i16 {

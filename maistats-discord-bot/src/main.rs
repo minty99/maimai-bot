@@ -81,8 +81,7 @@ async fn main() -> eyre::Result<()> {
                 commands::mai_today(),
                 commands::mai_updown(),
             ],
-            event_handler: |ctx, event, framework, data| {
-                let _ = framework;
+            event_handler: |ctx, event, _framework, data| {
                 Box::pin(updown::handle_event(ctx, event, data))
             },
             on_error: |error: poise::FrameworkError<
