@@ -13,6 +13,7 @@ mod db;
 mod dm;
 mod embeds;
 mod emoji;
+mod updown;
 
 use client::SongDatabaseClient;
 use config::DiscordConfig;
@@ -26,6 +27,7 @@ pub(crate) struct BotData {
     pub(crate) song_database_client: SongDatabaseClient,
     pub(crate) status_emojis: MaimaiStatusEmojis,
     pub(crate) version_warning_cache: Arc<Mutex<HashMap<String, i64>>>,
+    pub(crate) updown_sessions: updown::UpdownSessionStore,
 }
 
 #[tokio::main]
@@ -64,6 +66,7 @@ async fn main() -> eyre::Result<()> {
         song_database_client,
         status_emojis: MaimaiStatusEmojis::default(),
         version_warning_cache: Arc::new(Mutex::new(HashMap::new())),
+        updown_sessions: updown::new_session_store(),
     };
 
     let framework = poise::Framework::builder()
@@ -76,7 +79,12 @@ async fn main() -> eyre::Result<()> {
                 commands::mai_song_info(),
                 commands::mai_recent(),
                 commands::mai_today(),
+                commands::mai_updown(),
             ],
+            event_handler: |ctx, event, framework, data| {
+                let _ = framework;
+                Box::pin(updown::handle_event(ctx, event, data))
+            },
             on_error: |error: poise::FrameworkError<
                 '_,
                 BotData,
@@ -156,7 +164,8 @@ async fn main() -> eyre::Result<()> {
         })
         .build();
 
-    let intents = serenity::GatewayIntents::GUILDS;
+    let intents =
+        serenity::GatewayIntents::GUILDS | serenity::GatewayIntents::GUILD_MESSAGE_REACTIONS;
 
     let mut client = serenity::Client::builder(&discord_bot_token, intents)
         .framework(framework)

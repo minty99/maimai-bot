@@ -17,6 +17,7 @@ use crate::embeds::{
     embed_maintenance, format_level_with_internal,
 };
 use crate::emoji::{format_fc, format_rank, format_sync};
+use crate::updown;
 
 type Context<'a> = poise::Context<'a, BotData, Box<dyn std::error::Error + Send + Sync>>;
 type Error = Box<dyn std::error::Error + Send + Sync>;
@@ -46,7 +47,7 @@ pub(crate) async fn how_to_use(ctx: Context<'_>) -> Result<(), Error> {
                 "maistats helps you collect and manage your personal maimai records over time.\n\n\
                 Open `https://maistats.muhwan.dev` to see how to set up your own record collector.\n\
                 Once your collector is ready, connect it to this bot with `/register <url>`.\n\n\
-                After registering, you can use commands like `/mai-score`, `/mai-recent`, `/mai-song-info`, and `/mai-today` with your own data.",
+                After registering, you can use commands like `/mai-score`, `/mai-recent`, `/mai-song-info`, `/mai-today`, and `/mai-updown` with your own data.",
             ),
         ),
     )
@@ -625,6 +626,72 @@ pub(crate) async fn mai_today(ctx: Context<'_>) -> Result<(), Error> {
 
     ctx.send(CreateReply::default().embed(embed)).await?;
     send_pending_record_collector_update_warning(ctx, pending_warning).await?;
+    Ok(())
+}
+
+/// Start a mai-updown random session in a thread
+#[poise::command(slash_command, rename = "mai-updown", guild_only)]
+pub(crate) async fn mai_updown(
+    ctx: Context<'_>,
+    #[description = "Starting internal level (for example 13.0)"] internal_level: f64,
+) -> Result<(), Error> {
+    ctx.defer_ephemeral().await?;
+
+    let Some(collector_context) = registered_record_collector_client(ctx).await? else {
+        return Ok(());
+    };
+    let record_collector_client = collector_context.client;
+    let pending_warning = collector_context.pending_warning;
+
+    let start_level_tenths = match updown::parse_level_tenths(internal_level) {
+        Ok(value) => value,
+        Err(err) => {
+            ctx.send(
+                CreateReply::default()
+                    .ephemeral(true)
+                    .embed(embed_base("Invalid internal level").description(err.to_string())),
+            )
+            .await?;
+            send_pending_record_collector_update_warning(ctx, pending_warning).await?;
+            return Ok(());
+        }
+    };
+
+    match updown::start_session(ctx, record_collector_client, start_level_tenths).await {
+        Ok(()) => {}
+        Err(err) => {
+            if let Some(api_error) = err.downcast_ref::<ApiError>()
+                && api_error.code() == "MAINTENANCE"
+            {
+                ctx.send(
+                    CreateReply::default()
+                        .ephemeral(true)
+                        .embed(embed_maintenance()),
+                )
+                .await?;
+            } else {
+                ctx.send(
+                    CreateReply::default().ephemeral(true).embed(
+                        embed_base("Unable to start mai-updown").description(err.to_string()),
+                    ),
+                )
+                .await?;
+            }
+
+            send_pending_record_collector_update_warning(ctx, pending_warning).await?;
+            return Ok(());
+        }
+    }
+
+    ctx.send(
+        CreateReply::default()
+            .ephemeral(true)
+            .content("mai-updown session started."),
+    )
+    .await?;
+
+    send_pending_record_collector_update_warning(ctx, pending_warning).await?;
+
     Ok(())
 }
 

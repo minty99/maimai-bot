@@ -1,7 +1,8 @@
 use eyre::{Result, WrapErr};
 use models::{
-    ChartType, DifficultyCategory, ParsedPlayerProfile, PlayRecordApiResponse, SongAliases,
-    SongChartRegion, SongDetailScoreApiResponse, VersionApiResponse, is_minor_or_more_outdated,
+    ChartType, DifficultyCategory, ParsedPlayerProfile, PlayRecordApiResponse, ScoreApiResponse,
+    SongAliases, SongChartRegion, SongDetailScoreApiResponse, VersionApiResponse,
+    is_minor_or_more_outdated,
 };
 use reqwest::{Client, Url};
 use serde::{Deserialize, Serialize};
@@ -549,6 +550,10 @@ impl RecordCollectorClient {
     pub async fn get_today(&self, day: &str) -> Result<Vec<PlayRecordApiResponse>> {
         self.get_with_retry(&format!("/api/today?day={}", day))
             .await
+    }
+
+    pub async fn get_all_rated_scores(&self) -> Result<Vec<ScoreApiResponse>> {
+        self.get_with_retry("/api/scores/rated").await
     }
 
     pub async fn get_song_detail_scores(
