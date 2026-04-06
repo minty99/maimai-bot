@@ -643,56 +643,39 @@ pub(crate) async fn mai_updown(
     let record_collector_client = collector_context.client;
     let pending_warning = collector_context.pending_warning;
 
-    let start_level_tenths = match updown::parse_level_tenths(internal_level) {
-        Ok(value) => value,
-        Err(err) => {
-            ctx.send(
-                CreateReply::default()
+    let reply = match updown::parse_level_tenths(internal_level) {
+        Ok(start_level_tenths) => {
+            match updown::start_session(ctx, record_collector_client, start_level_tenths).await {
+                Ok(()) => CreateReply::default()
                     .ephemeral(true)
-                    .embed(embed_base("Invalid internal level").description(err.to_string())),
-            )
-            .await?;
-            send_pending_record_collector_update_warning(ctx, pending_warning).await?;
-            return Ok(());
+                    .content("mai-updown session started."),
+                Err(err) => build_mai_updown_start_error_reply(&err),
+            }
         }
+        Err(err) => CreateReply::default()
+            .ephemeral(true)
+            .embed(embed_base("Invalid internal level").description(err.to_string())),
     };
 
-    match updown::start_session(ctx, record_collector_client, start_level_tenths).await {
-        Ok(()) => {}
-        Err(err) => {
-            if let Some(api_error) = err.downcast_ref::<ApiError>()
-                && api_error.code() == "MAINTENANCE"
-            {
-                ctx.send(
-                    CreateReply::default()
-                        .ephemeral(true)
-                        .embed(embed_maintenance()),
-                )
-                .await?;
-            } else {
-                ctx.send(
-                    CreateReply::default().ephemeral(true).embed(
-                        embed_base("Unable to start mai-updown").description(err.to_string()),
-                    ),
-                )
-                .await?;
-            }
-
-            send_pending_record_collector_update_warning(ctx, pending_warning).await?;
-            return Ok(());
-        }
-    }
-
-    ctx.send(
-        CreateReply::default()
-            .ephemeral(true)
-            .content("mai-updown session started."),
-    )
-    .await?;
+    ctx.send(reply).await?;
 
     send_pending_record_collector_update_warning(ctx, pending_warning).await?;
 
     Ok(())
+}
+
+fn build_mai_updown_start_error_reply(err: &Error) -> CreateReply {
+    if let Some(api_error) = err.downcast_ref::<ApiError>()
+        && api_error.code() == "MAINTENANCE"
+    {
+        CreateReply::default()
+            .ephemeral(true)
+            .embed(embed_maintenance())
+    } else {
+        CreateReply::default()
+            .ephemeral(true)
+            .embed(embed_base("Unable to start mai-updown").description(err.to_string()))
+    }
 }
 
 async fn send_registration_validation_error(

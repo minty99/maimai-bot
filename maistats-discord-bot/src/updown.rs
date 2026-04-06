@@ -76,8 +76,7 @@ pub(crate) async fn start_session(
     let pools =
         build_candidate_pools(&ctx.data().song_database_client, &record_collector_client).await?;
 
-    let Some((_pool_size, candidate)) = choose_candidate_at_level(&pools, start_level_tenths)
-    else {
+    let Some(candidate) = choose_candidate_at_level(&pools, start_level_tenths) else {
         return Err(eyre::eyre!(
             "No eligible charts found at internal level **{}** with the current filters.",
             format_level_tenths(start_level_tenths)
@@ -324,11 +323,10 @@ fn append_song_candidates(
 fn choose_candidate_at_level(
     pools: &HashMap<i16, Vec<UpdownCandidate>>,
     level_tenths: i16,
-) -> Option<(usize, UpdownCandidate)> {
+) -> Option<UpdownCandidate> {
     let candidates = pools.get(&level_tenths)?;
     let mut rng = rand::thread_rng();
-    let selected = candidates.choose(&mut rng)?.clone();
-    Some((candidates.len(), selected))
+    candidates.choose(&mut rng).cloned()
 }
 
 fn pick_next_candidate(
@@ -338,7 +336,7 @@ fn pick_next_candidate(
 ) -> Result<(i16, UpdownCandidate, Option<String>), String> {
     if delta == 0 {
         return match choose_candidate_at_level(pools, current_level_tenths) {
-            Some((_pool_size, candidate)) => Ok((current_level_tenths, candidate, None)),
+            Some(candidate) => Ok((current_level_tenths, candidate, None)),
             None => Err(format!(
                 "No eligible charts found at **{}** with the current filters. Keeping the current level.",
                 format_level_tenths(current_level_tenths)
@@ -348,7 +346,7 @@ fn pick_next_candidate(
 
     let requested_level = current_level_tenths + delta;
     match choose_candidate_in_direction(pools, current_level_tenths, delta) {
-        Some((found_level_tenths, _pool_size, candidate)) => {
+        Some((found_level_tenths, candidate)) => {
             let note = (found_level_tenths != requested_level).then(|| {
                 format!(
                     "No eligible chart at **{}**. Jumped to **{}** instead.",
@@ -369,11 +367,11 @@ fn choose_candidate_in_direction(
     pools: &HashMap<i16, Vec<UpdownCandidate>>,
     current_level_tenths: i16,
     delta: i16,
-) -> Option<(i16, usize, UpdownCandidate)> {
+) -> Option<(i16, UpdownCandidate)> {
     let mut next_level = current_level_tenths + delta;
     while (MIN_LEVEL_TENTHS..=MAX_LEVEL_TENTHS).contains(&next_level) {
-        if let Some((pool_size, candidate)) = choose_candidate_at_level(pools, next_level) {
-            return Some((next_level, pool_size, candidate));
+        if let Some(candidate) = choose_candidate_at_level(pools, next_level) {
+            return Some((next_level, candidate));
         }
         next_level += delta;
     }
@@ -521,33 +519,38 @@ fn finish_session_progress(
     new_level_tenths: i16,
     new_pick_message_id: serenity::MessageId,
 ) {
-    let mut sessions = lock_session_store(session_store);
-    let Some(session) = sessions.get_mut(&claimed.user_id) else {
-        return;
-    };
-    if session.pick_message_id != claimed.pick_message_id
-        || session.in_flight_pick_message_id != Some(claimed.pick_message_id)
-    {
-        return;
-    }
-
-    session.current_level_tenths = new_level_tenths;
-    session.pick_message_id = new_pick_message_id;
-    session.in_flight_pick_message_id = None;
+    update_claimed_session(session_store, claimed, |session| {
+        session.current_level_tenths = new_level_tenths;
+        session.pick_message_id = new_pick_message_id;
+        session.in_flight_pick_message_id = None;
+    });
 }
 
 fn release_session_claim(session_store: &UpdownSessionStore, claimed: &UpdownSession) {
+    update_claimed_session(session_store, claimed, |session| {
+        session.in_flight_pick_message_id = None;
+    });
+}
+
+fn update_claimed_session(
+    session_store: &UpdownSessionStore,
+    claimed: &UpdownSession,
+    update: impl FnOnce(&mut UpdownSession),
+) {
     let mut sessions = lock_session_store(session_store);
     let Some(session) = sessions.get_mut(&claimed.user_id) else {
         return;
     };
-    if session.pick_message_id != claimed.pick_message_id
-        || session.in_flight_pick_message_id != Some(claimed.pick_message_id)
-    {
+    if !session_matches_claim(session, claimed) {
         return;
     }
 
-    session.in_flight_pick_message_id = None;
+    update(session);
+}
+
+fn session_matches_claim(session: &UpdownSession, claimed: &UpdownSession) -> bool {
+    session.pick_message_id == claimed.pick_message_id
+        && session.in_flight_pick_message_id == Some(claimed.pick_message_id)
 }
 
 fn remove_session_by_thread_id(
