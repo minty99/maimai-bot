@@ -197,53 +197,15 @@ async fn handle_reaction_add(
 
     let pools = &session.candidate_pools;
 
-    let (new_level_tenths, candidate, note) = if delta == 0 {
-        match choose_candidate_at_level(pools, session.current_level_tenths) {
-            Some((_pool_size, candidate)) => (session.current_level_tenths, candidate, None),
-            None => {
+    let (new_level_tenths, candidate, note) =
+        match pick_next_candidate(pools, session.current_level_tenths, delta) {
+            Ok(result) => result,
+            Err(notice_msg) => {
                 release_session_claim(&data.updown_sessions, &session);
-                announce_session_notice(
-                    ctx,
-                    session.thread_channel_id,
-                    &format!(
-                        "No eligible charts found at **{}** with the current filters. Keeping the current level.",
-                        format_level_tenths(session.current_level_tenths)
-                    ),
-                )
-                .await?;
+                announce_session_notice(ctx, session.thread_channel_id, &notice_msg).await?;
                 return Ok(());
             }
-        }
-    } else {
-        let requested_level = session.current_level_tenths + delta;
-        match choose_candidate_in_direction(pools, session.current_level_tenths, delta) {
-            Some((found_level_tenths, _pool_size, candidate)) => {
-                let note = if found_level_tenths == requested_level {
-                    None
-                } else {
-                    Some(format!(
-                        "No eligible chart at **{}**. Jumped to **{}** instead.",
-                        format_level_tenths(requested_level),
-                        format_level_tenths(found_level_tenths)
-                    ))
-                };
-                (found_level_tenths, candidate, note)
-            }
-            None => {
-                release_session_claim(&data.updown_sessions, &session);
-                announce_session_notice(
-                    ctx,
-                    session.thread_channel_id,
-                    &format!(
-                        "No eligible chart found before leaving the 1.0-15.0 range. Keeping **{}**.",
-                        format_level_tenths(session.current_level_tenths)
-                    ),
-                )
-                .await?;
-                return Ok(());
-            }
-        }
-    };
+        };
 
     let pick_message =
         match send_pick_message(ctx, data, session.thread_channel_id, &candidate, note).await {
@@ -369,6 +331,40 @@ fn choose_candidate_at_level(
     Some((candidates.len(), selected))
 }
 
+fn pick_next_candidate(
+    pools: &HashMap<i16, Vec<UpdownCandidate>>,
+    current_level_tenths: i16,
+    delta: i16,
+) -> Result<(i16, UpdownCandidate, Option<String>), String> {
+    if delta == 0 {
+        return match choose_candidate_at_level(pools, current_level_tenths) {
+            Some((_pool_size, candidate)) => Ok((current_level_tenths, candidate, None)),
+            None => Err(format!(
+                "No eligible charts found at **{}** with the current filters. Keeping the current level.",
+                format_level_tenths(current_level_tenths)
+            )),
+        };
+    }
+
+    let requested_level = current_level_tenths + delta;
+    match choose_candidate_in_direction(pools, current_level_tenths, delta) {
+        Some((found_level_tenths, _pool_size, candidate)) => {
+            let note = (found_level_tenths != requested_level).then(|| {
+                format!(
+                    "No eligible chart at **{}**. Jumped to **{}** instead.",
+                    format_level_tenths(requested_level),
+                    format_level_tenths(found_level_tenths)
+                )
+            });
+            Ok((found_level_tenths, candidate, note))
+        }
+        None => Err(format!(
+            "No eligible chart found before leaving the 1.0-15.0 range. Keeping **{}**.",
+            format_level_tenths(current_level_tenths)
+        )),
+    }
+}
+
 fn choose_candidate_in_direction(
     pools: &HashMap<i16, Vec<UpdownCandidate>>,
     current_level_tenths: i16,
@@ -406,37 +402,20 @@ fn build_pick_embed(data: &BotData, candidate: &UpdownCandidate) -> serenity::Cr
         candidate.diff_category,
         &level,
     );
-    let achievement = candidate
-        .score
-        .as_ref()
-        .and_then(|score| score.achievement_x10000)
+    let score = candidate.score.as_ref();
+    let achievement = score
+        .and_then(|s| s.achievement_x10000)
         .map(format_rate_x10000)
         .unwrap_or_else(|| "Unplayed".to_string());
-    let rank = format_rank(
-        &data.status_emojis,
-        candidate.score.as_ref().and_then(|score| score.rank),
-        "-",
-    );
-    let fc = format_fc(
-        &data.status_emojis,
-        candidate.score.as_ref().and_then(|score| score.fc),
-        "-",
-    );
-    let sync = format_sync(
-        &data.status_emojis,
-        candidate.score.as_ref().and_then(|score| score.sync),
-        "-",
-    );
+    let rank = format_rank(&data.status_emojis, score.and_then(|s| s.rank), "-");
+    let fc = format_fc(&data.status_emojis, score.and_then(|s| s.fc), "-");
+    let sync = format_sync(&data.status_emojis, score.and_then(|s| s.sync), "-");
     let meta = [
-        candidate
-            .score
-            .as_ref()
-            .and_then(|score| score.last_played_at.as_deref())
+        score
+            .and_then(|s| s.last_played_at.as_deref())
             .map(|value| format!("Last: {value}")),
-        candidate
-            .score
-            .as_ref()
-            .and_then(|score| score.play_count)
+        score
+            .and_then(|s| s.play_count)
             .map(|value| format!("Plays: {value}")),
     ]
     .into_iter()
