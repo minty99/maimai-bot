@@ -36,6 +36,7 @@ pub(crate) struct UpdownSession {
 struct UpdownCandidate {
     title: String,
     image_name: Option<String>,
+    version: Option<String>,
     chart_type: ChartType,
     diff_category: DifficultyCategory,
     level: String,
@@ -311,6 +312,7 @@ fn append_song_candidates(
             .push(UpdownCandidate {
                 title: song.title.clone(),
                 image_name: song.image_name.clone(),
+                version: sheet.version.clone(),
                 chart_type: sheet.chart_type,
                 diff_category: sheet.diff_category,
                 level: sheet.level.clone(),
@@ -400,6 +402,11 @@ fn build_pick_embed(data: &BotData, candidate: &UpdownCandidate) -> serenity::Cr
         candidate.diff_category,
         &level,
     );
+    let version_line = candidate
+        .version
+        .as_deref()
+        .map(|version| format!("Version: {version}"))
+        .unwrap_or_else(|| "Version: -".to_string());
     let score = candidate.score.as_ref();
     let achievement = score
         .and_then(|s| s.achievement_x10000)
@@ -423,6 +430,7 @@ fn build_pick_embed(data: &BotData, candidate: &UpdownCandidate) -> serenity::Cr
 
     let mut embed = embed_base(&candidate.title).description(format!(
         "**{chart_line}**\n\
+         {version_line}\n\
          {achievement} • {rank} • {fc} • {sync}\n\
          {meta}"
     ));
