@@ -1,9 +1,9 @@
 # /// script
 # requires-python = ">=3.11"
 # dependencies = [
-#   "plotly>=5.18",
-#   "kaleido>=0.2",
-#   "numpy>=1.24",
+#   "plotly~=6.6",
+#   "kaleido~=1.2",
+#   "numpy~=2.4",
 # ]
 # ///
 """
@@ -33,9 +33,12 @@ import plotly.graph_objects as go
 import plotly.io as pio
 
 # kaleido uses Chromium under the hood; when running as root (e.g. in Docker)
-# Chromium requires --no-sandbox and --disable-gpu to start correctly.
+# Chromium refuses to start without --no-sandbox.  kaleido >= 1.0 reads
+# KALEIDO_CHROMIUM_ARGS before launching its Chromium subprocess (which
+# happens lazily at the first to_image call), so setting the env var here
+# is sufficient.
 if os.name != "nt" and os.getuid() == 0:
-    pio.kaleido.scope.chromium_args = ("--disable-gpu", "--no-sandbox")
+    os.environ["KALEIDO_CHROMIUM_ARGS"] = "--disable-gpu --no-sandbox"
 
 # Rank boundary thresholds and their display labels
 RANK_THRESHOLDS: list[tuple[float, str]] = [
