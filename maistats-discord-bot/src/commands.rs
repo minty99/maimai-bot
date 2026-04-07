@@ -851,8 +851,9 @@ pub(crate) async fn mai_plot(
     let min_achievement = points.iter().map(|&(x, _)| x).fold(f64::INFINITY, f64::min);
     let x_min = min_achievement.min(100.5);
 
-    let png = plot::generate_scatter_plot(&points, x_min)
+    let png = tokio::task::spawn_blocking(move || plot::generate_scatter_plot(&points, x_min))
         .await
+        .wrap_err("scatter plot task panicked")?
         .wrap_err("generate scatter plot")?;
 
     use poise::serenity_prelude::builder::CreateAttachment;

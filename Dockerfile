@@ -56,44 +56,14 @@ FROM ubuntu:noble as maistats-discord-bot
 RUN apt-get update && apt-get install -y \
     ca-certificates \
     libssl3 \
-    curl \
-    python3 \
-    python3-venv \
-    # kaleido / Chromium system dependencies
-    libnss3 \
-    libatk1.0-0 \
-    libatk-bridge2.0-0 \
-    libcups2 \
-    libdrm2 \
-    libxkbcommon0 \
-    libxcomposite1 \
-    libxdamage1 \
-    libxfixes3 \
-    libxrandr2 \
-    libgbm1 \
-    libasound2t64 \
-    libpangocairo-1.0-0 \
+    # plotters uses font-kit which requires fontconfig + fonts at runtime
+    libfontconfig1 \
     fonts-dejavu-core \
     && rm -rf /var/lib/apt/lists/*
-
-# Install uv
-RUN curl -LsSf https://astral.sh/uv/install.sh | sh
-
-ENV PATH="/root/.local/bin:$PATH"
-# Prefer the system Python installed above rather than letting uv download its own
-ENV UV_PYTHON_PREFERENCE=only-system
 
 WORKDIR /app
 
 # Copy discord binary
 COPY --from=builder /app/target/release/maistats-discord-bot /usr/local/bin/maistats-discord-bot
-
-# Copy the plot script
-COPY scripts/ ./scripts/
-
-# Pre-warm: triggers uv to parse the PEP 723 metadata and install dependencies
-# into its cache layer before the first real request hits.
-# The script exits with an error (empty stdin), but that is expected — || true suppresses it.
-RUN uv run --script scripts/mai_plot.py > /dev/null 2>&1 || true
 
 CMD ["maistats-discord-bot"]

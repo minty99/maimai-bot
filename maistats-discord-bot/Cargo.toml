@@ -8,16 +8,15 @@ name = "maistats-discord-bot"
 path = "src/main.rs"
 
 [dependencies]
-ab_glyph = "0.2.32"
 base64 = "0.22.1"
 dotenvy = { workspace = true }
 eyre = { workspace = true }
 image = "0.25.9"
-imageproc = "0.25.0"
 models = { path = "../crates/models" }
 ordered-float = { workspace = true }
+plotters = { version = "0.3.7", default-features = false, features = ["bitmap_backend", "line_series", "ttf"] }
 poise = { workspace = true }
-rand = { workspace = true }
+rand.workspace = true
 reqwest = { workspace = true }
 serde = { workspace = true }
 serde_json.workspace = true
