@@ -27,6 +27,7 @@ use crate::embeds::{
     embed_maintenance, format_level_with_internal,
 };
 use crate::emoji::{format_fc, format_rank, format_sync};
+use crate::plot;
 use crate::updown;
 
 type Context<'a> = poise::Context<'a, BotData, Box<dyn std::error::Error + Send + Sync>>;
@@ -671,6 +672,204 @@ pub(crate) async fn mai_updown(
 
     send_pending_record_collector_update_warning(ctx, pending_warning).await?;
 
+    Ok(())
+}
+
+/// Scatter plot of best achievements for charts in an internal level range (played in last 3 months)
+#[poise::command(slash_command, rename = "mai-plot")]
+pub(crate) async fn mai_plot(
+    ctx: Context<'_>,
+    #[description = "Internal level range start (e.g. 13.0)"] from: f64,
+    #[description = "Internal level range end — same as start for a single level (e.g. 13.9)"]
+    to: f64,
+) -> Result<(), Error> {
+    ctx.defer().await?;
+
+    let Some(collector_context) = registered_record_collector_client(ctx).await? else {
+        return Ok(());
+    };
+    let record_collector_client = collector_context.client;
+    let pending_warning = collector_context.pending_warning;
+
+    /// Validate that a raw f64 Discord input is a multiple of 0.1 in [1.0, 15.0].
+    /// Returns the integer tenths value (e.g. 13.0 → 130) or an error description.
+    fn parse_level_tenths(v: f64) -> Result<i32, &'static str> {
+        let tenths = (v * 10.0).round() as i32;
+        if (v * 10.0 - tenths as f64).abs() > 0.01 {
+            return Err("Level must have at most one decimal place (e.g. 13.0, 14.7).");
+        }
+        if !(10..=150).contains(&tenths) {
+            return Err("Level must be between 1.0 and 15.0.");
+        }
+        Ok(tenths)
+    }
+
+    let from_tenths = match parse_level_tenths(from) {
+        Ok(t) => t,
+        Err(msg) => {
+            ctx.send(
+                CreateReply::default()
+                    .ephemeral(true)
+                    .embed(embed_base("Invalid `from` level").description(msg)),
+            )
+            .await?;
+            send_pending_record_collector_update_warning(ctx, pending_warning).await?;
+            return Ok(());
+        }
+    };
+    let to_tenths = match parse_level_tenths(to) {
+        Ok(t) => t,
+        Err(msg) => {
+            ctx.send(
+                CreateReply::default()
+                    .ephemeral(true)
+                    .embed(embed_base("Invalid `to` level").description(msg)),
+            )
+            .await?;
+            send_pending_record_collector_update_warning(ctx, pending_warning).await?;
+            return Ok(());
+        }
+    };
+    if from_tenths > to_tenths {
+        ctx.send(
+            CreateReply::default().ephemeral(true).embed(
+                embed_base("Invalid range").description("`from` level must be ≤ `to` level."),
+            ),
+        )
+        .await?;
+        send_pending_record_collector_update_warning(ctx, pending_warning).await?;
+        return Ok(());
+    }
+
+    let level_range_str = if from_tenths == to_tenths {
+        format!("{:.1}", from_tenths as f32 / 10.0)
+    } else {
+        format!(
+            "{:.1}–{:.1}",
+            from_tenths as f32 / 10.0,
+            to_tenths as f32 / 10.0
+        )
+    };
+
+    // JST threshold string for last_played_at comparison ("YYYY/MM/DD HH:MM")
+    let jst = UtcOffset::from_hms(9, 0, 0).unwrap_or(UtcOffset::UTC);
+    let since_jst = (OffsetDateTime::now_utc() - TimeDuration::days(90)).to_offset(jst);
+    let since_jst_str = format!(
+        "{:04}/{:02}/{:02} {:02}:{:02}",
+        since_jst.year(),
+        u8::from(since_jst.month()),
+        since_jst.day(),
+        since_jst.hour(),
+        since_jst.minute(),
+    );
+
+    let scores = record_collector_client
+        .get_all_rated_scores()
+        .await
+        .wrap_err("fetch rated scores")?;
+
+    let catalog = ctx
+        .data()
+        .song_database_client
+        .list_song_catalog()
+        .await
+        .wrap_err("fetch song catalog")?;
+
+    // Build lookup: (title, genre, artist, chart_type, diff_category) → internal_level_tenths
+    use models::{ChartType, DifficultyCategory};
+    use std::collections::HashMap;
+
+    let mut level_map: HashMap<(String, String, String, ChartType, DifficultyCategory), i32> =
+        HashMap::new();
+    for song in &catalog {
+        for sheet in &song.sheets {
+            if let Some(il) = sheet.internal_level {
+                let il_tenths = (il * 10.0).round() as i32;
+                level_map.insert(
+                    (
+                        song.title.clone(),
+                        song.genre.clone(),
+                        song.artist.clone(),
+                        sheet.chart_type,
+                        sheet.diff_category,
+                    ),
+                    il_tenths,
+                );
+            }
+        }
+    }
+
+    const MIN_ACHIEVEMENT: i64 = 900_000; // 90.0000%
+
+    // Each point: (achievement_percent, level_tenths)
+    let mut points: Vec<(f64, i32)> = Vec::new();
+
+    for score in &scores {
+        let Some(achievement) = score.achievement_x10000 else {
+            continue;
+        };
+        if achievement < MIN_ACHIEVEMENT {
+            continue;
+        }
+
+        let Some(ref last_played) = score.last_played_at else {
+            continue;
+        };
+        if last_played.as_str() < since_jst_str.as_str() {
+            continue;
+        }
+
+        let key = (
+            score.title.clone(),
+            score.genre.clone(),
+            score.artist.clone(),
+            score.chart_type,
+            score.diff_category,
+        );
+        let Some(&il_tenths) = level_map.get(&key) else {
+            continue;
+        };
+        if il_tenths < from_tenths || il_tenths > to_tenths {
+            continue;
+        }
+
+        points.push((achievement as f64 / 10000.0, il_tenths));
+    }
+
+    if points.is_empty() {
+        ctx.send(CreateReply::default().embed(
+            embed_base(format!("No records for level {}", level_range_str).as_str()).description(
+                "No songs in this level range with ≥90% were played in the last 3 months.",
+            ),
+        ))
+        .await?;
+        send_pending_record_collector_update_warning(ctx, pending_warning).await?;
+        return Ok(());
+    }
+
+    let total = points.len();
+    let min_achievement = points.iter().map(|&(x, _)| x).fold(f64::INFINITY, f64::min);
+    let x_min = min_achievement.min(100.5);
+
+    let png = plot::generate_scatter_plot(&points, x_min)
+        .await
+        .wrap_err("generate scatter plot")?;
+
+    use poise::serenity_prelude::builder::CreateAttachment;
+
+    ctx.send(
+        CreateReply::default()
+            .content(format!(
+                "Level **{}** — **{}** song{} with ≥90% played in the last 3 months",
+                level_range_str,
+                total,
+                if total == 1 { "" } else { "s" },
+            ))
+            .attachment(CreateAttachment::bytes(png, "plot.png")),
+    )
+    .await?;
+
+    send_pending_record_collector_update_warning(ctx, pending_warning).await?;
     Ok(())
 }
 

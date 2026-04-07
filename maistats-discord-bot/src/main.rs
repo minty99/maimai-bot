@@ -13,6 +13,7 @@ mod db;
 mod dm;
 mod embeds;
 mod emoji;
+mod plot;
 mod updown;
 
 use client::SongDatabaseClient;
@@ -80,6 +81,7 @@ async fn main() -> eyre::Result<()> {
                 commands::mai_recent(),
                 commands::mai_today(),
                 commands::mai_updown(),
+                commands::mai_plot(),
             ],
             event_handler: |ctx, event, _framework, data| {
                 Box::pin(updown::handle_event(ctx, event, data))
