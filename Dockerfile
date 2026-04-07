@@ -82,6 +82,7 @@ RUN curl -LsSf https://astral.sh/uv/install.sh | sh
 ENV PATH="/root/.local/bin:$PATH"
 # Prefer the system Python installed above rather than letting uv download its own
 ENV UV_PYTHON_PREFERENCE=only-system
+ENV BROWSER_PATH=/usr/local/bin/google-chrome
 
 WORKDIR /app
 
@@ -95,5 +96,11 @@ COPY scripts/ ./scripts/
 # into its cache layer before the first real request hits.
 # The script exits with an error (empty stdin), but that is expected — || true suppresses it.
 RUN uv run --script scripts/mai_plot.py > /dev/null 2>&1 || true
+
+# Kaleido v1 no longer bundles Chrome, so install a compatible browser into
+# the image and expose it at a stable path that Kaleido will always discover.
+RUN mkdir -p /opt/plotly/chrome && \
+    uv run --with plotly~=6.6 --with kaleido~=1.2 python -c \
+    'from pathlib import Path; import plotly.io as pio; chrome_path = Path(pio.get_chrome(path="/opt/plotly/chrome")); symlink_path = Path("/usr/local/bin/google-chrome"); symlink_path.unlink(missing_ok=True); symlink_path.symlink_to(chrome_path)'
 
 CMD ["maistats-discord-bot"]
