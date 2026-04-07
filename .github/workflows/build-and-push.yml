@@ -14,6 +14,7 @@ on:
       - crates/**
       - maistats-record-collector/**
       - maistats-discord-bot/**
+      - scripts/**
   workflow_dispatch:  # 수동 트리거 허용
 
 env:
