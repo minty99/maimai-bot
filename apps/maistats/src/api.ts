@@ -145,6 +145,19 @@ async function postJson<TRequest extends object, TResponse>(
   return data;
 }
 
+async function postWithoutBody(url: string, signal?: AbortSignal): Promise<void> {
+  const response = await fetch(url, {
+    method: 'POST',
+    signal,
+  });
+  if (!response.ok) {
+    const errJson = await safeParseJson<ApiErrorResponse>(response);
+    const code = errJson?.code ? `[${errJson.code}] ` : '';
+    const message = errJson?.message ?? response.statusText;
+    throw new Error(`${code}${message} (HTTP ${response.status})`);
+  }
+}
+
 function indexSongMetadata(songs: SongInfoResponse[]): Map<string, SongInfoResponse> {
   const metadata = new Map<string, SongInfoResponse>();
 
@@ -505,4 +518,16 @@ export async function refreshSongScores(
     payload,
     signal,
   );
+}
+
+export async function triggerCollectorPoll(
+  baseUrl: string,
+  signal?: AbortSignal,
+): Promise<void> {
+  const base = normalizeBaseUrl(baseUrl);
+  if (!base) {
+    throw new LocalizedApiError('api.recordCollectorRequired');
+  }
+
+  await postWithoutBody(`${base}/api/poll`, signal);
 }

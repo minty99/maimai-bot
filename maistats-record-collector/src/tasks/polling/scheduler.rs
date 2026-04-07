@@ -6,19 +6,21 @@ use tracing::{error, info};
 use crate::state::AppState;
 use crate::tasks::polling::cycle::run_cycle;
 
+const BACKGROUND_POLL_INTERVAL_SECS: u64 = 30 * 60;
+
 pub(crate) fn start_background_polling(app_state: AppState) {
     tokio::spawn(async move {
-        let mut timer = interval(Duration::from_secs(600));
+        let mut timer = interval(Duration::from_secs(BACKGROUND_POLL_INTERVAL_SECS));
         timer.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
 
-        info!("Background polling started: periodic playerData poll (every 10 minutes)");
+        info!("Background polling started: periodic playerData poll (every 30 minutes)");
 
         loop {
             tokio::select! {
                 _ = timer.tick() => {}
                 _ = app_state.timer_reset_notify.notified() => {
                     // /api/poll just ran a cycle; reset the timer so the next
-                    // scheduled tick fires 10 minutes from now.
+                    // scheduled tick fires 30 minutes from now.
                     timer.reset();
                     continue;
                 }

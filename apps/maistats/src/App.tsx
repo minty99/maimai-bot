@@ -5,9 +5,11 @@ import {
   fetchRecordCollectorVersionStatus,
   fetchExplorerPayload,
   fetchRecentPlaylogs,
+  formatApiErrorMessage,
   type PlayerProfile,
   type RecordCollectorVersionStatus,
   refreshSongScores,
+  triggerCollectorPoll,
 } from './api';
 import { HomePage } from './components/HomePage';
 import {
@@ -261,6 +263,17 @@ function ChevronDownIcon() {
   );
 }
 
+function RefreshIcon({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true" className={className}>
+      <path d="M20 11a8 8 0 0 0-14.9-3" />
+      <path d="M4 4v4h4" />
+      <path d="M4 13a8 8 0 0 0 14.9 3" />
+      <path d="M20 20v-4h-4" />
+    </svg>
+  );
+}
+
 function App() {
   const {
     formatLanguageName,
@@ -338,6 +351,8 @@ function App() {
   const [playerProfile, setPlayerProfile] = useState<PlayerProfile | null>(null);
   const [recordCollectorVersionStatus, setRecordCollectorVersionStatus] =
     useState<RecordCollectorVersionStatus | null>(null);
+  const [isPlayerRefreshPending, setIsPlayerRefreshPending] = useState(false);
+  const [playerRefreshError, setPlayerRefreshError] = useState<string | null>(null);
 
   const [query, setQuery] = useState('');
   const [chartFilter, setChartFilter] = useState<ChartType[]>(() => {
@@ -671,6 +686,14 @@ function App() {
     }
   }, []);
 
+  const reloadCollectorData = useCallback(async (options?: { force?: boolean; throwOnError?: boolean }) => {
+    const force = options?.force ?? false;
+    await Promise.all([
+      loadData({ force, throwOnError: options?.throwOnError }),
+      loadPlaylogs({ force, throwOnError: options?.throwOnError }),
+    ]);
+  }, [loadData, loadPlaylogs]);
+
   useEffect(() => {
     void loadData();
 
@@ -833,6 +856,21 @@ function App() {
     await refreshSongScores(recordCollectorUrl, target);
     await loadData({ force: true, throwOnError: true });
   }, [loadData, recordCollectorUrl]);
+
+  const handleRefreshPlayerData = useCallback(async () => {
+    setIsPlayerRefreshPending(true);
+    setPlayerRefreshError(null);
+
+    try {
+      await triggerCollectorPoll(recordCollectorUrl);
+      await reloadCollectorData({ force: true, throwOnError: true });
+      await loadRecordCollectorVersionStatus(recordCollectorUrl);
+    } catch (error) {
+      setPlayerRefreshError(formatApiErrorMessage(error, t));
+    } finally {
+      setIsPlayerRefreshPending(false);
+    }
+  }, [loadRecordCollectorVersionStatus, recordCollectorUrl, reloadCollectorData, t]);
 
   const handleOpenHistory = useCallback((row: ScoreRow) => {
     setSelectedHistoryKey(row.key);
@@ -1228,6 +1266,7 @@ function App() {
 
   const handleApplyRecordCollectorUrl = useCallback((url: string) => {
     const normalizedUrl = url.trim();
+    setPlayerRefreshError(null);
     setRecordCollectorUrl(normalizedUrl);
     setRecordCollectorUrlDraft(normalizedUrl);
     if (normalizedUrl === recordCollectorUrl.trim()) {
@@ -1297,16 +1336,49 @@ function App() {
   const ActiveNavIcon = activeNavItem.Icon;
   const mobileNavItems = navItems;
   const totalPlayCount = playerProfile?.total_play_count;
+  const playerRefreshLabel = isPlayerRefreshPending
+    ? t('player.refreshing')
+    : t('player.refresh');
   const playerInlineSummary = playerProfile ? (
-    <p className="app-player-summary" title={`${playerProfile.user_name} @ ${typeof totalPlayCount === 'number' ? formatNumber(totalPlayCount) : '-'}`}>
-      <span className="app-player-summary-name">{playerProfile.user_name}</span>
-      <span className="app-player-summary-separator">@</span>
-      <span className="app-player-summary-count">
-        {typeof totalPlayCount === 'number'
-          ? formatNumber(totalPlayCount)
-          : '-'}
-      </span>
-    </p>
+    <div className="app-player-summary-shell">
+      <div
+        className="app-player-summary"
+        title={`${playerProfile.user_name} @ ${typeof totalPlayCount === 'number' ? formatNumber(totalPlayCount) : '-'}`}
+        aria-busy={isPlayerRefreshPending}
+      >
+        <span className="app-player-summary-meta">
+          <span className="app-player-summary-name">{playerProfile.user_name}</span>
+          <span className="app-player-summary-separator">@</span>
+          <span className="app-player-summary-count">
+            {typeof totalPlayCount === 'number'
+              ? formatNumber(totalPlayCount)
+              : '-'}
+          </span>
+        </span>
+        <button
+          type="button"
+          className="app-player-refresh-button"
+          onClick={() => void handleRefreshPlayerData()}
+          disabled={isPlayerRefreshPending}
+          aria-label={playerRefreshLabel}
+          title={playerRefreshLabel}
+        >
+          <RefreshIcon
+            className={isPlayerRefreshPending ? 'app-player-refresh-icon is-spinning' : 'app-player-refresh-icon'}
+          />
+        </button>
+      </div>
+      {isPlayerRefreshPending ? (
+        <p className="app-player-summary-status muted" role="status">
+          {t('player.refreshing')}
+        </p>
+      ) : null}
+      {!isPlayerRefreshPending && playerRefreshError ? (
+        <p className="app-player-summary-status error-inline" role="alert">
+          {playerRefreshError}
+        </p>
+      ) : null}
+    </div>
   ) : null;
   const desktopSidebarTopContent = (
     <section className="panel app-sidebar-inline">
