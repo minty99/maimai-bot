@@ -34,8 +34,15 @@ import plotly.io as pio
 
 # kaleido uses Chromium under the hood; when running as root (e.g. in Docker)
 # Chromium requires --no-sandbox and --disable-gpu to start correctly.
+# kaleido launches Chromium lazily (at first to_image call), so setting the
+# env var or scope here is sufficient.
 if os.name != "nt" and os.getuid() == 0:
-    pio.kaleido.scope.chromium_args = ("--disable-gpu", "--no-sandbox")
+    try:
+        # kaleido 0.2.x: scope-based configuration
+        pio.kaleido.scope.chromium_args = ("--disable-gpu", "--no-sandbox")
+    except AttributeError:
+        # kaleido >= 1.0: scope API removed; configure via env var
+        os.environ["KALEIDO_CHROMIUM_ARGS"] = "--disable-gpu --no-sandbox"
 
 # Rank boundary thresholds and their display labels
 RANK_THRESHOLDS: list[tuple[float, str]] = [
