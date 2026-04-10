@@ -51,14 +51,16 @@ CMD ["maistats-record-collector"]
 # ============================================
 # Target: maistats-discord-bot
 # ============================================
-FROM ubuntu:noble as maistats-discord-bot
+FROM debian:bookworm-slim as maistats-discord-bot
+
+ARG DEBIAN_FRONTEND=noninteractive
 
 RUN apt-get update && apt-get install -y \
     ca-certificates \
-    libssl3 \
     curl \
+    libssl3 \
     python3 \
-    python3-venv \
+    chromium \
     # kaleido / Chromium system dependencies
     libnss3 \
     libatk1.0-0 \
@@ -72,20 +74,17 @@ RUN apt-get update && apt-get install -y \
     libxrandr2 \
     libgbm1 \
     libxkbcommon0 \
-    # Ubuntu Noble provides the requested libasound2 runtime via the t64 package.
-    libasound2t64 \
+    libasound2 \
     libpango-1.0-0 \
     libpangocairo-1.0-0 \
     fonts-dejavu-core \
     && rm -rf /var/lib/apt/lists/*
 
-# Install uv
 RUN curl -LsSf https://astral.sh/uv/install.sh | sh
 
 ENV PATH="/root/.local/bin:$PATH"
-# Prefer the system Python installed above rather than letting uv download its own
 ENV UV_PYTHON_PREFERENCE=only-system
-ENV BROWSER_PATH=/usr/local/bin/google-chrome
+ENV BROWSER_PATH=/usr/bin/chromium
 
 WORKDIR /app
 
@@ -95,15 +94,8 @@ COPY --from=builder /app/target/release/maistats-discord-bot /usr/local/bin/mais
 # Copy the plot script
 COPY scripts/ ./scripts/
 
-# Pre-warm: triggers uv to parse the PEP 723 metadata and install dependencies
-# into its cache layer before the first real request hits.
-# The script exits with an error (empty stdin), but that is expected — || true suppresses it.
-RUN uv run --script scripts/mai_plot.py > /dev/null 2>&1 || true
-
-# Kaleido v1 no longer bundles Chrome, so install a compatible browser into
-# the image and expose it at a stable path that Kaleido will always discover.
-RUN mkdir -p /opt/plotly/chrome && \
-    uv run --with plotly~=6.6 --with kaleido~=1.2 python -c \
-    'from pathlib import Path; import plotly.io as pio; chrome_path = Path(pio.get_chrome(path="/opt/plotly/chrome")); symlink_path = Path("/usr/local/bin/google-chrome"); symlink_path.unlink(missing_ok=True); symlink_path.symlink_to(chrome_path)'
+# Validate the script end-to-end during image build with a minimal payload.
+RUN printf '%s' '{"points":[{"achievement":100.0,"level_tenths":130}],"x_min":97.0}' | \
+    uv run --script scripts/mai_plot.py > /dev/null
 
 CMD ["maistats-discord-bot"]
