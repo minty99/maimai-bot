@@ -1,0 +1,14 @@
+name: maistats-discord-bot
+
+services:
+  maistats-discord-bot:
+    image: ghcr.io/minty99/maistats-discord-bot:latest
+    container_name: maistats-discord-bot
+    environment:
+      DISCORD_BOT_TOKEN: ${DISCORD_BOT_TOKEN}
+      DISCORD_DEV_USER_ID: ${DISCORD_DEV_USER_ID}
+      DISCORD_BOT_DATABASE_URL: sqlite:/app/data/bot.sqlite3
+      RUST_LOG: ${RUST_LOG:-info}
+    volumes:
+      - ./data:/app/data
+    restart: unless-stopped
