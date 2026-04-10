@@ -4,7 +4,9 @@
 # ============================================
 # Builder Stage - Compiles entire workspace
 # ============================================
-FROM rust:1.93-slim as builder
+# rust:1.93-slim currently tracks Debian trixie; keep runtime stages on the same
+# distro family/release so the Rust binaries and container libc stay aligned.
+FROM rust:1.93-slim AS builder
 
 WORKDIR /app
 
@@ -28,7 +30,9 @@ RUN cargo build --release
 # ============================================
 # Target: maistats-record-collector
 # ============================================
-FROM ubuntu:noble as maistats-record-collector
+FROM debian:trixie-slim AS maistats-record-collector
+
+ARG DEBIAN_FRONTEND=noninteractive
 
 RUN apt-get update && apt-get install -y \
     ca-certificates \
@@ -51,7 +55,7 @@ CMD ["maistats-record-collector"]
 # ============================================
 # Target: maistats-discord-bot
 # ============================================
-FROM debian:bookworm-slim as maistats-discord-bot
+FROM debian:trixie-slim AS maistats-discord-bot
 
 ARG DEBIAN_FRONTEND=noninteractive
 
