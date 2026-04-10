@@ -1,0 +1,43 @@
+name: maistats-record-collector
+
+services:
+  maistats-record-collector:
+    image: ghcr.io/minty99/maistats-record-collector:latest
+    container_name: maistats-record-collector
+    environment:
+      SEGA_ID: ${SEGA_ID}
+      SEGA_PASSWORD: ${SEGA_PASSWORD}
+      RECORD_COLLECTOR_PORT: ${RECORD_COLLECTOR_PORT:-3000}
+      DATA_DIR: /app/data
+      DATABASE_URL: sqlite:/app/data/records.sqlite3
+      RUST_LOG: ${RUST_LOG:-info}
+    volumes:
+      - ./data:/app/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:${RECORD_COLLECTOR_PORT:-3000}/health"]
+      interval: 10m
+      timeout: 10s
+      retries: 2
+      start_period: 10s
+
+### Enable below if you want to backup the database to S3.
+### Make sure to set the appropriate AWS credentials and bucket information in the environment variables.
+
+#   maimai-db-backup:
+#     build: ./backup
+#     container_name: maimai-db-backup
+#     volumes:
+#       - ./data:/data:ro
+#       - backup_state:/state
+#     environment:
+#       AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID}
+#       AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY}
+#       AWS_DEFAULT_REGION: ${AWS_DEFAULT_REGION}
+#       BACKUP_S3_BUCKET: ${BACKUP_S3_BUCKET}
+#       BACKUP_S3_PREFIX: ${BACKUP_S3_PREFIX:-backups/}
+#       BACKUP_S3_STORAGE_CLASS: ${BACKUP_S3_STORAGE_CLASS:-STANDARD_IA}
+#     restart: unless-stopped
+
+# volumes:
+#   backup_state:
