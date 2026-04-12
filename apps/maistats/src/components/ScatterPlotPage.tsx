@@ -309,7 +309,12 @@ export function ScatterPlotPage({
 
     const figWidth = Math.min(1200, Math.max(450, 110 * nLevels + 220));
 
+    // Match the rest of the app — Pretendard with the same fallback chain
+    // used in styles.css.
+    const FONT_FAMILY = "'Pretendard Variable', Pretendard, -apple-system, BlinkMacSystemFont, 'Apple SD Gothic Neo', 'Malgun Gothic', sans-serif";
+
     const layout: Record<string, unknown> = {
+      font: { family: FONT_FAMILY, color: plotTheme.text },
       xaxis: {
         range: [-0.5, nLevels - 0.5],
         tickvals: levels.map((_, i) => i),
@@ -317,18 +322,18 @@ export function ScatterPlotPage({
         showgrid: false,
         zeroline: false,
         fixedrange: true,
-        title: { text: 'Internal Level', font: { size: 12, color: plotTheme.textMuted } },
-        tickfont: { size: 11, color: plotTheme.text },
+        title: { text: 'Internal Level', font: { size: 12, color: plotTheme.textMuted, family: FONT_FAMILY } },
+        tickfont: { size: 11, color: plotTheme.text, family: FONT_FAMILY },
       },
       yaxis: {
         range: [yMin, 101.0],
-        title: { text: 'Achievement %', font: { size: 12, color: plotTheme.textMuted } },
+        title: { text: 'Achievement %', font: { size: 12, color: plotTheme.textMuted, family: FONT_FAMILY } },
         tickformat: '.2f',
         showgrid: true,
         gridcolor: plotTheme.grid,
         zeroline: false,
         fixedrange: true,
-        tickfont: { size: 11, color: plotTheme.text },
+        tickfont: { size: 11, color: plotTheme.text, family: FONT_FAMILY },
       },
       plot_bgcolor: plotTheme.bg,
       paper_bgcolor: plotTheme.paperBg,
@@ -342,7 +347,7 @@ export function ScatterPlotPage({
       hoverlabel: {
         bgcolor: plotTheme.hoverBg,
         bordercolor: plotTheme.hoverBorder,
-        font: { color: plotTheme.text, size: 12 },
+        font: { color: plotTheme.text, size: 12, family: FONT_FAMILY },
       },
       dragmode: false,
     };
