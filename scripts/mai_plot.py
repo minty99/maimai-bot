@@ -209,13 +209,18 @@ def main() -> None:
     # Scale width with number of levels (each lane ~110px), capped at 1200
     fig_width = min(1200, max(450, 110 * n_levels + 220))
 
+    # Font stack: prefer Inter (installed via fonts-inter), fall back to
+    # DejaVu Sans (always present via fonts-dejavu-core) and generic sans.
+    FONT_FAMILY = "Inter, 'DejaVu Sans', sans-serif"
+
     fig.update_layout(
+        font=dict(family=FONT_FAMILY, color=TEXT_COLOR),
         title=dict(
             text=title,
-            font=dict(size=16, color=TITLE_COLOR, family="Inter, sans-serif"),
-            x=0.02,
-            xanchor="left",
-            y=0.97,
+            font=dict(size=17, color=TITLE_COLOR, family=FONT_FAMILY),
+            x=0.5,
+            xanchor="center",
+            y=0.96,
             yanchor="top",
         ),
         xaxis=dict(
@@ -226,26 +231,26 @@ def main() -> None:
             zeroline=False,
             title=dict(
                 text="Internal Level",
-                font=dict(size=12, color=TEXT_MUTED),
+                font=dict(size=12, color=TEXT_MUTED, family=FONT_FAMILY),
             ),
-            tickfont=dict(size=11, color=TEXT_COLOR),
+            tickfont=dict(size=11, color=TEXT_COLOR, family=FONT_FAMILY),
         ),
         yaxis=dict(
             range=[x_min, 101.0],
             title=dict(
                 text="Achievement %",
-                font=dict(size=12, color=TEXT_MUTED),
+                font=dict(size=12, color=TEXT_MUTED, family=FONT_FAMILY),
             ),
             tickformat=".2f",
             showgrid=True,
             gridcolor=GRID_COLOR,
             zeroline=False,
-            tickfont=dict(size=11, color=TEXT_COLOR),
+            tickfont=dict(size=11, color=TEXT_COLOR, family=FONT_FAMILY),
         ),
         plot_bgcolor=PLOT_BG_COLOR,
         paper_bgcolor=BG_COLOR,
         showlegend=False,
-        margin=dict(l=70, r=110, t=60, b=55),
+        margin=dict(l=70, r=110, t=65, b=55),
         images=rank_images,
     )
 
