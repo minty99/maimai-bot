@@ -41,14 +41,86 @@ const PALETTE = [
   '#c888e0',
 ];
 
-const BG_COLOR = '#16161f';
-const PAPER_BG = '#0f0f17';
-const TEXT_COLOR = '#c8c8d0';
-const TEXT_MUTED = '#8888a0';
-const GRID_COLOR = 'rgba(255,255,255,0.06)';
-const LANE_SEP_COLOR = 'rgba(255,255,255,0.10)';
-const RANK_LINE_COLOR = 'rgba(255,255,255,0.18)';
-const RANK_LABEL_COLOR = '#b0b0c0';
+interface PlotTheme {
+  bg: string;
+  paperBg: string;
+  text: string;
+  textMuted: string;
+  titleColor: string;
+  grid: string;
+  laneSep: string;
+  rankLine: string;
+  rankLabel: string;
+  rankLabelBg: string;
+  hoverBg: string;
+  hoverBorder: string;
+  markerOutline: string;
+}
+
+const DARK_PLOT_THEME: PlotTheme = {
+  bg: '#16161f',
+  paperBg: '#0f0f17',
+  text: '#c8c8d0',
+  textMuted: '#8888a0',
+  titleColor: '#e0e0e8',
+  grid: 'rgba(255,255,255,0.06)',
+  laneSep: 'rgba(255,255,255,0.10)',
+  rankLine: 'rgba(255,255,255,0.18)',
+  rankLabel: '#b0b0c0',
+  rankLabelBg: 'rgba(22,22,31,0.85)',
+  hoverBg: '#1e1e2e',
+  hoverBorder: 'rgba(255,255,255,0.15)',
+  markerOutline: 'rgba(0,0,0,0.35)',
+};
+
+const LIGHT_PLOT_THEME: PlotTheme = {
+  bg: '#fafaf8',
+  paperBg: '#f0f0ec',
+  text: '#2a2a36',
+  textMuted: '#6a6a88',
+  titleColor: '#18181e',
+  grid: 'rgba(0,0,0,0.06)',
+  laneSep: 'rgba(0,0,0,0.10)',
+  rankLine: 'rgba(0,0,0,0.22)',
+  rankLabel: '#4a4a58',
+  rankLabelBg: 'rgba(250,250,248,0.9)',
+  hoverBg: '#ffffff',
+  hoverBorder: 'rgba(0,0,0,0.15)',
+  markerOutline: 'rgba(255,255,255,0.65)',
+};
+
+function resolveEffectiveTheme(): 'light' | 'dark' {
+  const attr = document.documentElement.getAttribute('data-theme');
+  if (attr === 'light') return 'light';
+  if (attr === 'dark') return 'dark';
+  return window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
+}
+
+function useEffectiveTheme(): 'light' | 'dark' {
+  const [theme, setTheme] = useState<'light' | 'dark'>(() => {
+    if (typeof window === 'undefined') return 'dark';
+    return resolveEffectiveTheme();
+  });
+
+  useEffect(() => {
+    const update = () => setTheme(resolveEffectiveTheme());
+
+    // Watch data-theme attribute on <html>
+    const observer = new MutationObserver(update);
+    observer.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+
+    // Watch system preference
+    const media = window.matchMedia('(prefers-color-scheme: light)');
+    media.addEventListener('change', update);
+
+    return () => {
+      observer.disconnect();
+      media.removeEventListener('change', update);
+    };
+  }, []);
+
+  return theme;
+}
 
 const MIN_ACHIEVEMENT_FILTER = 90;
 const DAYS_FILTER = 90;
@@ -70,6 +142,8 @@ export function ScatterPlotPage({
 }: ScatterPlotPageProps) {
   const { t } = useI18n();
   const plotRef = useRef<HTMLDivElement>(null);
+  const effectiveTheme = useEffectiveTheme();
+  const plotTheme = effectiveTheme === 'light' ? LIGHT_PLOT_THEME : DARK_PLOT_THEME;
 
   const [fromLevel, setFromLevel] = useState('13.0');
   const [toLevel, setToLevel] = useState('13.9');
@@ -177,7 +251,7 @@ export function ScatterPlotPage({
           size: 11,
           color: colorMap.get(levelTenths),
           opacity: 0.85,
-          line: { width: 0.6, color: 'rgba(0,0,0,0.35)' },
+          line: { width: 0.6, color: plotTheme.markerOutline },
         },
       };
     });
@@ -197,7 +271,7 @@ export function ScatterPlotPage({
         y1: 101.0,
         xref: 'x',
         yref: 'y',
-        line: { dash: 'dash', color: LANE_SEP_COLOR, width: 1 },
+        line: { dash: 'dash', color: plotTheme.laneSep, width: 1 },
       });
     }
 
@@ -213,7 +287,7 @@ export function ScatterPlotPage({
         y1: rank.value,
         xref: 'x',
         yref: 'y',
-        line: { dash: 'dot', color: RANK_LINE_COLOR, width: 1.2 },
+        line: { dash: 'dot', color: plotTheme.rankLine, width: 1.2 },
       });
       annotations.push({
         x: 1.02,
@@ -224,8 +298,8 @@ export function ScatterPlotPage({
         yref: 'y',
         xanchor: 'left',
         yanchor: 'middle',
-        font: { size: 11, color: RANK_LABEL_COLOR },
-        bgcolor: 'rgba(22,22,31,0.85)',
+        font: { size: 11, color: plotTheme.rankLabel },
+        bgcolor: plotTheme.rankLabelBg,
         borderpad: 3,
       });
     }
@@ -241,7 +315,7 @@ export function ScatterPlotPage({
     const layout: Record<string, unknown> = {
       title: {
         text: titleText,
-        font: { size: 16, color: '#e0e0e8' },
+        font: { size: 16, color: plotTheme.titleColor },
         x: 0.02,
         xanchor: 'left',
         y: 0.97,
@@ -253,20 +327,22 @@ export function ScatterPlotPage({
         ticktext: levels.map((lt) => `${(lt / 10).toFixed(1)}`),
         showgrid: false,
         zeroline: false,
-        title: { text: 'Internal Level', font: { size: 12, color: TEXT_MUTED } },
-        tickfont: { size: 11, color: TEXT_COLOR },
+        fixedrange: true,
+        title: { text: 'Internal Level', font: { size: 12, color: plotTheme.textMuted } },
+        tickfont: { size: 11, color: plotTheme.text },
       },
       yaxis: {
         range: [yMin, 101.0],
-        title: { text: 'Achievement %', font: { size: 12, color: TEXT_MUTED } },
+        title: { text: 'Achievement %', font: { size: 12, color: plotTheme.textMuted } },
         tickformat: '.2f',
         showgrid: true,
-        gridcolor: GRID_COLOR,
+        gridcolor: plotTheme.grid,
         zeroline: false,
-        tickfont: { size: 11, color: TEXT_COLOR },
+        fixedrange: true,
+        tickfont: { size: 11, color: plotTheme.text },
       },
-      plot_bgcolor: BG_COLOR,
-      paper_bgcolor: PAPER_BG,
+      plot_bgcolor: plotTheme.bg,
+      paper_bgcolor: plotTheme.paperBg,
       showlegend: false,
       margin: { l: 70, r: 110, t: 60, b: 55 },
       shapes,
@@ -274,19 +350,20 @@ export function ScatterPlotPage({
       width: figWidth,
       height: 650,
       hoverlabel: {
-        bgcolor: '#1e1e2e',
-        bordercolor: 'rgba(255,255,255,0.15)',
-        font: { color: TEXT_COLOR, size: 12 },
+        bgcolor: plotTheme.hoverBg,
+        bordercolor: plotTheme.hoverBorder,
+        font: { color: plotTheme.text, size: 12 },
       },
-      dragmode: 'pan',
+      dragmode: false,
     };
 
     const config: Record<string, unknown> = {
-      displayModeBar: true,
-      modeBarButtonsToRemove: ['lasso2d', 'select2d', 'autoScale2d'],
+      displayModeBar: false,
       displaylogo: false,
       responsive: true,
-      scrollZoom: true,
+      scrollZoom: false,
+      doubleClick: false,
+      staticPlot: false,
     };
 
     Plotly.react(el, traces, layout, config);
@@ -296,7 +373,7 @@ export function ScatterPlotPage({
       cancelled = true;
       void import('plotly.js-dist-min').then(({ default: P }) => P.purge(el));
     };
-  }, [points, levels]);
+  }, [points, levels, plotTheme]);
 
   return (
     <div className="scatter-plot-page">
