@@ -96,8 +96,10 @@ WORKDIR /app
 # Copy discord binary
 COPY --from=builder /app/target/release/maistats-discord-bot /usr/local/bin/maistats-discord-bot
 
-# Copy the plot script
+# Copy the plot script and the rank icons it loads from
+# maistats-discord-bot/assets/status-emojis/ at runtime.
 COPY scripts/ ./scripts/
+COPY maistats-discord-bot/assets/status-emojis/ ./maistats-discord-bot/assets/status-emojis/
 
 # Validate the script end-to-end during image build with a minimal payload.
 RUN printf '%s' '{"points":[{"achievement":100.0,"level_tenths":130}],"x_min":97.0}' | \
