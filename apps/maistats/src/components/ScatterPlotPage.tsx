@@ -380,8 +380,10 @@ export function ScatterPlotPage({
   }, [points, levels, plotTheme]);
 
   return (
-    <div className="scatter-plot-page">
-      {sidebarTopContent}
+    <section className="scatter-plot-layout">
+      <div className="scatter-plot-sidebar">
+        {sidebarTopContent}
+      </div>
       <section className="scatter-plot-section panel">
         <h2 className="section-heading">{t('plot.title')}</h2>
         <p className="muted scatter-plot-description">{t('plot.description')}</p>
@@ -429,6 +431,6 @@ export function ScatterPlotPage({
           <div className="scatter-plot-chart-container" ref={plotRef} />
         )}
       </section>
-    </div>
+    </section>
   );
 }

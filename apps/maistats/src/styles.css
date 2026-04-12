@@ -3416,12 +3416,34 @@ tbody tr:last-child td {
 
 /* ---- Scatter Plot Page ---- */
 
-.scatter-plot-page {
-  padding: 0 24px 32px;
+.scatter-plot-layout {
+  display: grid;
+  grid-template-columns: var(--desktop-sidebar-width) minmax(0, 1fr);
+  gap: 14px;
+  align-items: start;
+}
+
+.scatter-plot-sidebar {
+  display: grid;
+  gap: 10px;
+  align-self: start;
 }
 
 .scatter-plot-section {
   padding: 24px;
+}
+
+@media (max-width: 960px) {
+  .scatter-plot-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .scatter-plot-sidebar {
+    position: static;
+    top: auto;
+    max-height: none;
+    overflow: visible;
+  }
 }
 
 .scatter-plot-description {
@@ -3486,10 +3508,6 @@ tbody tr:last-child td {
 }
 
 @media (max-width: 640px) {
-  .scatter-plot-page {
-    padding: 0 12px 24px;
-  }
-
   .scatter-plot-section {
     padding: 16px;
   }
