@@ -23,9 +23,11 @@ Input (stdin, JSON):
 Output (stdout): PNG bytes
 """
 
+import base64
 import json
 import os
 import sys
+from pathlib import Path
 
 import numpy as np
 import plotly.graph_objects as go
@@ -52,15 +54,33 @@ RANK_LABEL_COLOR = "#b0b0c0"
 RANK_LABEL_BG = "rgba(22, 22, 31, 0.85)"
 TITLE_COLOR = "#e0e0e8"
 
-# Rank boundary thresholds and their display labels
-RANK_THRESHOLDS: list[tuple[float, str]] = [
-    (97.0, "S"),
-    (98.0, "S+"),
-    (99.0, "SS"),
-    (99.5, "SS+"),
-    (100.0, "SSS"),
-    (100.5, "SSS+"),
+# Rank boundary thresholds: (achievement %, label, icon filename stem)
+RANK_THRESHOLDS: list[tuple[float, str, str]] = [
+    (97.0, "S", "s"),
+    (98.0, "S+", "sp"),
+    (99.0, "SS", "ss"),
+    (99.5, "SS+", "ssp"),
+    (100.0, "SSS", "sss"),
+    (100.5, "SSS+", "sssp"),
 ]
+
+# Project root assumed to be the parent of this script's directory.
+RANK_ICON_DIR = (
+    Path(__file__).resolve().parent.parent
+    / "maistats-discord-bot"
+    / "assets"
+    / "status-emojis"
+)
+
+
+def load_rank_icon_data_uri(stem: str) -> str | None:
+    """Read a rank icon PNG and return it as a base64 data URI, or None if missing."""
+    path = RANK_ICON_DIR / f"music_icon_{stem}.png"
+    try:
+        encoded = base64.b64encode(path.read_bytes()).decode("ascii")
+    except OSError:
+        return None
+    return f"data:image/png;base64,{encoded}"
 
 # Hand-picked palette — vivid but not neon, readable on dark background
 PALETTE: list[str] = [
@@ -129,8 +149,9 @@ def main() -> None:
             line=dict(dash="dash", color=LANE_SEP_COLOR, width=1),
         )
 
-    # Rank boundary horizontal lines (only those visible within the y range)
-    for rank_val, rank_label in RANK_THRESHOLDS:
+    # Rank boundary horizontal lines + icon labels (only those visible within the y range)
+    rank_images: list[dict] = []
+    for rank_val, rank_label, rank_stem in RANK_THRESHOLDS:
         if rank_val < x_min or rank_val > 101.001:
             continue
 
@@ -138,19 +159,43 @@ def main() -> None:
             y=rank_val,
             line=dict(dash="dot", color=RANK_LINE_COLOR, width=1.2),
         )
-        # Label anchored to the right edge of the plot area
-        fig.add_annotation(
-            x=1.02,
-            y=rank_val,
-            text=f"<b>{rank_label}</b>",
-            showarrow=False,
-            xref="paper",
-            yref="y",
-            xanchor="left",
-            yanchor="middle",
-            font=dict(size=11, color=RANK_LABEL_COLOR),
-            bgcolor=RANK_LABEL_BG,
-            borderpad=3,
+
+        icon_uri = load_rank_icon_data_uri(rank_stem)
+        if icon_uri is None:
+            # Fallback to text annotation if the icon file is missing
+            fig.add_annotation(
+                x=1.02,
+                y=rank_val,
+                text=f"<b>{rank_label}</b>",
+                showarrow=False,
+                xref="paper",
+                yref="y",
+                xanchor="left",
+                yanchor="middle",
+                font=dict(size=11, color=RANK_LABEL_COLOR),
+                bgcolor=RANK_LABEL_BG,
+                borderpad=3,
+            )
+            continue
+
+        # Image positioned just outside the right edge of the plot area.
+        # Both xref and yref are paper-relative so the icon keeps a consistent
+        # visible size regardless of the y range.
+        paper_y = (rank_val - x_min) / (101.0 - x_min)
+        rank_images.append(
+            dict(
+                source=icon_uri,
+                xref="paper",
+                yref="paper",
+                x=1.01,
+                y=paper_y,
+                sizex=0.10,
+                sizey=0.05,
+                xanchor="left",
+                yanchor="middle",
+                sizing="contain",
+                layer="above",
+            )
         )
 
     # Chart title — positioned inside the top margin
@@ -201,6 +246,7 @@ def main() -> None:
         paper_bgcolor=BG_COLOR,
         showlegend=False,
         margin=dict(l=70, r=110, t=60, b=55),
+        images=rank_images,
     )
 
     img_bytes = fig.to_image(format="png", width=fig_width, height=650, scale=2)
