@@ -145,8 +145,8 @@ export function ScatterPlotPage({
   const effectiveTheme = useEffectiveTheme();
   const plotTheme = effectiveTheme === 'light' ? LIGHT_PLOT_THEME : DARK_PLOT_THEME;
 
-  const [fromLevel, setFromLevel] = useState('13.0');
-  const [toLevel, setToLevel] = useState('13.9');
+  const [fromLevel, setFromLevel] = useState('1.0');
+  const [toLevel, setToLevel] = useState('15.0');
 
   const handleFromChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     setFromLevel(e.target.value);
