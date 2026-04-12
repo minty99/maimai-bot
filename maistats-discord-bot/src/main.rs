@@ -145,6 +145,10 @@ async fn main() -> eyre::Result<()> {
                         }
                     };
 
+                if let Err(err) = updown::restore_sessions(&bot_data).await {
+                    warn!("mai-updown session restore failed: {err:?}");
+                }
+
                 let registration_count = db::count_registrations(&bot_data.db_pool).await?;
                 if let Err(e) = dm::send_developer_startup_dm(
                     &bot_data.discord_http,

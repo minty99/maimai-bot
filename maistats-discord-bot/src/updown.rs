@@ -1,5 +1,6 @@
 use crate::BotData;
 use crate::chart_links::linked_chart_label;
+use crate::db;
 use crate::embeds::{embed_base, format_level_with_internal};
 use crate::emoji::{format_fc, format_rank, format_sync};
 use eyre::WrapErr;
@@ -10,6 +11,7 @@ use rand::seq::SliceRandom;
 use serenity::builder::{CreateMessage, CreateThread, EditThread};
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex, MutexGuard};
+use time::OffsetDateTime;
 
 type Error = Box<dyn std::error::Error + Send + Sync>;
 type PoiseContext<'a> = poise::Context<'a, BotData, Error>;
@@ -135,7 +137,82 @@ pub(crate) async fn start_session(
         archive_session_thread(ctx.serenity_context(), previous_session.thread_channel_id).await;
     }
 
+    db::upsert_updown_session(
+        &ctx.data().db_pool,
+        ctx.author().id,
+        thread.id,
+        pick_message.id,
+        start_level_tenths,
+        OffsetDateTime::now_utc().unix_timestamp(),
+    )
+    .await
+    .wrap_err("persist mai-updown session")?;
+
     Ok(())
+}
+
+pub(crate) async fn restore_sessions(data: &BotData) -> eyre::Result<()> {
+    let rows = db::list_updown_sessions(&data.db_pool)
+        .await
+        .wrap_err("list persisted mai-updown sessions")?;
+
+    if rows.is_empty() {
+        return Ok(());
+    }
+
+    for row in rows {
+        match rebuild_session(data, &row).await {
+            Ok(session) => {
+                lock_session_store(&data.updown_sessions).insert(row.discord_user_id, session);
+                tracing::info!(
+                    "restored mai-updown session for user {} (thread {}, level {})",
+                    row.discord_user_id,
+                    row.thread_channel_id,
+                    format_level_tenths(row.current_level_tenths)
+                );
+            }
+            Err(err) => {
+                tracing::warn!(
+                    "failed to restore mai-updown session for user {}: {err:?}",
+                    row.discord_user_id
+                );
+                if let Err(delete_err) =
+                    db::delete_updown_session(&data.db_pool, row.discord_user_id).await
+                {
+                    tracing::warn!(
+                        "failed to delete stale mai-updown session row for user {}: {delete_err:?}",
+                        row.discord_user_id
+                    );
+                }
+            }
+        }
+    }
+
+    Ok(())
+}
+
+async fn rebuild_session(
+    data: &BotData,
+    row: &db::PersistedUpdownSession,
+) -> eyre::Result<UpdownSession> {
+    let registration = db::get_registration(&data.db_pool, row.discord_user_id)
+        .await
+        .wrap_err("load user registration")?
+        .ok_or_else(|| eyre::eyre!("no record collector registration"))?;
+
+    let client = RecordCollectorClient::new(registration.record_collector_server_url)
+        .wrap_err("build record collector client")?;
+
+    let pools = build_candidate_pools(&data.song_database_client, &client).await?;
+
+    Ok(UpdownSession {
+        user_id: row.discord_user_id,
+        pick_message_id: row.pick_message_id,
+        in_flight_pick_message_id: None,
+        thread_channel_id: row.thread_channel_id,
+        current_level_tenths: row.current_level_tenths,
+        candidate_pools: Arc::new(pools),
+    })
 }
 
 pub(crate) async fn handle_event(
@@ -153,11 +230,11 @@ pub(crate) async fn handle_event(
                 .as_ref()
                 .is_some_and(|metadata| metadata.archived)
             {
-                remove_session_by_thread_id(&data.updown_sessions, new.id);
+                remove_session_by_thread_id(data, new.id).await;
             }
         }
         serenity::FullEvent::ThreadDelete { thread, .. } => {
-            remove_session_by_thread_id(&data.updown_sessions, thread.id);
+            remove_session_by_thread_id(data, thread.id).await;
         }
         _ => {}
     }
@@ -216,12 +293,7 @@ async fn handle_reaction_add(
             }
         };
 
-    finish_session_progress(
-        &data.updown_sessions,
-        &session,
-        new_level_tenths,
-        pick_message.id,
-    );
+    finish_session_progress(data, &session, new_level_tenths, pick_message.id).await;
 
     Ok(())
 }
@@ -521,17 +593,34 @@ fn claim_session_by_pick_message(
     Some(session.clone())
 }
 
-fn finish_session_progress(
-    session_store: &UpdownSessionStore,
+async fn finish_session_progress(
+    data: &BotData,
     claimed: &UpdownSession,
     new_level_tenths: i16,
     new_pick_message_id: serenity::MessageId,
 ) {
-    update_claimed_session(session_store, claimed, |session| {
+    let applied = update_claimed_session(&data.updown_sessions, claimed, |session| {
         session.current_level_tenths = new_level_tenths;
         session.pick_message_id = new_pick_message_id;
         session.in_flight_pick_message_id = None;
     });
+
+    if !applied {
+        return;
+    }
+
+    if let Err(err) = db::upsert_updown_session(
+        &data.db_pool,
+        claimed.user_id,
+        claimed.thread_channel_id,
+        new_pick_message_id,
+        new_level_tenths,
+        OffsetDateTime::now_utc().unix_timestamp(),
+    )
+    .await
+    {
+        tracing::error!("persist mai-updown session progress failed: {err:?}");
+    }
 }
 
 fn release_session_claim(session_store: &UpdownSessionStore, claimed: &UpdownSession) {
@@ -544,16 +633,17 @@ fn update_claimed_session(
     session_store: &UpdownSessionStore,
     claimed: &UpdownSession,
     update: impl FnOnce(&mut UpdownSession),
-) {
+) -> bool {
     let mut sessions = lock_session_store(session_store);
     let Some(session) = sessions.get_mut(&claimed.user_id) else {
-        return;
+        return false;
     };
     if !session_matches_claim(session, claimed) {
-        return;
+        return false;
     }
 
     update(session);
+    true
 }
 
 fn session_matches_claim(session: &UpdownSession, claimed: &UpdownSession) -> bool {
@@ -561,16 +651,25 @@ fn session_matches_claim(session: &UpdownSession, claimed: &UpdownSession) -> bo
         && session.in_flight_pick_message_id == Some(claimed.pick_message_id)
 }
 
-fn remove_session_by_thread_id(
-    session_store: &UpdownSessionStore,
+async fn remove_session_by_thread_id(
+    data: &BotData,
     thread_channel_id: serenity::ChannelId,
 ) -> Option<UpdownSession> {
-    let mut sessions = lock_session_store(session_store);
-    let user_id = sessions.iter().find_map(|(user_id, session)| {
-        (session.thread_channel_id == thread_channel_id).then_some(*user_id)
-    })?;
+    let removed = {
+        let mut sessions = lock_session_store(&data.updown_sessions);
+        let user_id = sessions.iter().find_map(|(user_id, session)| {
+            (session.thread_channel_id == thread_channel_id).then_some(*user_id)
+        });
+        user_id.and_then(|id| sessions.remove(&id))
+    };
 
-    sessions.remove(&user_id)
+    if let Some(session) = removed.as_ref()
+        && let Err(err) = db::delete_updown_session(&data.db_pool, session.user_id).await
+    {
+        tracing::error!("delete mai-updown session row failed: {err:?}");
+    }
+
+    removed
 }
 
 fn lock_session_store(

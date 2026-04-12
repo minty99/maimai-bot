@@ -103,6 +103,102 @@ pub(crate) async fn count_registrations(pool: &SqlitePool) -> eyre::Result<i64> 
         .wrap_err("count registrations")
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct PersistedUpdownSession {
+    pub(crate) discord_user_id: serenity::UserId,
+    pub(crate) thread_channel_id: serenity::ChannelId,
+    pub(crate) pick_message_id: serenity::MessageId,
+    pub(crate) current_level_tenths: i16,
+}
+
+pub(crate) async fn upsert_updown_session(
+    pool: &SqlitePool,
+    discord_user_id: serenity::UserId,
+    thread_channel_id: serenity::ChannelId,
+    pick_message_id: serenity::MessageId,
+    current_level_tenths: i16,
+    now_unix: i64,
+) -> eyre::Result<()> {
+    sqlx::query(
+        r#"
+INSERT INTO updown_sessions (
+  discord_user_id,
+  thread_channel_id,
+  pick_message_id,
+  current_level_tenths,
+  created_at,
+  updated_at
+)
+VALUES (?1, ?2, ?3, ?4, ?5, ?5)
+ON CONFLICT(discord_user_id) DO UPDATE SET
+  thread_channel_id = excluded.thread_channel_id,
+  pick_message_id = excluded.pick_message_id,
+  current_level_tenths = excluded.current_level_tenths,
+  updated_at = excluded.updated_at
+"#,
+    )
+    .bind(discord_user_id.to_string())
+    .bind(thread_channel_id.to_string())
+    .bind(pick_message_id.to_string())
+    .bind(i64::from(current_level_tenths))
+    .bind(now_unix)
+    .execute(pool)
+    .await
+    .wrap_err("upsert updown session")?;
+    Ok(())
+}
+
+pub(crate) async fn delete_updown_session(
+    pool: &SqlitePool,
+    discord_user_id: serenity::UserId,
+) -> eyre::Result<()> {
+    sqlx::query("DELETE FROM updown_sessions WHERE discord_user_id = ?1")
+        .bind(discord_user_id.to_string())
+        .execute(pool)
+        .await
+        .wrap_err("delete updown session")?;
+    Ok(())
+}
+
+pub(crate) async fn list_updown_sessions(
+    pool: &SqlitePool,
+) -> eyre::Result<Vec<PersistedUpdownSession>> {
+    let rows = sqlx::query_as::<_, (String, String, String, i64)>(
+        r#"
+SELECT discord_user_id, thread_channel_id, pick_message_id, current_level_tenths
+FROM updown_sessions
+"#,
+    )
+    .fetch_all(pool)
+    .await
+    .wrap_err("list updown sessions")?;
+
+    let mut sessions = Vec::with_capacity(rows.len());
+    for (user_id, thread_id, message_id, level_tenths) in rows {
+        let parsed_user = user_id
+            .parse::<u64>()
+            .wrap_err("parse discord_user_id from updown_sessions")?;
+        let parsed_thread = thread_id
+            .parse::<u64>()
+            .wrap_err("parse thread_channel_id from updown_sessions")?;
+        let parsed_message = message_id
+            .parse::<u64>()
+            .wrap_err("parse pick_message_id from updown_sessions")?;
+        let parsed_level: i16 = level_tenths
+            .try_into()
+            .wrap_err("parse current_level_tenths from updown_sessions")?;
+
+        sessions.push(PersistedUpdownSession {
+            discord_user_id: serenity::UserId::new(parsed_user),
+            thread_channel_id: serenity::ChannelId::new(parsed_thread),
+            pick_message_id: serenity::MessageId::new(parsed_message),
+            current_level_tenths: parsed_level,
+        });
+    }
+
+    Ok(sessions)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
