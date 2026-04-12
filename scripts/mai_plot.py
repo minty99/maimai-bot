@@ -229,18 +229,10 @@ def main() -> None:
             ticktext=[f"{lt / 10:.1f}" for lt in levels],
             showgrid=False,
             zeroline=False,
-            title=dict(
-                text="Internal Level",
-                font=dict(size=12, color=TEXT_MUTED, family=FONT_FAMILY),
-            ),
             tickfont=dict(size=11, color=TEXT_COLOR, family=FONT_FAMILY),
         ),
         yaxis=dict(
             range=[x_min, 101.0],
-            title=dict(
-                text="Achievement %",
-                font=dict(size=12, color=TEXT_MUTED, family=FONT_FAMILY),
-            ),
             tickformat=".2f",
             showgrid=True,
             gridcolor=GRID_COLOR,
@@ -250,7 +242,7 @@ def main() -> None:
         plot_bgcolor=PLOT_BG_COLOR,
         paper_bgcolor=BG_COLOR,
         showlegend=False,
-        margin=dict(l=70, r=110, t=65, b=55),
+        margin=dict(l=60, r=110, t=65, b=40),
         images=rank_images,
     )
 
