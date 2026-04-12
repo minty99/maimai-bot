@@ -3496,7 +3496,8 @@ tbody tr:last-child td {
 
 .scatter-plot-chart-container {
   border-radius: 8px;
-  overflow: hidden;
+  overflow-x: auto;
+  overflow-y: hidden;
 }
 
 .scatter-plot-chart-container .modebar {

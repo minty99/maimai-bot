@@ -350,7 +350,7 @@ export function ScatterPlotPage({
     const config: Record<string, unknown> = {
       displayModeBar: false,
       displaylogo: false,
-      responsive: true,
+      responsive: false,
       scrollZoom: false,
       doubleClick: false,
       staticPlot: false,
