@@ -73,6 +73,7 @@ import { ScoreExplorerSection } from './components/ScoreExplorerSection';
 import { SettingsPage } from './components/SettingsPage';
 import { SetupGuidePage } from './components/SetupGuidePage';
 import { SongDetailModal } from './components/SongDetailModal';
+import { ScatterPlotPage } from './components/ScatterPlotPage';
 import { ScoreHistoryModal } from './components/ScoreHistoryModal';
 import type { SongDetailTarget } from './components/TableActionCells';
 import { songIdentityKey } from './songIdentity';
@@ -88,7 +89,7 @@ import type {
 } from './types';
 import logoUrl from './assets/logo.png';
 
-type AppPage = 'home' | 'setup' | 'scores' | 'rating' | 'playlogs' | 'picker' | 'settings';
+type AppPage = 'home' | 'setup' | 'scores' | 'rating' | 'playlogs' | 'picker' | 'plot' | 'settings';
 type RatedScoreRow = ScoreRow & { rating: number; version: string };
 type ThemePreference = 'system' | 'light' | 'dark';
 type LoadingErrorState =
@@ -110,6 +111,9 @@ function readPageFromHash(hash: string): AppPage {
   }
   if (hash === '#picker') {
     return 'picker';
+  }
+  if (hash === '#plot') {
+    return 'plot';
   }
   if (hash === '#settings') {
     return 'settings';
@@ -229,6 +233,18 @@ function PickerIcon() {
       <path d="M15 4v4" />
       <path d="M12 8v4" />
       <path d="M7 20c0-2.8 2.2-5 5-5s5 2.2 5 5" />
+    </svg>
+  );
+}
+
+function PlotIcon() {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <circle cx="7" cy="14" r="2" />
+      <circle cx="12" cy="8" r="2" />
+      <circle cx="17" cy="11" r="2" />
+      <path d="M3 20V4" />
+      <path d="M3 20h18" />
     </svg>
   );
 }
@@ -1295,9 +1311,11 @@ function App() {
           ? '#rating'
           : page === 'picker'
             ? '#picker'
-            : page === 'settings'
-              ? '#settings'
-              : '#scores';
+            : page === 'plot'
+              ? '#plot'
+              : page === 'settings'
+                ? '#settings'
+                : '#scores';
     if (window.location.hash !== nextHash) {
       window.location.hash = nextHash;
       return;
@@ -1328,6 +1346,7 @@ function App() {
       { page: 'rating', label: t('nav.rating'), Icon: RatingIcon },
       { page: 'playlogs', label: t('nav.playlogs'), Icon: PlaylogsIcon },
       { page: 'picker', label: t('nav.picker'), Icon: PickerIcon },
+      { page: 'plot', label: t('nav.plot'), Icon: PlotIcon },
       { page: 'settings', label: t('nav.settings'), Icon: SettingsIcon },
     ],
     [t],
@@ -1607,6 +1626,12 @@ function App() {
             scoreRecords={scoreRecords}
             songMetadata={songMetadata}
             versionOptions={pickerVersionOptions}
+          />
+        ) : activePage === 'plot' ? (
+          <ScatterPlotPage
+            sidebarTopContent={desktopSidebarTopContent}
+            scoreRecords={scoreRecords}
+            songMetadata={songMetadata}
           />
         ) : (
           <SettingsPage

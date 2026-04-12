@@ -3413,3 +3413,107 @@ tbody tr:last-child td {
   --skeleton-from: #deded8;
   --skeleton-mid: #d0d0ca;
 }
+
+/* ---- Scatter Plot Page ---- */
+
+.scatter-plot-layout {
+  display: grid;
+  grid-template-columns: var(--desktop-sidebar-width) minmax(0, 1fr);
+  gap: 14px;
+  align-items: start;
+}
+
+.scatter-plot-sidebar {
+  display: grid;
+  gap: 10px;
+  align-self: start;
+}
+
+.scatter-plot-section {
+  padding: 24px;
+}
+
+@media (max-width: 960px) {
+  .scatter-plot-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .scatter-plot-sidebar {
+    position: static;
+    top: auto;
+    max-height: none;
+    overflow: visible;
+  }
+}
+
+.scatter-plot-description {
+  margin-bottom: 16px;
+}
+
+.scatter-plot-controls {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin-bottom: 20px;
+}
+
+.scatter-plot-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.scatter-plot-label-text {
+  font-size: 0.85rem;
+  color: var(--text-muted);
+}
+
+.scatter-plot-input {
+  width: 7ch;
+  padding: 6px 8px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--panel);
+  color: var(--text);
+  font-size: 0.9rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.scatter-plot-input:focus {
+  outline: 2px solid var(--accent);
+  outline-offset: -1px;
+}
+
+.scatter-plot-summary {
+  font-size: 0.85rem;
+}
+
+.scatter-plot-empty {
+  padding: 48px 0;
+  text-align: center;
+}
+
+.scatter-plot-chart-container {
+  border-radius: 8px;
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+
+.scatter-plot-chart-container .modebar {
+  opacity: 0.5;
+}
+
+.scatter-plot-chart-container .modebar:hover {
+  opacity: 1;
+}
+
+@media (max-width: 640px) {
+  .scatter-plot-section {
+    padding: 16px;
+  }
+
+  .scatter-plot-controls {
+    gap: 10px;
+  }
+}
