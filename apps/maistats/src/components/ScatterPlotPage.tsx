@@ -307,23 +307,9 @@ export function ScatterPlotPage({
       });
     }
 
-    // Title
-    const levelLabel = levels.length === 1
-      ? `Lv ${(levels[0] / 10).toFixed(1)}`
-      : `Lv ${(levels[0] / 10).toFixed(1)}\u2013${(levels[levels.length - 1] / 10).toFixed(1)}`;
-    const titleText = `${levelLabel}  \u2014  ${points.length} song${points.length !== 1 ? 's' : ''} (last 3 months, \u226590%)`;
-
     const figWidth = Math.min(1200, Math.max(450, 110 * nLevels + 220));
 
     const layout: Record<string, unknown> = {
-      title: {
-        text: titleText,
-        font: { size: 16, color: plotTheme.titleColor },
-        x: 0.02,
-        xanchor: 'left',
-        y: 0.97,
-        yanchor: 'top',
-      },
       xaxis: {
         range: [-0.5, nLevels - 0.5],
         tickvals: levels.map((_, i) => i),
@@ -347,7 +333,7 @@ export function ScatterPlotPage({
       plot_bgcolor: plotTheme.bg,
       paper_bgcolor: plotTheme.paperBg,
       showlegend: false,
-      margin: { l: 70, r: 110, t: 60, b: 55 },
+      margin: { l: 70, r: 110, t: 20, b: 55 },
       shapes,
       annotations,
       images,
