@@ -19,13 +19,13 @@ interface PlotPoint {
   title: string;
 }
 
-const RANK_THRESHOLDS: Array<{ value: number; label: string }> = [
-  { value: 97.0, label: 'S' },
-  { value: 98.0, label: 'S+' },
-  { value: 99.0, label: 'SS' },
-  { value: 99.5, label: 'SS+' },
-  { value: 100.0, label: 'SSS' },
-  { value: 100.5, label: 'SSS+' },
+const RANK_THRESHOLDS: Array<{ value: number; label: string; icon: string }> = [
+  { value: 97.0, label: 'S', icon: '/rank-icons/s.png' },
+  { value: 98.0, label: 'S+', icon: '/rank-icons/sp.png' },
+  { value: 99.0, label: 'SS', icon: '/rank-icons/ss.png' },
+  { value: 99.5, label: 'SS+', icon: '/rank-icons/ssp.png' },
+  { value: 100.0, label: 'SSS', icon: '/rank-icons/sss.png' },
+  { value: 100.5, label: 'SSS+', icon: '/rank-icons/sssp.png' },
 ];
 
 const PALETTE = [
@@ -277,6 +277,8 @@ export function ScatterPlotPage({
 
     // Rank threshold lines
     const annotations: Array<Record<string, unknown>> = [];
+    const images: Array<Record<string, unknown>> = [];
+    const yRange = 101.0 - yMin;
     for (const rank of RANK_THRESHOLDS) {
       if (rank.value < yMin || rank.value > 101.0) continue;
       shapes.push({
@@ -289,18 +291,19 @@ export function ScatterPlotPage({
         yref: 'y',
         line: { dash: 'dot', color: plotTheme.rankLine, width: 1.2 },
       });
-      annotations.push({
-        x: 1.02,
-        y: rank.value,
-        text: `<b>${rank.label}</b>`,
-        showarrow: false,
+      const paperY = (rank.value - yMin) / yRange;
+      images.push({
+        source: rank.icon,
         xref: 'paper',
-        yref: 'y',
+        yref: 'paper',
+        x: 1.01,
+        y: paperY,
+        sizex: 0.10,
+        sizey: 0.05,
         xanchor: 'left',
         yanchor: 'middle',
-        font: { size: 11, color: plotTheme.rankLabel },
-        bgcolor: plotTheme.rankLabelBg,
-        borderpad: 3,
+        sizing: 'contain',
+        layer: 'above',
       });
     }
 
@@ -347,6 +350,7 @@ export function ScatterPlotPage({
       margin: { l: 70, r: 110, t: 60, b: 55 },
       shapes,
       annotations,
+      images,
       width: figWidth,
       height: 650,
       hoverlabel: {
