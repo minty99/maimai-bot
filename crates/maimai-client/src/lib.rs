@@ -2,13 +2,11 @@ use eyre::{Result, WrapErr};
 use models::{
     ChartType, DifficultyCategory, ParsedPlayerProfile, PlayRecordApiResponse, ScoreApiResponse,
     SongAliases, SongChartRegion, SongDetailScoreApiResponse, VersionApiResponse,
-    is_minor_or_more_outdated,
 };
 use reqwest::{Client, Url};
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
 use std::fmt;
-use std::sync::{Arc, Mutex, OnceLock};
+use std::sync::Arc;
 use std::time::Instant;
 use tokio::sync::RwLock;
 use tokio::time::{Duration, sleep};
@@ -146,62 +144,11 @@ pub struct RecordCollectorClient {
     base_url: String,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum RecordCollectorVersionIssue {
-    VersionMismatch,
-    InvalidResponse,
-    Unreachable,
-}
-
-#[derive(Debug, Clone)]
-pub struct RecordCollectorVersionStatus {
-    collector_version: Option<String>,
-    issue: Option<RecordCollectorVersionIssue>,
-}
-
-#[derive(Debug, Clone)]
-struct CachedRecordCollectorVersionStatus {
-    status: RecordCollectorVersionStatus,
-    fetched_at: Instant,
-}
-
-const VERSION_STATUS_CACHE_TTL: Duration = Duration::from_secs(300);
-static VERSION_STATUS_CACHE: OnceLock<Mutex<HashMap<String, CachedRecordCollectorVersionStatus>>> =
-    OnceLock::new();
-
-impl RecordCollectorVersionStatus {
-    pub fn compatible(collector_version: String) -> Self {
-        Self {
-            collector_version: Some(collector_version),
-            issue: None,
-        }
-    }
-
-    pub fn outdated(collector_version: Option<String>, issue: RecordCollectorVersionIssue) -> Self {
-        Self {
-            collector_version,
-            issue: Some(issue),
-        }
-    }
-
-    pub fn collector_version(&self) -> Option<&str> {
-        self.collector_version.as_deref()
-    }
-
-    pub fn issue(&self) -> Option<RecordCollectorVersionIssue> {
-        self.issue
-    }
-}
-
 fn build_client() -> Result<Client> {
     Client::builder()
         .timeout(Duration::from_secs(30))
         .build()
         .wrap_err("build http client")
-}
-
-fn version_status_cache() -> &'static Mutex<HashMap<String, CachedRecordCollectorVersionStatus>> {
-    VERSION_STATUS_CACHE.get_or_init(|| Mutex::new(HashMap::new()))
 }
 
 fn normalize_record_collector_path(path: &str) -> String {
@@ -499,59 +446,9 @@ impl RecordCollectorClient {
         self.get_with_retry("/api/player").await
     }
 
-    pub async fn get_version_status(&self, expected_version: &str) -> RecordCollectorVersionStatus {
-        if let Ok(mut cache) = version_status_cache().lock() {
-            cache.retain(|_, cached| cached.fetched_at.elapsed() <= VERSION_STATUS_CACHE_TTL);
-            if let Some(cached) = cache.get(&self.base_url).cloned() {
-                return cached.status;
-            }
-        }
-
-        let status = match self
-            .get_with_retry::<VersionApiResponse>("/api/version")
-            .await
-        {
-            Ok(response) => match is_minor_or_more_outdated(expected_version, &response.version) {
-                Ok(true) => RecordCollectorVersionStatus::outdated(
-                    Some(response.version),
-                    RecordCollectorVersionIssue::VersionMismatch,
-                ),
-                Ok(false) => RecordCollectorVersionStatus::compatible(response.version),
-                Err(err) => {
-                    tracing::warn!(
-                        "record collector {} returned invalid version {:?}: {err:#}",
-                        self.base_url,
-                        response.version
-                    );
-                    RecordCollectorVersionStatus::outdated(
-                        Some(response.version),
-                        RecordCollectorVersionIssue::InvalidResponse,
-                    )
-                }
-            },
-            Err(err) => {
-                tracing::warn!(
-                    "failed to load record collector version from {}: {err:#}",
-                    self.base_url
-                );
-                RecordCollectorVersionStatus::outdated(
-                    None,
-                    RecordCollectorVersionIssue::Unreachable,
-                )
-            }
-        };
-
-        if let Ok(mut cache) = version_status_cache().lock() {
-            cache.insert(
-                self.base_url.clone(),
-                CachedRecordCollectorVersionStatus {
-                    status: status.clone(),
-                    fetched_at: Instant::now(),
-                },
-            );
-        }
-
-        status
+    pub async fn get_version(&self) -> Result<String> {
+        let response: VersionApiResponse = self.get_with_retry("/api/version").await?;
+        Ok(response.version)
     }
 
     pub async fn get_recent(&self, limit: usize) -> Result<Vec<PlayRecordApiResponse>> {
