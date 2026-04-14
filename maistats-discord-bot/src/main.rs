@@ -6,7 +6,6 @@ use std::sync::{Arc, Mutex};
 use tracing::{info, warn};
 
 mod chart_links;
-mod client;
 mod commands;
 mod config;
 mod db;
@@ -16,9 +15,9 @@ mod emoji;
 mod plot;
 mod updown;
 
-use client::SongDatabaseClient;
 use config::DiscordConfig;
 use emoji::MaimaiStatusEmojis;
+use maimai_client::SongDatabaseClient;
 
 #[derive(Debug, Clone)]
 pub(crate) struct BotData {

@@ -2,13 +2,11 @@ use eyre::{Result, WrapErr};
 use models::{
     ChartType, DifficultyCategory, ParsedPlayerProfile, PlayRecordApiResponse, ScoreApiResponse,
     SongAliases, SongChartRegion, SongDetailScoreApiResponse, VersionApiResponse,
-    is_minor_or_more_outdated,
 };
 use reqwest::{Client, Url};
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
 use std::fmt;
-use std::sync::{Arc, Mutex, OnceLock};
+use std::sync::Arc;
 use std::time::Instant;
 use tokio::sync::RwLock;
 use tokio::time::{Duration, sleep};
@@ -22,7 +20,7 @@ struct RecordCollectorErrorResponse {
 }
 
 #[derive(Debug, Clone)]
-pub(crate) struct ApiError {
+pub struct ApiError {
     status: reqwest::StatusCode,
     code: String,
     message: String,
@@ -48,11 +46,11 @@ impl ApiError {
         }
     }
 
-    pub(crate) fn code(&self) -> &str {
+    pub fn code(&self) -> &str {
         &self.code
     }
 
-    pub(crate) fn message(&self) -> &str {
+    pub fn message(&self) -> &str {
         &self.message
     }
 }
@@ -70,39 +68,39 @@ impl fmt::Display for ApiError {
 impl std::error::Error for ApiError {}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub(crate) struct SongMetadata {
-    pub(crate) title: String,
-    pub(crate) chart_type: ChartType,
-    pub(crate) diff_category: DifficultyCategory,
-    pub(crate) level: Option<String>,
-    pub(crate) internal_level: Option<f32>,
-    pub(crate) image_name: Option<String>,
-    pub(crate) version: Option<String>,
-    pub(crate) genre: String,
-    pub(crate) artist: String,
-    pub(crate) aliases: SongAliases,
-    pub(crate) region: SongChartRegion,
+pub struct SongMetadata {
+    pub title: String,
+    pub chart_type: ChartType,
+    pub diff_category: DifficultyCategory,
+    pub level: Option<String>,
+    pub internal_level: Option<f32>,
+    pub image_name: Option<String>,
+    pub version: Option<String>,
+    pub genre: String,
+    pub artist: String,
+    pub aliases: SongAliases,
+    pub region: SongChartRegion,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub(crate) struct SongCatalogSheet {
-    pub(crate) chart_type: ChartType,
+pub struct SongCatalogSheet {
+    pub chart_type: ChartType,
     #[serde(rename = "difficulty")]
-    pub(crate) diff_category: DifficultyCategory,
-    pub(crate) level: String,
-    pub(crate) version: Option<String>,
-    pub(crate) internal_level: Option<f32>,
-    pub(crate) region: SongChartRegion,
+    pub diff_category: DifficultyCategory,
+    pub level: String,
+    pub version: Option<String>,
+    pub internal_level: Option<f32>,
+    pub region: SongChartRegion,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub(crate) struct SongCatalogSong {
-    pub(crate) title: String,
-    pub(crate) genre: String,
-    pub(crate) artist: String,
-    pub(crate) image_name: Option<String>,
-    pub(crate) aliases: SongAliases,
-    pub(crate) sheets: Vec<SongCatalogSheet>,
+pub struct SongCatalogSong {
+    pub title: String,
+    pub genre: String,
+    pub artist: String,
+    pub image_name: Option<String>,
+    pub aliases: SongAliases,
+    pub sheets: Vec<SongCatalogSheet>,
 }
 
 #[derive(Debug, Clone)]
@@ -112,25 +110,25 @@ struct CachedSongCatalog {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub(crate) struct SongMetadataSearchRequest {
+pub struct SongMetadataSearchRequest {
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub(crate) title: Option<String>,
+    pub title: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub(crate) genre: Option<String>,
+    pub genre: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub(crate) artist: Option<String>,
+    pub artist: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub(crate) chart_type: Option<String>,
+    pub chart_type: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub(crate) diff_category: Option<String>,
+    pub diff_category: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub(crate) limits: Option<usize>,
+    pub limits: Option<usize>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub(crate) struct SongMetadataSearchResponse {
-    pub(crate) total: usize,
-    pub(crate) items: Vec<SongMetadata>,
+pub struct SongMetadataSearchResponse {
+    pub total: usize,
+    pub items: Vec<SongMetadata>,
 }
 
 #[derive(Debug, Clone)]
@@ -146,67 +144,11 @@ pub struct RecordCollectorClient {
     base_url: String,
 }
 
-pub(crate) const BOT_VERSION: &str = env!("CARGO_PKG_VERSION");
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum RecordCollectorVersionIssue {
-    VersionMismatch,
-    InvalidResponse,
-    Unreachable,
-}
-
-#[derive(Debug, Clone)]
-pub(crate) struct RecordCollectorVersionStatus {
-    collector_version: Option<String>,
-    issue: Option<RecordCollectorVersionIssue>,
-}
-
-#[derive(Debug, Clone)]
-struct CachedRecordCollectorVersionStatus {
-    status: RecordCollectorVersionStatus,
-    fetched_at: Instant,
-}
-
-const VERSION_STATUS_CACHE_TTL: Duration = Duration::from_secs(300);
-static VERSION_STATUS_CACHE: OnceLock<Mutex<HashMap<String, CachedRecordCollectorVersionStatus>>> =
-    OnceLock::new();
-
-impl RecordCollectorVersionStatus {
-    pub(crate) fn compatible(collector_version: String) -> Self {
-        Self {
-            collector_version: Some(collector_version),
-            issue: None,
-        }
-    }
-
-    pub(crate) fn outdated(
-        collector_version: Option<String>,
-        issue: RecordCollectorVersionIssue,
-    ) -> Self {
-        Self {
-            collector_version,
-            issue: Some(issue),
-        }
-    }
-
-    pub(crate) fn collector_version(&self) -> Option<&str> {
-        self.collector_version.as_deref()
-    }
-
-    pub(crate) fn issue(&self) -> Option<RecordCollectorVersionIssue> {
-        self.issue
-    }
-}
-
 fn build_client() -> Result<Client> {
     Client::builder()
         .timeout(Duration::from_secs(30))
         .build()
         .wrap_err("build http client")
-}
-
-fn version_status_cache() -> &'static Mutex<HashMap<String, CachedRecordCollectorVersionStatus>> {
-    VERSION_STATUS_CACHE.get_or_init(|| Mutex::new(HashMap::new()))
 }
 
 fn normalize_record_collector_path(path: &str) -> String {
@@ -226,7 +168,7 @@ fn normalize_record_collector_path(path: &str) -> String {
     trimmed.to_string()
 }
 
-pub(crate) fn normalize_record_collector_url(input: &str) -> Result<String> {
+pub fn normalize_record_collector_url(input: &str) -> Result<String> {
     let trimmed = input.trim();
     eyre::ensure!(
         !trimmed.is_empty(),
@@ -306,7 +248,7 @@ impl SongDatabaseClient {
         })
     }
 
-    pub(crate) async fn list_song_catalog(&self) -> Result<Vec<SongCatalogSong>> {
+    pub async fn list_song_catalog(&self) -> Result<Vec<SongCatalogSong>> {
         const SONG_DATABASE_CACHE_TTL: Duration = Duration::from_secs(600);
 
         {
@@ -348,7 +290,7 @@ impl SongDatabaseClient {
         Ok(songs)
     }
 
-    pub(crate) fn cover_url(&self, image_name: &str) -> String {
+    pub fn cover_url(&self, image_name: &str) -> String {
         format!(
             "{}/cover/{}",
             self.base_url,
@@ -356,7 +298,7 @@ impl SongDatabaseClient {
         )
     }
 
-    pub(crate) async fn search_song_metadata(
+    pub async fn search_song_metadata(
         &self,
         request: &SongMetadataSearchRequest,
     ) -> Result<SongMetadataSearchResponse> {
@@ -422,7 +364,7 @@ impl SongDatabaseClient {
         Ok(SongMetadataSearchResponse { total, items })
     }
 
-    pub(crate) async fn find_song_metadata(
+    pub async fn find_song_metadata(
         &self,
         title: &str,
         genre: &str,
@@ -457,11 +399,11 @@ impl RecordCollectorClient {
         Ok(Self { client, base_url })
     }
 
-    pub(crate) fn base_url(&self) -> &str {
+    pub fn base_url(&self) -> &str {
         &self.base_url
     }
 
-    pub(crate) async fn trigger_poll(&self) {
+    pub async fn trigger_poll(&self) {
         let url = format!("{}/api/poll", self.base_url);
         match self.client.post(&url).send().await {
             Ok(resp) if resp.status().is_success() || resp.status().as_u16() == 202 => {}
@@ -478,7 +420,7 @@ impl RecordCollectorClient {
         }
     }
 
-    pub(crate) async fn health_check(&self) -> Result<()> {
+    pub async fn health_check(&self) -> Result<()> {
         let url = format!("{}/health/ready", self.base_url);
         let resp = self
             .client
@@ -500,63 +442,13 @@ impl RecordCollectorClient {
         Err(ApiError::from_http_text(status, &body).into())
     }
 
-    pub(crate) async fn get_player_profile(&self) -> Result<ParsedPlayerProfile> {
+    pub async fn get_player_profile(&self) -> Result<ParsedPlayerProfile> {
         self.get_with_retry("/api/player").await
     }
 
-    pub(crate) async fn get_version_status(&self) -> RecordCollectorVersionStatus {
-        if let Ok(mut cache) = version_status_cache().lock() {
-            cache.retain(|_, cached| cached.fetched_at.elapsed() <= VERSION_STATUS_CACHE_TTL);
-            if let Some(cached) = cache.get(&self.base_url).cloned() {
-                return cached.status;
-            }
-        }
-
-        let status = match self
-            .get_with_retry::<VersionApiResponse>("/api/version")
-            .await
-        {
-            Ok(response) => match is_minor_or_more_outdated(BOT_VERSION, &response.version) {
-                Ok(true) => RecordCollectorVersionStatus::outdated(
-                    Some(response.version),
-                    RecordCollectorVersionIssue::VersionMismatch,
-                ),
-                Ok(false) => RecordCollectorVersionStatus::compatible(response.version),
-                Err(err) => {
-                    tracing::warn!(
-                        "record collector {} returned invalid version {:?}: {err:#}",
-                        self.base_url,
-                        response.version
-                    );
-                    RecordCollectorVersionStatus::outdated(
-                        Some(response.version),
-                        RecordCollectorVersionIssue::InvalidResponse,
-                    )
-                }
-            },
-            Err(err) => {
-                tracing::warn!(
-                    "failed to load record collector version from {}: {err:#}",
-                    self.base_url
-                );
-                RecordCollectorVersionStatus::outdated(
-                    None,
-                    RecordCollectorVersionIssue::Unreachable,
-                )
-            }
-        };
-
-        if let Ok(mut cache) = version_status_cache().lock() {
-            cache.insert(
-                self.base_url.clone(),
-                CachedRecordCollectorVersionStatus {
-                    status: status.clone(),
-                    fetched_at: Instant::now(),
-                },
-            );
-        }
-
-        status
+    pub async fn get_version(&self) -> Result<String> {
+        let response: VersionApiResponse = self.get_with_retry("/api/version").await?;
+        Ok(response.version)
     }
 
     pub async fn get_recent(&self, limit: usize) -> Result<Vec<PlayRecordApiResponse>> {

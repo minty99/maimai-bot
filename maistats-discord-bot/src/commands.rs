@@ -1,3 +1,7 @@
+use std::collections::HashMap;
+use std::sync::{Mutex, OnceLock};
+use std::time::{Duration, Instant};
+
 use eyre::WrapErr;
 use models::SongAliases;
 use poise::CreateReply;
@@ -9,10 +13,12 @@ use models::is_minor_or_more_outdated;
 
 use crate::BotData;
 use crate::chart_links::{linked_chart_label, linked_short_difficulty};
-use crate::client::{
-    ApiError, BOT_VERSION, RecordCollectorClient, RecordCollectorVersionIssue, SongCatalogSheet,
-    SongCatalogSong, SongDatabaseClient, SongMetadata, normalize_record_collector_url,
+use maimai_client::{
+    ApiError, RecordCollectorClient, SongCatalogSheet, SongCatalogSong, SongDatabaseClient,
+    SongMetadata, normalize_record_collector_url,
 };
+
+pub(crate) const BOT_VERSION: &str = env!("CARGO_PKG_VERSION");
 
 /// Changelog entries ordered newest-first.
 /// Add one entry here every time the workspace version is bumped.
@@ -33,6 +39,87 @@ use crate::updown;
 type Context<'a> = poise::Context<'a, BotData, Box<dyn std::error::Error + Send + Sync>>;
 type Error = Box<dyn std::error::Error + Send + Sync>;
 const VERSION_WARNING_INTERVAL_SECONDS: i64 = 24 * 60 * 60;
+const VERSION_STATUS_CACHE_TTL: Duration = Duration::from_secs(300);
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum RecordCollectorVersionIssue {
+    VersionMismatch,
+    InvalidResponse,
+    Unreachable,
+}
+
+#[derive(Debug, Clone)]
+struct RecordCollectorVersionStatus {
+    collector_version: Option<String>,
+    issue: Option<RecordCollectorVersionIssue>,
+}
+
+#[derive(Debug, Clone)]
+struct CachedRecordCollectorVersionStatus {
+    status: RecordCollectorVersionStatus,
+    fetched_at: Instant,
+}
+
+static VERSION_STATUS_CACHE: OnceLock<Mutex<HashMap<String, CachedRecordCollectorVersionStatus>>> =
+    OnceLock::new();
+
+fn version_status_cache() -> &'static Mutex<HashMap<String, CachedRecordCollectorVersionStatus>> {
+    VERSION_STATUS_CACHE.get_or_init(|| Mutex::new(HashMap::new()))
+}
+
+async fn resolve_record_collector_version_status(
+    client: &RecordCollectorClient,
+) -> RecordCollectorVersionStatus {
+    let base_url = client.base_url().to_string();
+
+    if let Ok(mut cache) = version_status_cache().lock() {
+        cache.retain(|_, cached| cached.fetched_at.elapsed() <= VERSION_STATUS_CACHE_TTL);
+        if let Some(cached) = cache.get(&base_url).cloned() {
+            return cached.status;
+        }
+    }
+
+    let status = match client.get_version().await {
+        Ok(collector_version) => match is_minor_or_more_outdated(BOT_VERSION, &collector_version) {
+            Ok(true) => RecordCollectorVersionStatus {
+                collector_version: Some(collector_version),
+                issue: Some(RecordCollectorVersionIssue::VersionMismatch),
+            },
+            Ok(false) => RecordCollectorVersionStatus {
+                collector_version: Some(collector_version),
+                issue: None,
+            },
+            Err(err) => {
+                warn!(
+                    "record collector {base_url} returned invalid version {collector_version:?}: {err:#}"
+                );
+                RecordCollectorVersionStatus {
+                    collector_version: Some(collector_version),
+                    issue: Some(RecordCollectorVersionIssue::InvalidResponse),
+                }
+            }
+        },
+        Err(err) => {
+            warn!("failed to load record collector version from {base_url}: {err:#}");
+            RecordCollectorVersionStatus {
+                collector_version: None,
+                issue: Some(RecordCollectorVersionIssue::Unreachable),
+            }
+        }
+    };
+
+    if let Ok(mut cache) = version_status_cache().lock() {
+        cache.insert(
+            base_url,
+            CachedRecordCollectorVersionStatus {
+                status: status.clone(),
+                fetched_at: Instant::now(),
+            },
+        );
+    }
+
+    status
+}
 
 #[derive(Debug, Clone)]
 struct PendingRecordCollectorWarning {
@@ -965,8 +1052,8 @@ async fn prepare_record_collector_update_warning(
     record_collector_server_url: &str,
     client: &RecordCollectorClient,
 ) -> Option<PendingRecordCollectorWarning> {
-    let version_status = client.get_version_status().await;
-    let issue = version_status.issue()?;
+    let version_status = resolve_record_collector_version_status(client).await;
+    let issue = version_status.issue?;
 
     let cache_key = version_warning_cache_key(discord_user_id, record_collector_server_url);
     Some(PendingRecordCollectorWarning {
@@ -974,7 +1061,7 @@ async fn prepare_record_collector_update_warning(
         message: build_record_collector_update_message(
             client.base_url(),
             issue,
-            version_status.collector_version(),
+            version_status.collector_version.as_deref(),
         ),
     })
 }
@@ -1387,7 +1474,7 @@ mod tests {
         find_song_candidates, format_song_alias_summary, format_song_candidate_details,
         latest_credit_len,
     };
-    use crate::client::SongCatalogSong;
+    use maimai_client::SongCatalogSong;
     use models::SongAliases;
 
     #[test]

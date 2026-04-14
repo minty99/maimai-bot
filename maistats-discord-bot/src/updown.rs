@@ -1,9 +1,9 @@
 use crate::BotData;
 use crate::chart_links::linked_chart_label;
-use crate::client::{RecordCollectorClient, SongCatalogSong};
 use crate::embeds::{embed_base, format_level_with_internal};
 use crate::emoji::{format_fc, format_rank, format_sync};
 use eyre::WrapErr;
+use maimai_client::{RecordCollectorClient, SongCatalogSong};
 use models::{ChartType, DifficultyCategory, ScoreApiResponse};
 use poise::serenity_prelude as serenity;
 use rand::seq::SliceRandom;
@@ -227,7 +227,7 @@ async fn handle_reaction_add(
 }
 
 async fn build_candidate_pools(
-    song_database_client: &crate::client::SongDatabaseClient,
+    song_database_client: &maimai_client::SongDatabaseClient,
     record_collector_client: &RecordCollectorClient,
 ) -> eyre::Result<HashMap<i16, Vec<UpdownCandidate>>> {
     let scores = record_collector_client
