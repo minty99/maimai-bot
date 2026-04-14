@@ -3,6 +3,7 @@ members = [
     "maistats-record-collector",
     "maistats-song-info",
     "crates/maimai-auth",
+    "crates/maimai-client",
     "crates/maimai-parsers",
     "crates/models",
     "maistats-discord-bot",

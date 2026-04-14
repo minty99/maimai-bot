@@ -3,8 +3,8 @@ use poise::serenity_prelude as serenity;
 use serenity::builder::{CreateEmbed, CreateEmbedFooter};
 
 use crate::chart_links::linked_chart_label;
-use crate::client::SongDatabaseClient;
 use crate::emoji::{MaimaiStatusEmojis, format_fc, format_rank, format_sync};
+use maimai_client::SongDatabaseClient;
 
 const EMBED_COLOR: u32 = 0x51BCF3;
 const EMBED_COLOR_MAINTENANCE: u32 = 0xFFA500;

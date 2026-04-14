@@ -9,10 +9,12 @@ use models::is_minor_or_more_outdated;
 
 use crate::BotData;
 use crate::chart_links::{linked_chart_label, linked_short_difficulty};
-use crate::client::{
-    ApiError, BOT_VERSION, RecordCollectorClient, RecordCollectorVersionIssue, SongCatalogSheet,
+use maimai_client::{
+    ApiError, RecordCollectorClient, RecordCollectorVersionIssue, SongCatalogSheet,
     SongCatalogSong, SongDatabaseClient, SongMetadata, normalize_record_collector_url,
 };
+
+pub(crate) const BOT_VERSION: &str = env!("CARGO_PKG_VERSION");
 
 /// Changelog entries ordered newest-first.
 /// Add one entry here every time the workspace version is bumped.
@@ -965,7 +967,7 @@ async fn prepare_record_collector_update_warning(
     record_collector_server_url: &str,
     client: &RecordCollectorClient,
 ) -> Option<PendingRecordCollectorWarning> {
-    let version_status = client.get_version_status().await;
+    let version_status = client.get_version_status(BOT_VERSION).await;
     let issue = version_status.issue()?;
 
     let cache_key = version_warning_cache_key(discord_user_id, record_collector_server_url);
@@ -1387,7 +1389,7 @@ mod tests {
         find_song_candidates, format_song_alias_summary, format_song_candidate_details,
         latest_credit_len,
     };
-    use crate::client::SongCatalogSong;
+    use maimai_client::SongCatalogSong;
     use models::SongAliases;
 
     #[test]
