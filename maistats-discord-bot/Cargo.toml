@@ -14,7 +14,7 @@ dotenvy = { workspace = true }
 eyre = { workspace = true }
 image = "0.25.9"
 imageproc = "0.25.0"
-maimai-client = { version = "1.1.0", path = "../crates/maimai-client" }
+maimai-client = { path = "../crates/maimai-client" }
 models = { path = "../crates/models" }
 ordered-float = { workspace = true }
 poise = { workspace = true }
