@@ -235,6 +235,15 @@ async fn process_reaction(
 
     let pools = build_candidate_pools(&data.song_database_client, &record_collector_client).await?;
 
+    if !session_is_current(&data.db_pool, session).await? {
+        tracing::info!(
+            "mai-updown session for user {} was replaced during reaction processing; discarding pick for thread {}",
+            session.discord_user_id,
+            session.thread_channel_id
+        );
+        return Ok(());
+    }
+
     let (new_level_tenths, candidate, note) =
         match pick_next_candidate(&pools, session.current_level_tenths, delta) {
             Ok(result) => result,
@@ -546,6 +555,19 @@ async fn archive_session_thread(
             thread_channel_id
         );
     }
+}
+
+async fn session_is_current(
+    pool: &db::SqlitePool,
+    snapshot: &db::PersistedUpdownSession,
+) -> eyre::Result<bool> {
+    let current = db::get_updown_session(pool, snapshot.discord_user_id)
+        .await
+        .wrap_err("reload mai-updown session")?;
+    Ok(current.is_some_and(|current| {
+        current.thread_channel_id == snapshot.thread_channel_id
+            && current.pick_message_id == snapshot.pick_message_id
+    }))
 }
 
 fn try_acquire_in_flight(
