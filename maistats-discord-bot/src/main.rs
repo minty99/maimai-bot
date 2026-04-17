@@ -27,7 +27,7 @@ pub(crate) struct BotData {
     pub(crate) song_database_client: SongDatabaseClient,
     pub(crate) status_emojis: MaimaiStatusEmojis,
     pub(crate) version_warning_cache: Arc<Mutex<HashMap<String, i64>>>,
-    pub(crate) updown_sessions: updown::UpdownSessionStore,
+    pub(crate) updown_in_flight: updown::UpdownInFlightLocks,
 }
 
 #[tokio::main]
@@ -66,7 +66,7 @@ async fn main() -> eyre::Result<()> {
         song_database_client,
         status_emojis: MaimaiStatusEmojis::default(),
         version_warning_cache: Arc::new(Mutex::new(HashMap::new())),
-        updown_sessions: updown::new_session_store(),
+        updown_in_flight: updown::new_in_flight_locks(),
     };
 
     let framework = poise::Framework::builder()
@@ -144,10 +144,6 @@ async fn main() -> eyre::Result<()> {
                             MaimaiStatusEmojis::default()
                         }
                     };
-
-                if let Err(err) = updown::restore_sessions(&bot_data).await {
-                    warn!("mai-updown session restore failed: {err:?}");
-                }
 
                 let registration_count = db::count_registrations(&bot_data.db_pool).await?;
                 if let Err(e) = dm::send_developer_startup_dm(
