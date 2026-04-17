@@ -27,8 +27,26 @@ on:
   workflow_dispatch:
 
 jobs:
-  validate:
+  check-maintenance-window:
     if: ${{ github.event_name == 'pull_request' || github.event_name == 'push' }}
+    runs-on: ubuntu-latest
+    outputs:
+      in_window: ${{ steps.maintenance.outputs.in_window }}
+    steps:
+      - name: Check JST maintenance window
+        id: maintenance
+        run: |
+          hour=$(TZ=Asia/Tokyo date +%H)
+          if [ "$hour" -ge 4 ] && [ "$hour" -lt 7 ]; then
+            echo "Current JST hour is $hour; validate will be skipped during maimai maintenance window (04:00-07:00 JST)."
+            echo "in_window=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "in_window=false" >> "$GITHUB_OUTPUT"
+          fi
+
+  validate:
+    needs: check-maintenance-window
+    if: ${{ needs.check-maintenance-window.outputs.in_window != 'true' }}
     runs-on: ubuntu-latest
     env:
       HAS_GENERATE_SECRETS: ${{ secrets.MAIMAI_INTL_SEGA_ID != '' && secrets.MAIMAI_INTL_SEGA_PASSWORD != '' && secrets.USER_AGENT != '' }}
