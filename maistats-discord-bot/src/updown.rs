@@ -147,14 +147,13 @@ pub(crate) async fn handle_event(
         serenity::FullEvent::ReactionAdd { add_reaction } => {
             handle_reaction_add(ctx, data, add_reaction).await?;
         }
-        serenity::FullEvent::ThreadUpdate { new, .. } => {
+        serenity::FullEvent::ThreadUpdate { new, .. }
             if new
                 .thread_metadata
                 .as_ref()
-                .is_some_and(|metadata| metadata.archived)
-            {
-                remove_session_by_thread_id(&data.updown_sessions, new.id);
-            }
+                .is_some_and(|metadata| metadata.archived) =>
+        {
+            remove_session_by_thread_id(&data.updown_sessions, new.id);
         }
         serenity::FullEvent::ThreadDelete { thread, .. } => {
             remove_session_by_thread_id(&data.updown_sessions, thread.id);
