@@ -8,16 +8,22 @@ const PLOT_SCRIPT: &str = "scripts/mai_plot.py";
 
 /// Generate a PNG scatter plot by delegating to the Python script via `uv run`.
 ///
-/// * `points` — `(achievement_percent, level_tenths)` for each matching score
-///   (e.g. `(100.5234, 130)` for a 13.0 chart scored 100.5234%).
+/// * `points` — `(achievement_percent, level_tenths, days_elapsed)` for each
+///   matching score (e.g. `(100.5234, 130, 12.0)` for a 13.0 chart scored
+///   100.5234% that was last played ~12 days ago). `days_elapsed` is used by
+///   the renderer to fade older plays into the background.
 /// * `x_min`  — left edge of the X axis (caller already clamped to ≤ 100.5).
-pub(crate) async fn generate_scatter_plot(points: &[(f64, i32)], x_min: f64) -> Result<Vec<u8>> {
+pub(crate) async fn generate_scatter_plot(
+    points: &[(f64, i32, f64)],
+    x_min: f64,
+) -> Result<Vec<u8>> {
     let json_points: Vec<serde_json::Value> = points
         .iter()
-        .map(|&(achievement, level_tenths)| {
+        .map(|&(achievement, level_tenths, days_elapsed)| {
             serde_json::json!({
                 "achievement":   achievement,
                 "level_tenths":  level_tenths,
+                "days_elapsed":  days_elapsed,
             })
         })
         .collect();
