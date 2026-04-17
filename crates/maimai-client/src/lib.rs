@@ -249,7 +249,7 @@ impl SongDatabaseClient {
     }
 
     pub async fn list_song_catalog(&self) -> Result<Vec<SongCatalogSong>> {
-        const SONG_DATABASE_CACHE_TTL: Duration = Duration::from_secs(600);
+        const SONG_DATABASE_CACHE_TTL: Duration = Duration::from_secs(3600);
 
         {
             let cache = self.cache.read().await;
