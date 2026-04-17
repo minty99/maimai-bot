@@ -1,5 +1,6 @@
 use crate::BotData;
 use crate::chart_links::linked_chart_label;
+use crate::db;
 use crate::embeds::{embed_base, format_level_with_internal};
 use crate::emoji::{format_fc, format_rank, format_sync};
 use eyre::WrapErr;
@@ -10,27 +11,21 @@ use rand::seq::SliceRandom;
 use serenity::builder::{CreateMessage, CreateThread, EditThread};
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex, MutexGuard};
+use time::OffsetDateTime;
 
 type Error = Box<dyn std::error::Error + Send + Sync>;
 type PoiseContext<'a> = poise::Context<'a, BotData, Error>;
 
-pub(crate) type UpdownSessionStore = Arc<Mutex<HashMap<serenity::UserId, UpdownSession>>>;
+/// In-memory lock table preventing concurrent reaction handling for the same
+/// user's session. Maps a user ID to the pick message ID currently being
+/// processed. Session metadata itself lives in SQLite (`updown_sessions`).
+pub(crate) type UpdownInFlightLocks = Arc<Mutex<HashMap<serenity::UserId, serenity::MessageId>>>;
 
 const MIN_LEVEL_TENTHS: i16 = 10;
 const MAX_LEVEL_TENTHS: i16 = 150;
 const REACTION_DOWN: &str = "⬇️";
 const REACTION_STAY: &str = "⏺️";
 const REACTION_UP: &str = "⬆️";
-
-#[derive(Debug, Clone)]
-pub(crate) struct UpdownSession {
-    user_id: serenity::UserId,
-    pick_message_id: serenity::MessageId,
-    in_flight_pick_message_id: Option<serenity::MessageId>,
-    thread_channel_id: serenity::ChannelId,
-    current_level_tenths: i16,
-    candidate_pools: Arc<HashMap<i16, Vec<UpdownCandidate>>>,
-}
 
 #[derive(Debug, Clone)]
 struct UpdownCandidate {
@@ -44,7 +39,7 @@ struct UpdownCandidate {
     score: Option<ScoreApiResponse>,
 }
 
-pub(crate) fn new_session_store() -> UpdownSessionStore {
+pub(crate) fn new_in_flight_locks() -> UpdownInFlightLocks {
     Arc::new(Mutex::new(HashMap::new()))
 }
 
@@ -120,19 +115,30 @@ pub(crate) async fn start_session(
     )
     .await?;
 
-    let session = UpdownSession {
-        user_id: ctx.author().id,
-        pick_message_id: pick_message.id,
-        in_flight_pick_message_id: None,
-        thread_channel_id: thread.id,
-        current_level_tenths: start_level_tenths,
-        candidate_pools: Arc::new(pools),
-    };
+    let previous = db::get_updown_session(&ctx.data().db_pool, ctx.author().id)
+        .await
+        .wrap_err("load previous mai-updown session")?;
 
-    let previous_session =
-        lock_session_store(&ctx.data().updown_sessions).insert(ctx.author().id, session);
-    if let Some(previous_session) = previous_session {
-        archive_session_thread(ctx.serenity_context(), previous_session.thread_channel_id).await;
+    {
+        let mut guard = lock_in_flight(&ctx.data().updown_in_flight);
+        guard.remove(&ctx.author().id);
+    }
+
+    db::upsert_updown_session(
+        &ctx.data().db_pool,
+        ctx.author().id,
+        thread.id,
+        pick_message.id,
+        start_level_tenths,
+        OffsetDateTime::now_utc().unix_timestamp(),
+    )
+    .await
+    .wrap_err("persist mai-updown session")?;
+
+    if let Some(prev) = previous
+        && prev.thread_channel_id != thread.id
+    {
+        archive_session_thread(ctx.serenity_context(), prev.thread_channel_id).await;
     }
 
     Ok(())
@@ -153,15 +159,21 @@ pub(crate) async fn handle_event(
                 .as_ref()
                 .is_some_and(|metadata| metadata.archived) =>
         {
-            remove_session_by_thread_id(&data.updown_sessions, new.id);
+            cleanup_session_for_thread(data, new.id).await;
         }
         serenity::FullEvent::ThreadDelete { thread, .. } => {
-            remove_session_by_thread_id(&data.updown_sessions, thread.id);
+            cleanup_session_for_thread(data, thread.id).await;
         }
         _ => {}
     }
 
     Ok(())
+}
+
+async fn cleanup_session_for_thread(data: &BotData, thread_channel_id: serenity::ChannelId) {
+    if let Err(err) = db::delete_updown_session_by_thread(&data.db_pool, thread_channel_id).await {
+        tracing::warn!("delete mai-updown session row failed: {err:?}");
+    }
 }
 
 async fn handle_reaction_add(
@@ -188,39 +200,79 @@ async fn handle_reaction_add(
         return Ok(());
     };
 
-    let Some(session) =
-        claim_session_by_pick_message(&data.updown_sessions, user_id, reaction.message_id)
+    let Some(session) = db::get_updown_session(&data.db_pool, user_id)
+        .await
+        .wrap_err("load mai-updown session")?
     else {
         return Ok(());
     };
+    if session.pick_message_id != reaction.message_id {
+        return Ok(());
+    }
 
-    let pools = &session.candidate_pools;
+    if !try_acquire_in_flight(&data.updown_in_flight, user_id, session.pick_message_id) {
+        return Ok(());
+    }
+
+    let result = process_reaction(ctx, data, &session, delta).await;
+    release_in_flight(&data.updown_in_flight, user_id, session.pick_message_id);
+    result
+}
+
+async fn process_reaction(
+    ctx: &serenity::Context,
+    data: &BotData,
+    session: &db::PersistedUpdownSession,
+    delta: i16,
+) -> Result<(), Error> {
+    let registration = db::get_registration(&data.db_pool, session.discord_user_id)
+        .await
+        .wrap_err("load user registration")?
+        .ok_or_else(|| eyre::eyre!("no record collector registered"))?;
+    let record_collector_client =
+        RecordCollectorClient::new(registration.record_collector_server_url)
+            .wrap_err("build record collector client")?;
+
+    let pools = build_candidate_pools(&data.song_database_client, &record_collector_client).await?;
+
+    if !session_is_current(&data.db_pool, session).await? {
+        tracing::info!(
+            "mai-updown session for user {} was replaced during reaction processing; discarding pick for thread {}",
+            session.discord_user_id,
+            session.thread_channel_id
+        );
+        return Ok(());
+    }
 
     let (new_level_tenths, candidate, note) =
-        match pick_next_candidate(pools, session.current_level_tenths, delta) {
+        match pick_next_candidate(&pools, session.current_level_tenths, delta) {
             Ok(result) => result,
             Err(notice_msg) => {
-                release_session_claim(&data.updown_sessions, &session);
                 announce_session_notice(ctx, session.thread_channel_id, &notice_msg).await?;
                 return Ok(());
             }
         };
 
     let pick_message =
-        match send_pick_message(ctx, data, session.thread_channel_id, &candidate, note).await {
-            Ok(message) => message,
-            Err(err) => {
-                release_session_claim(&data.updown_sessions, &session);
-                return Err(err);
-            }
-        };
+        send_pick_message(ctx, data, session.thread_channel_id, &candidate, note).await?;
 
-    finish_session_progress(
-        &data.updown_sessions,
-        &session,
-        new_level_tenths,
+    let affected = db::update_updown_session_progress(
+        &data.db_pool,
+        session.discord_user_id,
+        session.thread_channel_id,
         pick_message.id,
-    );
+        new_level_tenths,
+        OffsetDateTime::now_utc().unix_timestamp(),
+    )
+    .await
+    .wrap_err("persist mai-updown session progress")?;
+
+    if affected == 0 {
+        tracing::info!(
+            "mai-updown session row for user {} was removed during reaction processing; not resurrecting",
+            session.discord_user_id
+        );
+    }
 
     Ok(())
 }
@@ -505,77 +557,49 @@ async fn archive_session_thread(
     }
 }
 
-fn claim_session_by_pick_message(
-    session_store: &UpdownSessionStore,
+async fn session_is_current(
+    pool: &db::SqlitePool,
+    snapshot: &db::PersistedUpdownSession,
+) -> eyre::Result<bool> {
+    let current = db::get_updown_session(pool, snapshot.discord_user_id)
+        .await
+        .wrap_err("reload mai-updown session")?;
+    Ok(current.is_some_and(|current| {
+        current.thread_channel_id == snapshot.thread_channel_id
+            && current.pick_message_id == snapshot.pick_message_id
+    }))
+}
+
+fn try_acquire_in_flight(
+    locks: &UpdownInFlightLocks,
     user_id: serenity::UserId,
     pick_message_id: serenity::MessageId,
-) -> Option<UpdownSession> {
-    let mut sessions = lock_session_store(session_store);
-    let session = sessions.get_mut(&user_id)?;
-    if session.pick_message_id != pick_message_id || session.in_flight_pick_message_id.is_some() {
-        return None;
+) -> bool {
+    let mut guard = lock_in_flight(locks);
+    match guard.entry(user_id) {
+        std::collections::hash_map::Entry::Occupied(_) => false,
+        std::collections::hash_map::Entry::Vacant(slot) => {
+            slot.insert(pick_message_id);
+            true
+        }
     }
-
-    session.in_flight_pick_message_id = Some(pick_message_id);
-    Some(session.clone())
 }
 
-fn finish_session_progress(
-    session_store: &UpdownSessionStore,
-    claimed: &UpdownSession,
-    new_level_tenths: i16,
-    new_pick_message_id: serenity::MessageId,
+fn release_in_flight(
+    locks: &UpdownInFlightLocks,
+    user_id: serenity::UserId,
+    pick_message_id: serenity::MessageId,
 ) {
-    update_claimed_session(session_store, claimed, |session| {
-        session.current_level_tenths = new_level_tenths;
-        session.pick_message_id = new_pick_message_id;
-        session.in_flight_pick_message_id = None;
-    });
-}
-
-fn release_session_claim(session_store: &UpdownSessionStore, claimed: &UpdownSession) {
-    update_claimed_session(session_store, claimed, |session| {
-        session.in_flight_pick_message_id = None;
-    });
-}
-
-fn update_claimed_session(
-    session_store: &UpdownSessionStore,
-    claimed: &UpdownSession,
-    update: impl FnOnce(&mut UpdownSession),
-) {
-    let mut sessions = lock_session_store(session_store);
-    let Some(session) = sessions.get_mut(&claimed.user_id) else {
-        return;
-    };
-    if !session_matches_claim(session, claimed) {
-        return;
+    let mut guard = lock_in_flight(locks);
+    if guard.get(&user_id) == Some(&pick_message_id) {
+        guard.remove(&user_id);
     }
-
-    update(session);
 }
 
-fn session_matches_claim(session: &UpdownSession, claimed: &UpdownSession) -> bool {
-    session.pick_message_id == claimed.pick_message_id
-        && session.in_flight_pick_message_id == Some(claimed.pick_message_id)
-}
-
-fn remove_session_by_thread_id(
-    session_store: &UpdownSessionStore,
-    thread_channel_id: serenity::ChannelId,
-) -> Option<UpdownSession> {
-    let mut sessions = lock_session_store(session_store);
-    let user_id = sessions.iter().find_map(|(user_id, session)| {
-        (session.thread_channel_id == thread_channel_id).then_some(*user_id)
-    })?;
-
-    sessions.remove(&user_id)
-}
-
-fn lock_session_store(
-    session_store: &UpdownSessionStore,
-) -> MutexGuard<'_, HashMap<serenity::UserId, UpdownSession>> {
-    session_store.lock().expect("session store lock")
+fn lock_in_flight(
+    locks: &UpdownInFlightLocks,
+) -> MutexGuard<'_, HashMap<serenity::UserId, serenity::MessageId>> {
+    locks.lock().expect("mai-updown in-flight lock")
 }
 
 fn internal_level_tenths(value: f32) -> i16 {

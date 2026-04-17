@@ -103,6 +103,136 @@ pub(crate) async fn count_registrations(pool: &SqlitePool) -> eyre::Result<i64> 
         .wrap_err("count registrations")
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct PersistedUpdownSession {
+    pub(crate) discord_user_id: serenity::UserId,
+    pub(crate) thread_channel_id: serenity::ChannelId,
+    pub(crate) pick_message_id: serenity::MessageId,
+    pub(crate) current_level_tenths: i16,
+}
+
+pub(crate) async fn upsert_updown_session(
+    pool: &SqlitePool,
+    discord_user_id: serenity::UserId,
+    thread_channel_id: serenity::ChannelId,
+    pick_message_id: serenity::MessageId,
+    current_level_tenths: i16,
+    now_unix: i64,
+) -> eyre::Result<()> {
+    sqlx::query(
+        r#"
+INSERT INTO updown_sessions (
+  discord_user_id,
+  thread_channel_id,
+  pick_message_id,
+  current_level_tenths,
+  created_at,
+  updated_at
+)
+VALUES (?1, ?2, ?3, ?4, ?5, ?5)
+ON CONFLICT(discord_user_id) DO UPDATE SET
+  thread_channel_id = excluded.thread_channel_id,
+  pick_message_id = excluded.pick_message_id,
+  current_level_tenths = excluded.current_level_tenths,
+  updated_at = excluded.updated_at
+"#,
+    )
+    .bind(discord_user_id.to_string())
+    .bind(thread_channel_id.to_string())
+    .bind(pick_message_id.to_string())
+    .bind(i64::from(current_level_tenths))
+    .bind(now_unix)
+    .execute(pool)
+    .await
+    .wrap_err("upsert updown session")?;
+    Ok(())
+}
+
+pub(crate) async fn get_updown_session(
+    pool: &SqlitePool,
+    discord_user_id: serenity::UserId,
+) -> eyre::Result<Option<PersistedUpdownSession>> {
+    let row = sqlx::query_as::<_, (String, String, String, i64)>(
+        r#"
+SELECT discord_user_id, thread_channel_id, pick_message_id, current_level_tenths
+FROM updown_sessions
+WHERE discord_user_id = ?1
+"#,
+    )
+    .bind(discord_user_id.to_string())
+    .fetch_optional(pool)
+    .await
+    .wrap_err("fetch updown session")?;
+
+    row.map(parse_updown_session_row).transpose()
+}
+
+pub(crate) async fn update_updown_session_progress(
+    pool: &SqlitePool,
+    discord_user_id: serenity::UserId,
+    thread_channel_id: serenity::ChannelId,
+    new_pick_message_id: serenity::MessageId,
+    new_level_tenths: i16,
+    now_unix: i64,
+) -> eyre::Result<u64> {
+    let result = sqlx::query(
+        r#"
+UPDATE updown_sessions
+SET pick_message_id = ?1,
+    current_level_tenths = ?2,
+    updated_at = ?3
+WHERE discord_user_id = ?4
+  AND thread_channel_id = ?5
+"#,
+    )
+    .bind(new_pick_message_id.to_string())
+    .bind(i64::from(new_level_tenths))
+    .bind(now_unix)
+    .bind(discord_user_id.to_string())
+    .bind(thread_channel_id.to_string())
+    .execute(pool)
+    .await
+    .wrap_err("update updown session progress")?;
+    Ok(result.rows_affected())
+}
+
+pub(crate) async fn delete_updown_session_by_thread(
+    pool: &SqlitePool,
+    thread_channel_id: serenity::ChannelId,
+) -> eyre::Result<()> {
+    sqlx::query("DELETE FROM updown_sessions WHERE thread_channel_id = ?1")
+        .bind(thread_channel_id.to_string())
+        .execute(pool)
+        .await
+        .wrap_err("delete updown session by thread")?;
+    Ok(())
+}
+
+fn parse_updown_session_row(
+    row: (String, String, String, i64),
+) -> eyre::Result<PersistedUpdownSession> {
+    let (user_id, thread_id, message_id, level_tenths) = row;
+    let parsed_user = user_id
+        .parse::<u64>()
+        .wrap_err("parse discord_user_id from updown_sessions")?;
+    let parsed_thread = thread_id
+        .parse::<u64>()
+        .wrap_err("parse thread_channel_id from updown_sessions")?;
+    let parsed_message = message_id
+        .parse::<u64>()
+        .wrap_err("parse pick_message_id from updown_sessions")?;
+    let parsed_level: i16 = level_tenths
+        .try_into()
+        .wrap_err("parse current_level_tenths from updown_sessions")?;
+
+    Ok(PersistedUpdownSession {
+        discord_user_id: serenity::UserId::new(parsed_user),
+        thread_channel_id: serenity::ChannelId::new(parsed_thread),
+        pick_message_id: serenity::MessageId::new(parsed_message),
+        current_level_tenths: parsed_level,
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -158,6 +288,82 @@ mod tests {
 
         upsert_registration(&pool, other_user_id, "https://second.example", 300).await?;
         assert_eq!(count_registrations(&pool).await?, 2);
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn updown_session_upsert_get_and_progress() -> eyre::Result<()> {
+        let pool = connect("sqlite::memory:").await?;
+        migrate(&pool).await?;
+
+        let user_id = serenity::UserId::new(42);
+        let thread_id = serenity::ChannelId::new(1001);
+        let pick_id = serenity::MessageId::new(2001);
+
+        assert!(get_updown_session(&pool, user_id).await?.is_none());
+
+        upsert_updown_session(&pool, user_id, thread_id, pick_id, 130, 100).await?;
+        let stored = get_updown_session(&pool, user_id)
+            .await?
+            .expect("session should exist");
+        assert_eq!(stored.thread_channel_id, thread_id);
+        assert_eq!(stored.pick_message_id, pick_id);
+        assert_eq!(stored.current_level_tenths, 130);
+
+        let new_pick_id = serenity::MessageId::new(2002);
+        let affected =
+            update_updown_session_progress(&pool, user_id, thread_id, new_pick_id, 131, 200)
+                .await?;
+        assert_eq!(affected, 1);
+
+        let stored = get_updown_session(&pool, user_id)
+            .await?
+            .expect("session should still exist");
+        assert_eq!(stored.pick_message_id, new_pick_id);
+        assert_eq!(stored.current_level_tenths, 131);
+
+        let other_thread_id = serenity::ChannelId::new(1002);
+        let affected = update_updown_session_progress(
+            &pool,
+            user_id,
+            other_thread_id,
+            serenity::MessageId::new(2003),
+            132,
+            300,
+        )
+        .await?;
+        assert_eq!(affected, 0, "update should not match a different thread");
+
+        let stored = get_updown_session(&pool, user_id)
+            .await?
+            .expect("session should remain unchanged");
+        assert_eq!(stored.pick_message_id, new_pick_id);
+        assert_eq!(stored.current_level_tenths, 131);
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn updown_session_delete_by_thread() -> eyre::Result<()> {
+        let pool = connect("sqlite::memory:").await?;
+        migrate(&pool).await?;
+
+        let user_id = serenity::UserId::new(42);
+        let thread_id = serenity::ChannelId::new(1001);
+        let pick_id = serenity::MessageId::new(2001);
+
+        upsert_updown_session(&pool, user_id, thread_id, pick_id, 130, 100).await?;
+        assert!(get_updown_session(&pool, user_id).await?.is_some());
+
+        delete_updown_session_by_thread(&pool, serenity::ChannelId::new(9999)).await?;
+        assert!(
+            get_updown_session(&pool, user_id).await?.is_some(),
+            "unrelated thread delete must not remove the row"
+        );
+
+        delete_updown_session_by_thread(&pool, thread_id).await?;
+        assert!(get_updown_session(&pool, user_id).await?.is_none());
 
         Ok(())
     }
