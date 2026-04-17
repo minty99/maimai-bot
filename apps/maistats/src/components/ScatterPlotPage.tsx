@@ -17,6 +17,7 @@ interface PlotPoint {
   achievement: number;
   levelTenths: number;
   title: string;
+  daysElapsed: number;
 }
 
 const RANK_THRESHOLDS: Array<{ value: number; label: string; icon: string }> = [
@@ -40,6 +41,24 @@ const PALETTE = [
   '#d0a060',
   '#c888e0',
 ];
+
+// Marker fading window: recent plays are fully opaque, plays at the far end of
+// the window fade toward MIN_ALPHA so they visibly recede into the background.
+const MAX_ALPHA = 0.85;
+const MIN_ALPHA = 0.25;
+
+function hexToRgba(hex: string, alpha: number): string {
+  const h = hex.replace('#', '');
+  const r = parseInt(h.slice(0, 2), 16);
+  const g = parseInt(h.slice(2, 4), 16);
+  const b = parseInt(h.slice(4, 6), 16);
+  return `rgba(${r}, ${g}, ${b}, ${alpha.toFixed(3)})`;
+}
+
+function ageAlpha(daysElapsed: number, windowDays: number): number {
+  const ratio = Math.max(0, Math.min(1, daysElapsed / windowDays));
+  return MAX_ALPHA - (MAX_ALPHA - MIN_ALPHA) * ratio;
+}
 
 interface PlotTheme {
   bg: string;
@@ -184,13 +203,10 @@ export function ScatterPlotPage({
       const achievementPercent = score.achievement_x10000 / 10000;
       if (achievementPercent < MIN_ACHIEVEMENT_FILTER) continue;
 
-      if (score.last_played_at) {
-        const playedUnix = parseMaimaiPlayedAtToUnix(score.last_played_at);
-        const elapsed = daysSince(playedUnix);
-        if (elapsed != null && elapsed > DAYS_FILTER) continue;
-      } else {
-        continue;
-      }
+      if (!score.last_played_at) continue;
+      const playedUnix = parseMaimaiPlayedAtToUnix(score.last_played_at);
+      const elapsed = daysSince(playedUnix);
+      if (elapsed == null || elapsed > DAYS_FILTER) continue;
 
       const key = JSON.stringify([score.title, score.genre, score.artist, score.chart_type, score.diff_category]);
       const ilTenths = levelMap.get(key);
@@ -200,6 +216,7 @@ export function ScatterPlotPage({
         achievement: achievementPercent,
         levelTenths: ilTenths,
         title: score.title,
+        daysElapsed: elapsed,
       });
     }
 
@@ -238,6 +255,8 @@ export function ScatterPlotPage({
       const hoverTexts = group.map(
         (p) => `<b>${p.title}</b><br>Lv ${(p.levelTenths / 10).toFixed(1)}<br>${p.achievement.toFixed(4)}%`,
       );
+      const baseHex = colorMap.get(levelTenths) ?? PALETTE[0];
+      const colors = group.map((p) => hexToRgba(baseHex, ageAlpha(p.daysElapsed, DAYS_FILTER)));
 
       return {
         x: xVals,
@@ -249,8 +268,7 @@ export function ScatterPlotPage({
         hoverinfo: 'text' as const,
         marker: {
           size: 11,
-          color: colorMap.get(levelTenths),
-          opacity: 0.85,
+          color: colors,
           line: { width: 0.6, color: plotTheme.markerOutline },
         },
       };

@@ -14,11 +14,16 @@ X axis: uniform random jitter (no information, purely for visual spread)
 
 Input (stdin, JSON):
   {
-    "points": [{"achievement": <float>, "level_tenths": <int>}, ...],
+    "points": [
+      {"achievement": <float>, "level_tenths": <int>, "days_elapsed": <float>},
+      ...
+    ],
     "x_min": <float>   -- lower bound of the Y (achievement) axis
   }
 
-  Each point represents one song's best score. Points are colored by level_tenths.
+  Each point represents one song's best score. Points are colored by
+  level_tenths, and faded toward transparency as days_elapsed grows so that
+  older plays read as visually less prominent than recent ones.
 
 Output (stdout): PNG bytes
 """
@@ -96,6 +101,26 @@ PALETTE: list[str] = [
     "#c888e0",  # lavender
 ]
 
+# Marker fading window: recent plays are fully opaque, plays at the far end of
+# the window are rendered at MIN_ALPHA so they visibly recede into the plot
+# background.
+PLOT_WINDOW_DAYS = 90.0
+MAX_ALPHA = 0.85
+MIN_ALPHA = 0.25
+
+
+def hex_to_rgba(hex_color: str, alpha: float) -> str:
+    """Convert '#rrggbb' + alpha ∈ [0, 1] to a Plotly 'rgba(r, g, b, a)' string."""
+    h = hex_color.lstrip("#")
+    r, g, b = int(h[0:2], 16), int(h[2:4], 16), int(h[4:6], 16)
+    return f"rgba({r}, {g}, {b}, {alpha:.3f})"
+
+
+def age_alpha(days_elapsed: float) -> float:
+    """Linearly fade from MAX_ALPHA at day 0 to MIN_ALPHA at PLOT_WINDOW_DAYS."""
+    ratio = max(0.0, min(1.0, days_elapsed / PLOT_WINDOW_DAYS))
+    return MAX_ALPHA - (MAX_ALPHA - MIN_ALPHA) * ratio
+
 
 def main() -> None:
     data = json.loads(sys.stdin.buffer.read())
@@ -126,6 +151,12 @@ def main() -> None:
         x_vals = (idx + rng.uniform(-JITTER, JITTER, size=len(group))).tolist()
         # Y: achievement %
         y_vals = [p["achievement"] for p in group]
+        # Per-point rgba color: same hue per level, alpha fades with age
+        base_hex = color_map[level_tenths]
+        colors = [
+            hex_to_rgba(base_hex, age_alpha(float(p.get("days_elapsed", 0.0))))
+            for p in group
+        ]
 
         fig.add_trace(
             go.Scatter(
@@ -135,8 +166,7 @@ def main() -> None:
                 name=f"Lv {level_tenths / 10:.1f}",
                 marker=dict(
                     size=11,
-                    color=color_map[level_tenths],
-                    opacity=0.85,
+                    color=colors,
                     line=dict(width=0.6, color="rgba(0, 0, 0, 0.35)"),
                 ),
             )

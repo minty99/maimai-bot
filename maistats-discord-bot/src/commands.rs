@@ -838,17 +838,26 @@ pub(crate) async fn mai_plot(
         )
     };
 
-    // JST threshold string for last_played_at comparison ("YYYY/MM/DD HH:MM")
+    // Reference JST "now" for computing age-in-days of each record.
     let jst = UtcOffset::from_hms(9, 0, 0).unwrap_or(UtcOffset::UTC);
-    let since_jst = (OffsetDateTime::now_utc() - TimeDuration::days(90)).to_offset(jst);
-    let since_jst_str = format!(
-        "{:04}/{:02}/{:02} {:02}:{:02}",
-        since_jst.year(),
-        u8::from(since_jst.month()),
-        since_jst.day(),
-        since_jst.hour(),
-        since_jst.minute(),
-    );
+    let now_jst = OffsetDateTime::now_utc().to_offset(jst);
+    const PLOT_WINDOW_DAYS: f64 = 90.0;
+
+    // Parse a "YYYY/MM/DD HH:MM" JST timestamp into an OffsetDateTime, or None.
+    fn parse_jst_played_at(s: &str, jst: UtcOffset) -> Option<OffsetDateTime> {
+        if s.len() != 16 {
+            return None;
+        }
+        let year: i32 = s.get(0..4)?.parse().ok()?;
+        let month_num: u8 = s.get(5..7)?.parse().ok()?;
+        let day: u8 = s.get(8..10)?.parse().ok()?;
+        let hour: u8 = s.get(11..13)?.parse().ok()?;
+        let minute: u8 = s.get(14..16)?.parse().ok()?;
+        let month = time::Month::try_from(month_num).ok()?;
+        let date = time::Date::from_calendar_date(year, month, day).ok()?;
+        let tm = time::Time::from_hms(hour, minute, 0).ok()?;
+        Some(date.with_time(tm).assume_offset(jst))
+    }
 
     let scores = record_collector_client
         .get_all_rated_scores()
@@ -888,8 +897,8 @@ pub(crate) async fn mai_plot(
 
     const MIN_ACHIEVEMENT: i64 = 900_000; // 90.0000%
 
-    // Each point: (achievement_percent, level_tenths)
-    let mut points: Vec<(f64, i32)> = Vec::new();
+    // Each point: (achievement_percent, level_tenths, days_elapsed)
+    let mut points: Vec<(f64, i32, f64)> = Vec::new();
 
     for score in &scores {
         let Some(achievement) = score.achievement_x10000 else {
@@ -902,7 +911,11 @@ pub(crate) async fn mai_plot(
         let Some(ref last_played) = score.last_played_at else {
             continue;
         };
-        if last_played.as_str() < since_jst_str.as_str() {
+        let Some(last_played_dt) = parse_jst_played_at(last_played, jst) else {
+            continue;
+        };
+        let elapsed_days = (now_jst - last_played_dt).as_seconds_f64() / (60.0 * 60.0 * 24.0);
+        if !(0.0..=PLOT_WINDOW_DAYS).contains(&elapsed_days) {
             continue;
         }
 
@@ -920,7 +933,7 @@ pub(crate) async fn mai_plot(
             continue;
         }
 
-        points.push((achievement as f64 / 10000.0, il_tenths));
+        points.push((achievement as f64 / 10000.0, il_tenths, elapsed_days));
     }
 
     if points.is_empty() {
@@ -935,7 +948,10 @@ pub(crate) async fn mai_plot(
     }
 
     let total = points.len();
-    let min_achievement = points.iter().map(|&(x, _)| x).fold(f64::INFINITY, f64::min);
+    let min_achievement = points
+        .iter()
+        .map(|&(x, _, _)| x)
+        .fold(f64::INFINITY, f64::min);
     let x_min = min_achievement.min(100.5);
 
     let png = plot::generate_scatter_plot(&points, x_min)
