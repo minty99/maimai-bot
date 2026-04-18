@@ -242,6 +242,9 @@ pub(crate) async fn register(
 pub(crate) async fn mai_score(
     ctx: Context<'_>,
     #[description = "Song title or alias to search for"] search: String,
+    #[description = "Chart type filter: st/std/standard or dx/deluxe"] chart_type: Option<String>,
+    #[description = "Difficulty filter: basic/bas/b, advanced/adv/a, expert/exp/e, master/mas/m, remaster/rem/r"]
+    difficulty: Option<String>,
 ) -> Result<(), Error> {
     ctx.defer().await?;
 
@@ -262,6 +265,46 @@ pub(crate) async fn mai_score(
         send_pending_record_collector_update_warning(ctx, pending_warning).await?;
         return Ok(());
     }
+
+    let chart_type_filter = match chart_type.as_deref() {
+        Some(raw) => match parse_mai_score_chart_type(raw) {
+            Some(parsed) => Some(parsed),
+            None => {
+                ctx.send(
+                    CreateReply::default().ephemeral(true).embed(
+                        embed_base("Invalid chart type").description(format!(
+                            "Unknown chart type `{}`. Use one of: `st`/`std`/`standard` or `dx`/`deluxe`.",
+                            raw.trim()
+                        )),
+                    ),
+                )
+                .await?;
+                send_pending_record_collector_update_warning(ctx, pending_warning).await?;
+                return Ok(());
+            }
+        },
+        None => None,
+    };
+
+    let difficulty_filter = match difficulty.as_deref() {
+        Some(raw) => match parse_mai_score_difficulty(raw) {
+            Some(parsed) => Some(parsed),
+            None => {
+                ctx.send(
+                    CreateReply::default().ephemeral(true).embed(
+                        embed_base("Invalid difficulty").description(format!(
+                            "Unknown difficulty `{}`. Use one of: `basic`/`bas`/`b`, `advanced`/`adv`/`a`, `expert`/`exp`/`e`, `master`/`mas`/`m`, `remaster`/`rem`/`r`.",
+                            raw.trim()
+                        )),
+                    ),
+                )
+                .await?;
+                send_pending_record_collector_update_warning(ctx, pending_warning).await?;
+                return Ok(());
+            }
+        },
+        None => None,
+    };
 
     let matched_songs = search_song_catalog(&ctx.data().song_database_client, requested_title)
         .await
@@ -300,6 +343,10 @@ pub(crate) async fn mai_score(
         .await
     {
         Ok(mut v) => {
+            v.retain(|s| {
+                chart_type_filter.is_none_or(|ct| s.chart_type == ct)
+                    && difficulty_filter.is_none_or(|dc| s.diff_category == dc)
+            });
             v.sort_by_key(|s| (s.chart_type.as_u8(), s.diff_category));
             v
         }
@@ -1407,6 +1454,25 @@ fn build_region_unreleased_line(sheets: &[SongCatalogSheet]) -> Option<String> {
     }
 }
 
+fn parse_mai_score_chart_type(value: &str) -> Option<models::ChartType> {
+    match value.trim().to_ascii_lowercase().as_str() {
+        "st" | "std" | "standard" => Some(models::ChartType::Std),
+        "dx" | "deluxe" => Some(models::ChartType::Dx),
+        _ => None,
+    }
+}
+
+fn parse_mai_score_difficulty(value: &str) -> Option<models::DifficultyCategory> {
+    match value.trim().to_ascii_lowercase().as_str() {
+        "b" | "bas" | "basic" => Some(models::DifficultyCategory::Basic),
+        "a" | "adv" | "advanced" => Some(models::DifficultyCategory::Advanced),
+        "e" | "exp" | "expert" => Some(models::DifficultyCategory::Expert),
+        "m" | "mas" | "master" => Some(models::DifficultyCategory::Master),
+        "r" | "rem" | "remaster" => Some(models::DifficultyCategory::ReMaster),
+        _ => None,
+    }
+}
+
 fn is_ap_like(fc: Option<&models::FcStatus>) -> bool {
     matches!(
         fc,
@@ -1488,10 +1554,10 @@ fn chart_rating_points(internal_level: f64, achievement_percent: f64, ap_bonus: 
 mod tests {
     use super::{
         find_song_candidates, format_song_alias_summary, format_song_candidate_details,
-        latest_credit_len,
+        latest_credit_len, parse_mai_score_chart_type, parse_mai_score_difficulty,
     };
     use maimai_client::SongCatalogSong;
-    use models::SongAliases;
+    use models::{ChartType, DifficultyCategory, SongAliases};
 
     #[test]
     fn latest_credit_len_uses_first_track_one_boundary() {
@@ -1580,6 +1646,40 @@ mod tests {
 
         assert_eq!(matches.len(), 1);
         assert_eq!(matches[0].title, "Real Title");
+    }
+
+    #[test]
+    fn parse_mai_score_chart_type_accepts_known_aliases() {
+        for raw in ["st", "std", "standard", "STD", " Standard "] {
+            assert_eq!(parse_mai_score_chart_type(raw), Some(ChartType::Std));
+        }
+        for raw in ["dx", "deluxe", "DX", " DeLuXe "] {
+            assert_eq!(parse_mai_score_chart_type(raw), Some(ChartType::Dx));
+        }
+        assert_eq!(parse_mai_score_chart_type("unknown"), None);
+    }
+
+    #[test]
+    fn parse_mai_score_difficulty_accepts_known_aliases() {
+        let cases = [
+            (DifficultyCategory::Basic, ["b", "bas", "basic"]),
+            (DifficultyCategory::Advanced, ["a", "adv", "advanced"]),
+            (DifficultyCategory::Expert, ["e", "exp", "expert"]),
+            (DifficultyCategory::Master, ["m", "mas", "master"]),
+            (DifficultyCategory::ReMaster, ["r", "rem", "remaster"]),
+        ];
+
+        for (expected, aliases) in cases {
+            for raw in aliases {
+                assert_eq!(parse_mai_score_difficulty(raw), Some(expected));
+                assert_eq!(
+                    parse_mai_score_difficulty(&raw.to_uppercase()),
+                    Some(expected)
+                );
+            }
+        }
+
+        assert_eq!(parse_mai_score_difficulty("utage"), None);
     }
 
     fn test_song(title: &str, alias: &str) -> SongCatalogSong {
