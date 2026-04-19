@@ -1207,14 +1207,18 @@ async fn send_no_records_found_reply(
     ctx: Context<'_>,
     song: &SongCatalogSong,
 ) -> Result<(), Error> {
-    let mut embed = embed_base(&song.title).description("No records found.");
-
-    if let Some(image_name) = song.image_name.as_deref() {
-        embed = embed.thumbnail(ctx.data().song_database_client.cover_url(image_name));
+    let mut info_song = song.clone();
+    info_song
+        .sheets
+        .sort_by_key(|sheet| (sheet.chart_type.as_u8(), sheet.diff_category.as_u8()));
+    let mut info_embed = build_song_info_embed(&info_song);
+    if let Some(image_name) = info_song.image_name.as_deref() {
+        info_embed = info_embed.thumbnail(ctx.data().song_database_client.cover_url(image_name));
     }
 
     ctx.send(CreateReply {
-        embeds: vec![embed],
+        content: Some("No records found. Showing song info instead.".to_string()),
+        embeds: vec![info_embed],
         ephemeral: Some(true),
         ..Default::default()
     })
