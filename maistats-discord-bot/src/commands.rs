@@ -722,9 +722,101 @@ pub(crate) async fn mai_today(ctx: Context<'_>) -> Result<(), Error> {
     let display_name = load_player_display_name(&record_collector_client).await;
     let embed = build_mai_today_embed(&display_name, &start, &end, credits, tracks, new_records);
 
-    ctx.send(CreateReply::default().embed(embed)).await?;
+    let mut reply = CreateReply::default().embed(embed);
+    match build_mai_today_plot(ctx, &plays, &today_str, now_jst, offset).await {
+        Ok(Some(png)) => {
+            use poise::serenity_prelude::builder::CreateAttachment;
+            reply = reply.attachment(CreateAttachment::bytes(png, "today.png"));
+        }
+        Ok(None) => {}
+        Err(err) => {
+            warn!("mai-today plot generation failed: {err:?}");
+        }
+    }
+
+    ctx.send(reply).await?;
     send_pending_record_collector_update_warning(ctx, pending_warning).await?;
     Ok(())
+}
+
+/// Build a scatter plot PNG of today's plays across the full 1.0-15.0 level range.
+/// Returns `Ok(None)` if there is nothing to plot (no plays, or none could be
+/// resolved against the song catalog).
+async fn build_mai_today_plot(
+    ctx: Context<'_>,
+    plays: &[models::PlayRecordApiResponse],
+    today_str: &str,
+    now_jst: OffsetDateTime,
+    jst: UtcOffset,
+) -> Result<Option<Vec<u8>>, Error> {
+    if plays.is_empty() {
+        return Ok(None);
+    }
+
+    let catalog = ctx
+        .data()
+        .song_database_client
+        .list_song_catalog()
+        .await
+        .wrap_err("fetch song catalog")?;
+
+    let level_map = plot::build_level_map(&catalog);
+
+    let mut points: Vec<(f64, i32, f64)> = Vec::new();
+    for play in plays {
+        let Some(achievement) = play.achievement_x10000 else {
+            continue;
+        };
+        let Some(diff_category) = play.diff_category else {
+            continue;
+        };
+        let (Some(genre), Some(artist)) = (play.genre.as_ref(), play.artist.as_ref()) else {
+            continue;
+        };
+        let key = (
+            play.title.clone(),
+            genre.clone(),
+            artist.clone(),
+            play.chart_type,
+            diff_category,
+        );
+        let Some(&il_tenths) = level_map.get(&key) else {
+            continue;
+        };
+
+        let elapsed_days = play
+            .played_at
+            .as_deref()
+            .and_then(|s| plot::parse_jst_played_at(s, jst))
+            .map(|dt| (now_jst - dt).as_seconds_f64() / (60.0 * 60.0 * 24.0))
+            .unwrap_or(0.0)
+            .max(0.0);
+
+        points.push((achievement as f64 / 10000.0, il_tenths, elapsed_days));
+    }
+
+    if points.is_empty() {
+        return Ok(None);
+    }
+
+    let min_achievement = points
+        .iter()
+        .map(|&(x, _, _)| x)
+        .fold(f64::INFINITY, f64::min);
+    let x_min = min_achievement.min(100.5);
+
+    let total = points.len();
+    let title = format!(
+        "{}  —  {} play{}",
+        today_str,
+        total,
+        if total == 1 { "" } else { "s" }
+    );
+
+    let png = plot::generate_scatter_plot(&points, x_min, Some(&title))
+        .await
+        .wrap_err("generate scatter plot")?;
+    Ok(Some(png))
 }
 
 /// Start a mai-updown random session in a thread
@@ -843,22 +935,6 @@ pub(crate) async fn mai_plot(
     let now_jst = OffsetDateTime::now_utc().to_offset(jst);
     const PLOT_WINDOW_DAYS: f64 = 90.0;
 
-    // Parse a "YYYY/MM/DD HH:MM" JST timestamp into an OffsetDateTime, or None.
-    fn parse_jst_played_at(s: &str, jst: UtcOffset) -> Option<OffsetDateTime> {
-        if s.len() != 16 {
-            return None;
-        }
-        let year: i32 = s.get(0..4)?.parse().ok()?;
-        let month_num: u8 = s.get(5..7)?.parse().ok()?;
-        let day: u8 = s.get(8..10)?.parse().ok()?;
-        let hour: u8 = s.get(11..13)?.parse().ok()?;
-        let minute: u8 = s.get(14..16)?.parse().ok()?;
-        let month = time::Month::try_from(month_num).ok()?;
-        let date = time::Date::from_calendar_date(year, month, day).ok()?;
-        let tm = time::Time::from_hms(hour, minute, 0).ok()?;
-        Some(date.with_time(tm).assume_offset(jst))
-    }
-
     let scores = record_collector_client
         .get_all_rated_scores()
         .await
@@ -871,29 +947,7 @@ pub(crate) async fn mai_plot(
         .await
         .wrap_err("fetch song catalog")?;
 
-    // Build lookup: (title, genre, artist, chart_type, diff_category) → internal_level_tenths
-    use models::{ChartType, DifficultyCategory};
-    use std::collections::HashMap;
-
-    let mut level_map: HashMap<(String, String, String, ChartType, DifficultyCategory), i32> =
-        HashMap::new();
-    for song in &catalog {
-        for sheet in &song.sheets {
-            if let Some(il) = sheet.internal_level {
-                let il_tenths = (il * 10.0).round() as i32;
-                level_map.insert(
-                    (
-                        song.title.clone(),
-                        song.genre.clone(),
-                        song.artist.clone(),
-                        sheet.chart_type,
-                        sheet.diff_category,
-                    ),
-                    il_tenths,
-                );
-            }
-        }
-    }
+    let level_map = plot::build_level_map(&catalog);
 
     const MIN_ACHIEVEMENT: i64 = 900_000; // 90.0000%
 
@@ -911,7 +965,7 @@ pub(crate) async fn mai_plot(
         let Some(ref last_played) = score.last_played_at else {
             continue;
         };
-        let Some(last_played_dt) = parse_jst_played_at(last_played, jst) else {
+        let Some(last_played_dt) = plot::parse_jst_played_at(last_played, jst) else {
             continue;
         };
         let elapsed_days = (now_jst - last_played_dt).as_seconds_f64() / (60.0 * 60.0 * 24.0);
@@ -954,7 +1008,7 @@ pub(crate) async fn mai_plot(
         .fold(f64::INFINITY, f64::min);
     let x_min = min_achievement.min(100.5);
 
-    let png = plot::generate_scatter_plot(&points, x_min)
+    let png = plot::generate_scatter_plot(&points, x_min, None)
         .await
         .wrap_err("generate scatter plot")?;
 
