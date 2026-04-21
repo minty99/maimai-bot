@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::ops::RangeInclusive;
 use std::process::Stdio;
 
 use eyre::{Result, WrapErr};
@@ -10,6 +11,110 @@ use tokio::process::Command;
 
 /// Path to the Python plot script, relative to the working directory.
 const PLOT_SCRIPT: &str = "scripts/mai_plot.py";
+
+/// Minimum achievement (as `percent * 10000`) plotted on scatter charts.
+/// Records below 90.0000% are excluded.
+const MIN_ACHIEVEMENT_X10000: i64 = 900_000;
+
+/// Normalized view of a single record fed into the scatter-plot pipeline.
+///
+/// Each source type (`PlayRecordApiResponse`, `ScoreApiResponse`, …) is
+/// adapted into this shape by the caller. Fields that may be missing on the
+/// upstream struct are modeled as `Option` so the shared pipeline can apply a
+/// uniform "drop if unknown" rule without knowing the origin.
+pub(crate) struct PlotInputRecord<'a> {
+    pub achievement_x10000: Option<i64>,
+    pub title: &'a str,
+    pub genre: Option<&'a str>,
+    pub artist: Option<&'a str>,
+    pub chart_type: ChartType,
+    pub diff_category: Option<DifficultyCategory>,
+    pub played_at: Option<&'a str>,
+}
+
+/// Filters applied inside `build_plot_points`.
+///
+/// * `day_range` — when `Some`, records missing a valid `played_at` are
+///   dropped and records outside the range are dropped. When `None`,
+///   missing/malformed timestamps fall back to `0.0` days elapsed (used by
+///   callers that already restrict the input to a known recent window).
+/// * `level_range_tenths` — when `Some`, records whose internal level (in
+///   tenths) fall outside the inclusive range are dropped.
+pub(crate) struct PlotFilter {
+    pub day_range: Option<RangeInclusive<f64>>,
+    pub level_range_tenths: Option<RangeInclusive<i32>>,
+}
+
+/// Convert normalized records into scatter-plot points, applying the 90%
+/// achievement floor plus the caller-supplied filter. Records are dropped
+/// silently when any required field (achievement, genre, artist,
+/// `diff_category`, level-map entry) is missing.
+pub(crate) fn build_plot_points<'a>(
+    records: impl IntoIterator<Item = PlotInputRecord<'a>>,
+    level_map: &HashMap<LevelMapKey, i32>,
+    now_jst: OffsetDateTime,
+    jst: UtcOffset,
+    filter: &PlotFilter,
+) -> Vec<(f64, i32, f64)> {
+    records
+        .into_iter()
+        .filter_map(|rec| {
+            let achievement = rec.achievement_x10000?;
+            if achievement < MIN_ACHIEVEMENT_X10000 {
+                return None;
+            }
+            let genre = rec.genre?;
+            let artist = rec.artist?;
+            let diff_category = rec.diff_category?;
+            let key = (
+                rec.title.to_string(),
+                genre.to_string(),
+                artist.to_string(),
+                rec.chart_type,
+                diff_category,
+            );
+            let &il_tenths = level_map.get(&key)?;
+            if let Some(range) = filter.level_range_tenths.as_ref()
+                && !range.contains(&il_tenths)
+            {
+                return None;
+            }
+            let elapsed_days = match (
+                filter.day_range.as_ref(),
+                elapsed_days_since(rec.played_at, now_jst, jst),
+            ) {
+                (Some(range), Some(d)) if range.contains(&d) => d,
+                (Some(_), _) => return None,
+                (None, Some(d)) => d.max(0.0),
+                (None, None) => 0.0,
+            };
+            Some((achievement as f64 / 10000.0, il_tenths, elapsed_days))
+        })
+        .collect()
+}
+
+/// Compute the X-axis left edge for a scatter plot of `(achievement_pct, _, _)`
+/// points: the minimum achievement, capped at 100.5 so the axis always extends
+/// through the perfect-play zone.
+pub(crate) fn compute_x_min(points: &[(f64, i32, f64)]) -> f64 {
+    points
+        .iter()
+        .map(|&(x, _, _)| x)
+        .fold(f64::INFINITY, f64::min)
+        .min(100.5)
+}
+
+/// Days between a JST-formatted timestamp and `now_jst`. Returns `None` when
+/// the input is missing or malformed.
+fn elapsed_days_since(
+    played_at: Option<&str>,
+    now_jst: OffsetDateTime,
+    jst: UtcOffset,
+) -> Option<f64> {
+    played_at
+        .and_then(|s| parse_jst_played_at(s, jst))
+        .map(|dt| (now_jst - dt).as_seconds_f64() / (60.0 * 60.0 * 24.0))
+}
 
 /// Generate a PNG scatter plot by delegating to the Python script via `uv run`.
 ///
