@@ -18,7 +18,9 @@ Input (stdin, JSON):
       {"achievement": <float>, "level_tenths": <int>, "days_elapsed": <float>},
       ...
     ],
-    "x_min": <float>   -- lower bound of the Y (achievement) axis
+    "x_min": <float>,            -- lower bound of the Y (achievement) axis
+    "title": <str | optional>    -- override plot title; default is
+                                    "Lv {min}-{max} - N songs (last 3 months, >=90%)"
   }
 
   Each point represents one song's best score. Points are colored by
@@ -126,6 +128,7 @@ def main() -> None:
     data = json.loads(sys.stdin.buffer.read())
     raw_points: list[dict] = data["points"]
     x_min: float = data["x_min"]
+    title_override: str | None = data.get("title")
 
     # Determine distinct levels present and assign colors
     levels: list[int] = sorted(set(p["level_tenths"] for p in raw_points))
@@ -230,11 +233,14 @@ def main() -> None:
 
     # Chart title — positioned inside the top margin
     n = len(raw_points)
-    if n_levels == 1:
-        level_label = f"Lv {levels[0] / 10:.1f}"
+    if title_override is not None:
+        title = title_override
     else:
-        level_label = f"Lv {levels[0] / 10:.1f}\u2013{levels[-1] / 10:.1f}"
-    title = f"{level_label}  \u2014  {n} song{'s' if n != 1 else ''} (last 3 months, \u226590%)"
+        if n_levels == 1:
+            level_label = f"Lv {levels[0] / 10:.1f}"
+        else:
+            level_label = f"Lv {levels[0] / 10:.1f}\u2013{levels[-1] / 10:.1f}"
+        title = f"{level_label}  \u2014  {n} song{'s' if n != 1 else ''} (last 3 months, \u226590%)"
 
     # Scale width with number of levels (each lane ~110px), capped at 1200
     fig_width = min(1200, max(450, 110 * n_levels + 220))
