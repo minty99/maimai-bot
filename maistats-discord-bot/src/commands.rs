@@ -762,48 +762,30 @@ async fn build_mai_today_plot(
 
     let level_map = plot::build_level_map(&catalog);
 
-    let mut points: Vec<(f64, i32, f64)> = Vec::new();
-    for play in plays {
-        let Some(achievement) = play.achievement_x10000 else {
-            continue;
-        };
-        let Some(diff_category) = play.diff_category else {
-            continue;
-        };
-        let (Some(genre), Some(artist)) = (play.genre.as_ref(), play.artist.as_ref()) else {
-            continue;
-        };
-        let key = (
-            play.title.clone(),
-            genre.clone(),
-            artist.clone(),
-            play.chart_type,
-            diff_category,
-        );
-        let Some(&il_tenths) = level_map.get(&key) else {
-            continue;
-        };
-
-        let elapsed_days = play
-            .played_at
-            .as_deref()
-            .and_then(|s| plot::parse_jst_played_at(s, jst))
-            .map(|dt| (now_jst - dt).as_seconds_f64() / (60.0 * 60.0 * 24.0))
-            .unwrap_or(0.0)
-            .max(0.0);
-
-        points.push((achievement as f64 / 10000.0, il_tenths, elapsed_days));
-    }
+    let points = plot::build_plot_points(
+        plays.iter().map(|p| plot::PlotInputRecord {
+            achievement_x10000: p.achievement_x10000,
+            title: &p.title,
+            genre: p.genre.as_deref(),
+            artist: p.artist.as_deref(),
+            chart_type: p.chart_type,
+            diff_category: p.diff_category,
+            played_at: p.played_at.as_deref(),
+        }),
+        &level_map,
+        now_jst,
+        jst,
+        &plot::PlotFilter {
+            day_range: None,
+            level_range_tenths: None,
+        },
+    );
 
     if points.is_empty() {
         return Ok(None);
     }
 
-    let min_achievement = points
-        .iter()
-        .map(|&(x, _, _)| x)
-        .fold(f64::INFINITY, f64::min);
-    let x_min = min_achievement.min(100.5);
+    let x_min = plot::compute_x_min(&points);
 
     let total = points.len();
     let title = format!(
@@ -949,46 +931,24 @@ pub(crate) async fn mai_plot(
 
     let level_map = plot::build_level_map(&catalog);
 
-    const MIN_ACHIEVEMENT: i64 = 900_000; // 90.0000%
-
-    // Each point: (achievement_percent, level_tenths, days_elapsed)
-    let mut points: Vec<(f64, i32, f64)> = Vec::new();
-
-    for score in &scores {
-        let Some(achievement) = score.achievement_x10000 else {
-            continue;
-        };
-        if achievement < MIN_ACHIEVEMENT {
-            continue;
-        }
-
-        let Some(ref last_played) = score.last_played_at else {
-            continue;
-        };
-        let Some(last_played_dt) = plot::parse_jst_played_at(last_played, jst) else {
-            continue;
-        };
-        let elapsed_days = (now_jst - last_played_dt).as_seconds_f64() / (60.0 * 60.0 * 24.0);
-        if !(0.0..=PLOT_WINDOW_DAYS).contains(&elapsed_days) {
-            continue;
-        }
-
-        let key = (
-            score.title.clone(),
-            score.genre.clone(),
-            score.artist.clone(),
-            score.chart_type,
-            score.diff_category,
-        );
-        let Some(&il_tenths) = level_map.get(&key) else {
-            continue;
-        };
-        if il_tenths < from_tenths || il_tenths > to_tenths {
-            continue;
-        }
-
-        points.push((achievement as f64 / 10000.0, il_tenths, elapsed_days));
-    }
+    let points = plot::build_plot_points(
+        scores.iter().map(|s| plot::PlotInputRecord {
+            achievement_x10000: s.achievement_x10000,
+            title: &s.title,
+            genre: Some(&s.genre),
+            artist: Some(&s.artist),
+            chart_type: s.chart_type,
+            diff_category: Some(s.diff_category),
+            played_at: s.last_played_at.as_deref(),
+        }),
+        &level_map,
+        now_jst,
+        jst,
+        &plot::PlotFilter {
+            day_range: Some(0.0..=PLOT_WINDOW_DAYS),
+            level_range_tenths: Some(from_tenths..=to_tenths),
+        },
+    );
 
     if points.is_empty() {
         ctx.send(CreateReply::default().embed(
@@ -1002,11 +962,7 @@ pub(crate) async fn mai_plot(
     }
 
     let total = points.len();
-    let min_achievement = points
-        .iter()
-        .map(|&(x, _, _)| x)
-        .fold(f64::INFINITY, f64::min);
-    let x_min = min_achievement.min(100.5);
+    let x_min = plot::compute_x_min(&points);
 
     let png = plot::generate_scatter_plot(&points, x_min, None)
         .await
