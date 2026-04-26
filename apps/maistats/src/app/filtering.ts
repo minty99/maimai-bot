@@ -79,7 +79,7 @@ export function buildFilteredScoreRows({
 
   const isIncluded = (row: ScoreRow): boolean => {
     const hasPlayRecord = row.playCount !== null && row.playCount > 0;
-    const targetText = `${row.title} ${aliasValues(row.aliases, "en").join(" ")} ${aliasValues(row.aliases, "ko").join(" ")} ${row.version ?? ""} ${row.level ?? ""}`;
+    const targetText = `${row.title} ${row.artist} ${aliasValues(row.aliases, "en").join(" ")} ${aliasValues(row.aliases, "ko").join(" ")} ${row.version ?? ""} ${row.level ?? ""}`;
     if (!includesText(targetText, query)) {
       return false;
     }
@@ -301,7 +301,7 @@ export function buildFilteredPlaylogRows({
 
     if (
       !includesText(
-        `${row.title} ${aliasValues(row.aliases, "en").join(" ")} ${aliasValues(row.aliases, "ko").join(" ")} ${row.playedAtLabel ?? ""}`,
+        `${row.title} ${row.artist} ${aliasValues(row.aliases, "en").join(" ")} ${aliasValues(row.aliases, "ko").join(" ")} ${row.playedAtLabel ?? ""}`,
         playlogQuery,
       )
     ) {
