@@ -4,7 +4,7 @@ import { buildFilteredPlaylogRows, buildFilteredScoreRows } from './filtering';
 import { DEFAULT_SCORE_FILTERS } from './scoreFilterPresets';
 import type { PlaylogRow, ScoreRow } from '../types';
 
-function buildPlaylogRow(key: string): PlaylogRow {
+function buildPlaylogRow(key: string, overrides: Partial<PlaylogRow> = {}): PlaylogRow {
   return {
     key,
     songKey: 'song-1',
@@ -32,6 +32,7 @@ function buildPlaylogRow(key: string): PlaylogRow {
     creditId: 1,
     isNewRecord: true,
     imageName: null,
+    ...overrides,
   };
 }
 
@@ -68,6 +69,35 @@ function buildScoreRow(key: string, overrides: Partial<ScoreRow> = {}): ScoreRow
 }
 
 describe('buildFilteredScoreRows', () => {
+  it('matches rows by artist', () => {
+    const rows = buildFilteredScoreRows({
+      scoreData: [
+        buildScoreRow('match', { artist: 'Searchable Artist' }),
+        buildScoreRow('miss', { artist: 'Other Artist' }),
+      ],
+      locale: 'ko-KR',
+      query: 'searchable',
+      chartFilter: ['DX'],
+      difficultyFilter: ['MASTER'],
+      versionSelection: 'ALL',
+      playedOnly: DEFAULT_SCORE_FILTERS.playedOnly,
+      versionOptions: [],
+      fcFilter: [],
+      syncFilter: [],
+      achievementMin: 0,
+      achievementMax: 101,
+      internalMin: 1,
+      internalMax: 15.5,
+      daysMin: 0,
+      daysMax: 2000,
+      scoreSortKey: 'title',
+      scoreSortDesc: false,
+    });
+
+    expect(rows).toHaveLength(1);
+    expect(rows[0]?.key).toBe('match');
+  });
+
   it('keeps rows without play records when played-only is disabled', () => {
     const rows = buildFilteredScoreRows({
       scoreData: [
@@ -151,6 +181,30 @@ describe('buildFilteredScoreRows', () => {
 });
 
 describe('buildFilteredPlaylogRows', () => {
+  it('matches rows by artist', () => {
+    const rows = buildFilteredPlaylogRows({
+      playlogData: [
+        buildPlaylogRow('match', { artist: 'Searchable Artist' }),
+        buildPlaylogRow('miss', { artist: 'Other Artist' }),
+      ],
+      locale: 'ko-KR',
+      playlogQuery: 'searchable',
+      playlogChartFilter: ['DX'],
+      playlogDifficultyFilter: ['MASTER'],
+      playlogAchievementMin: 0,
+      playlogAchievementMax: 101,
+      playlogBestOnly: false,
+      playlogNewRecordOnly: false,
+      playlogSortKey: 'playedAt',
+      playlogSortDesc: true,
+      playlogDayStartUnix: null,
+      playlogDayEndUnix: null,
+    });
+
+    expect(rows).toHaveLength(1);
+    expect(rows[0]?.key).toBe('match');
+  });
+
   it('uses a locale-independent tiebreaker when best-only is enabled', () => {
     const rows = buildFilteredPlaylogRows({
       playlogData: [buildPlaylogRow('100-1'), buildPlaylogRow('100-2')],
