@@ -15,7 +15,13 @@ X axis: uniform random jitter (no information, purely for visual spread)
 Input (stdin, JSON):
   {
     "points": [
-      {"achievement": <float>, "level_tenths": <int>, "days_elapsed": <float>},
+      {
+        "achievement": <float>,
+        "level_tenths": <int>,
+        "days_elapsed": <float>,
+        "is_new_record": <bool | optional>,
+        "previous_achievement": <float | null | optional>
+      },
       ...
     ],
     "x_min": <float>,            -- lower bound of the Y (achievement) axis
@@ -152,6 +158,8 @@ def main() -> None:
         group = [p for p in raw_points if p["level_tenths"] == level_tenths]
         # X: lane center + jitter
         x_vals = (idx + rng.uniform(-JITTER, JITTER, size=len(group))).tolist()
+        for point, x_val in zip(group, x_vals):
+            point["_plot_x"] = float(x_val)
         # Y: achievement %
         y_vals = [p["achievement"] for p in group]
         # Per-point rgba color: same hue per level, alpha fades with age
@@ -160,19 +168,92 @@ def main() -> None:
             hex_to_rgba(base_hex, age_alpha(float(p.get("days_elapsed", 0.0))))
             for p in group
         ]
+        for point, color in zip(group, colors):
+            point["_plot_color"] = color
 
         fig.add_trace(
             go.Scatter(
-                x=x_vals,
-                y=y_vals,
+                x=[
+                    x_val
+                    for x_val, point in zip(x_vals, group)
+                    if not point.get("is_new_record")
+                ],
+                y=[
+                    achievement
+                    for achievement, point in zip(y_vals, group)
+                    if not point.get("is_new_record")
+                ],
                 mode="markers",
                 name=f"Lv {level_tenths / 10:.1f}",
                 marker=dict(
                     size=11,
-                    color=colors,
+                    color=[
+                        color
+                        for color, point in zip(colors, group)
+                        if not point.get("is_new_record")
+                    ],
                     line=dict(width=0.6, color="rgba(0, 0, 0, 0.35)"),
                 ),
             )
+        )
+
+        previous_record_marks = [
+            p
+            for p in group
+            if p.get("is_new_record") and p.get("previous_achievement") is not None
+        ]
+        if previous_record_marks:
+            fig.add_trace(
+                go.Scatter(
+                    x=[p["_plot_x"] for p in previous_record_marks],
+                    y=[p["previous_achievement"] for p in previous_record_marks],
+                    mode="markers",
+                    marker=dict(
+                        symbol="line-ew",
+                        size=11,
+                        line=dict(
+                            width=1.6,
+                            color=[p["_plot_color"] for p in previous_record_marks],
+                        ),
+                    ),
+                    hoverinfo="skip",
+                    showlegend=False,
+                )
+            )
+
+        new_record_points = [p for p in group if p.get("is_new_record")]
+        if new_record_points:
+            fig.add_trace(
+                go.Scatter(
+                    x=[p["_plot_x"] for p in new_record_points],
+                    y=[p["achievement"] for p in new_record_points],
+                    mode="markers",
+                    marker=dict(
+                        symbol="star",
+                        size=13,
+                        color=[p["_plot_color"] for p in new_record_points],
+                        line=dict(width=0.6, color="rgba(0, 0, 0, 0.35)"),
+                    ),
+                    hoverinfo="skip",
+                    showlegend=False,
+                )
+            )
+
+    # Thin vertical connector from previous best to today's new record.
+    # Layer "below" so the star marker visually caps the line top.
+    for point in raw_points:
+        previous_achievement = point.get("previous_achievement")
+        if not point.get("is_new_record") or previous_achievement is None:
+            continue
+
+        fig.add_shape(
+            type="line",
+            x0=point["_plot_x"],
+            x1=point["_plot_x"],
+            y0=previous_achievement,
+            y1=point["achievement"],
+            line=dict(color=point["_plot_color"], width=1.3),
+            layer="below",
         )
 
     # Lane separator lines between adjacent levels
