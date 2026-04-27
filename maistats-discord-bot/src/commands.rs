@@ -40,6 +40,7 @@ type Context<'a> = poise::Context<'a, BotData, Box<dyn std::error::Error + Send 
 type Error = Box<dyn std::error::Error + Send + Sync>;
 const VERSION_WARNING_INTERVAL_SECONDS: i64 = 24 * 60 * 60;
 const VERSION_STATUS_CACHE_TTL: Duration = Duration::from_secs(300);
+const PLAYLOG_HISTORY_LIMIT: usize = 10_000;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum RecordCollectorVersionIssue {
@@ -723,7 +724,16 @@ pub(crate) async fn mai_today(ctx: Context<'_>) -> Result<(), Error> {
     let embed = build_mai_today_embed(&display_name, &start, &end, credits, tracks, new_records);
 
     let mut reply = CreateReply::default().embed(embed);
-    match build_mai_today_plot(ctx, &plays, &today_str, now_jst, offset).await {
+    match build_mai_today_plot(
+        ctx,
+        &record_collector_client,
+        &plays,
+        &today_str,
+        now_jst,
+        offset,
+    )
+    .await
+    {
         Ok(Some(png)) => {
             use poise::serenity_prelude::builder::CreateAttachment;
             reply = reply.attachment(CreateAttachment::bytes(png, "today.png"));
@@ -744,6 +754,7 @@ pub(crate) async fn mai_today(ctx: Context<'_>) -> Result<(), Error> {
 /// resolved against the song catalog).
 async fn build_mai_today_plot(
     ctx: Context<'_>,
+    record_collector_client: &RecordCollectorClient,
     plays: &[models::PlayRecordApiResponse],
     today_str: &str,
     now_jst: OffsetDateTime,
@@ -761,6 +772,12 @@ async fn build_mai_today_plot(
         .wrap_err("fetch song catalog")?;
 
     let level_map = plot::build_level_map(&catalog);
+    let recent_playlogs = record_collector_client
+        .get_recent(PLAYLOG_HISTORY_LIMIT)
+        .await
+        .wrap_err("fetch recent playlogs")?;
+    let previous_achievement_by_played_at =
+        previous_new_record_achievements_by_played_at(plays, &recent_playlogs);
 
     let points = plot::build_plot_points(
         plays.iter().map(|p| plot::PlotInputRecord {
@@ -771,6 +788,10 @@ async fn build_mai_today_plot(
             chart_type: p.chart_type,
             diff_category: p.diff_category,
             played_at: p.played_at.as_deref(),
+            is_new_record: p.achievement_new_record.unwrap_or(0) != 0,
+            previous_achievement_x10000: previous_achievement_by_played_at
+                .get(&p.played_at_unixtime)
+                .copied(),
         }),
         &level_map,
         now_jst,
@@ -799,6 +820,45 @@ async fn build_mai_today_plot(
         .await
         .wrap_err("generate scatter plot")?;
     Ok(Some(png))
+}
+
+fn previous_new_record_achievements_by_played_at(
+    plays: &[models::PlayRecordApiResponse],
+    playlog_history: &[models::PlayRecordApiResponse],
+) -> HashMap<i64, i64> {
+    plays
+        .iter()
+        .filter(|play| play.achievement_new_record.unwrap_or(0) != 0)
+        .filter_map(|play| {
+            previous_best_achievement_x10000(play, playlog_history)
+                .map(|previous| (play.played_at_unixtime, previous))
+        })
+        .collect()
+}
+
+fn previous_best_achievement_x10000(
+    play: &models::PlayRecordApiResponse,
+    playlog_history: &[models::PlayRecordApiResponse],
+) -> Option<i64> {
+    playlog_history
+        .iter()
+        .filter(|candidate| {
+            candidate.played_at_unixtime < play.played_at_unixtime
+                && same_playlog_chart_identity(candidate, play)
+        })
+        .filter_map(|candidate| candidate.achievement_x10000)
+        .max()
+}
+
+fn same_playlog_chart_identity(
+    left: &models::PlayRecordApiResponse,
+    right: &models::PlayRecordApiResponse,
+) -> bool {
+    left.title == right.title
+        && left.genre == right.genre
+        && left.artist == right.artist
+        && left.chart_type == right.chart_type
+        && left.diff_category == right.diff_category
 }
 
 /// Start a mai-updown random session in a thread
@@ -940,6 +1000,8 @@ pub(crate) async fn mai_plot(
             chart_type: s.chart_type,
             diff_category: Some(s.diff_category),
             played_at: s.last_played_at.as_deref(),
+            is_new_record: false,
+            previous_achievement_x10000: None,
         }),
         &level_map,
         now_jst,
@@ -1502,10 +1564,10 @@ fn chart_rating_points(internal_level: f64, achievement_percent: f64, ap_bonus: 
 mod tests {
     use super::{
         find_song_candidates, format_song_alias_summary, format_song_candidate_details,
-        latest_credit_len,
+        latest_credit_len, previous_new_record_achievements_by_played_at,
     };
     use maimai_client::SongCatalogSong;
-    use models::SongAliases;
+    use models::{ChartType, DifficultyCategory, PlayRecordApiResponse, SongAliases};
 
     #[test]
     fn latest_credit_len_uses_first_track_one_boundary() {
@@ -1596,6 +1658,36 @@ mod tests {
         assert_eq!(matches[0].title, "Real Title");
     }
 
+    #[test]
+    fn previous_new_record_achievement_uses_best_prior_matching_playlog() {
+        let target = test_playlog(300, "Song A", Some("POPS"), Some(990_000), true);
+        let result = previous_new_record_achievements_by_played_at(
+            std::slice::from_ref(&target),
+            &[
+                test_playlog(100, "Song A", Some("POPS"), Some(930_000), false),
+                test_playlog(200, "Song A", Some("POPS"), Some(960_000), false),
+                test_playlog(250, "Song B", Some("POPS"), Some(980_000), false),
+                target.clone(),
+            ],
+        );
+
+        assert_eq!(result.get(&300), Some(&960_000));
+    }
+
+    #[test]
+    fn previous_new_record_achievement_requires_known_prior_record() {
+        let target = test_playlog(300, "Song A", Some("POPS"), Some(990_000), true);
+        let result = previous_new_record_achievements_by_played_at(
+            &[target],
+            &[
+                test_playlog(200, "Song A", Some("VARIETY"), Some(960_000), false),
+                test_playlog(400, "Song A", Some("POPS"), Some(995_000), false),
+            ],
+        );
+
+        assert!(result.is_empty());
+    }
+
     fn test_song(title: &str, alias: &str) -> SongCatalogSong {
         SongCatalogSong {
             title: title.to_string(),
@@ -1607,6 +1699,33 @@ mod tests {
                 ko: Vec::new(),
             },
             sheets: Vec::new(),
+        }
+    }
+
+    fn test_playlog(
+        played_at_unixtime: i64,
+        title: &str,
+        genre: Option<&str>,
+        achievement_x10000: Option<i64>,
+        achievement_new_record: bool,
+    ) -> PlayRecordApiResponse {
+        PlayRecordApiResponse {
+            played_at_unixtime,
+            played_at: None,
+            track: None,
+            title: title.to_string(),
+            genre: genre.map(str::to_string),
+            artist: Some("Artist".to_string()),
+            chart_type: ChartType::Dx,
+            diff_category: Some(DifficultyCategory::Master),
+            achievement_x10000,
+            score_rank: None,
+            fc: None,
+            sync: None,
+            dx_score: None,
+            dx_score_max: None,
+            credit_id: None,
+            achievement_new_record: Some(i32::from(achievement_new_record)),
         }
     }
 }

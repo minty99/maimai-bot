@@ -30,6 +30,16 @@ pub(crate) struct PlotInputRecord<'a> {
     pub chart_type: ChartType,
     pub diff_category: Option<DifficultyCategory>,
     pub played_at: Option<&'a str>,
+    pub is_new_record: bool,
+    pub previous_achievement_x10000: Option<i64>,
+}
+
+pub(crate) struct PlotPoint {
+    pub achievement_percent: f64,
+    pub level_tenths: i32,
+    pub days_elapsed: f64,
+    pub is_new_record: bool,
+    pub previous_achievement_percent: Option<f64>,
 }
 
 /// Filters applied inside `build_plot_points`.
@@ -55,7 +65,7 @@ pub(crate) fn build_plot_points<'a>(
     now_jst: OffsetDateTime,
     jst: UtcOffset,
     filter: &PlotFilter,
-) -> Vec<(f64, i32, f64)> {
+) -> Vec<PlotPoint> {
     records
         .into_iter()
         .filter_map(|rec| {
@@ -88,7 +98,17 @@ pub(crate) fn build_plot_points<'a>(
                 (None, Some(d)) => d.max(0.0),
                 (None, None) => 0.0,
             };
-            Some((achievement as f64 / 10000.0, il_tenths, elapsed_days))
+            Some(PlotPoint {
+                achievement_percent: achievement as f64 / 10000.0,
+                level_tenths: il_tenths,
+                days_elapsed: elapsed_days,
+                is_new_record: rec.is_new_record,
+                previous_achievement_percent: rec
+                    .previous_achievement_x10000
+                    .filter(|previous| *previous >= MIN_ACHIEVEMENT_X10000)
+                    .filter(|previous| *previous < achievement)
+                    .map(|previous| previous as f64 / 10000.0),
+            })
         })
         .collect()
 }
@@ -96,10 +116,16 @@ pub(crate) fn build_plot_points<'a>(
 /// Compute the X-axis left edge for a scatter plot of `(achievement_pct, _, _)`
 /// points: the minimum achievement, capped at 100.5 so the axis always extends
 /// through the perfect-play zone.
-pub(crate) fn compute_x_min(points: &[(f64, i32, f64)]) -> f64 {
+pub(crate) fn compute_x_min(points: &[PlotPoint]) -> f64 {
     points
         .iter()
-        .map(|&(x, _, _)| x)
+        .flat_map(|point| {
+            [
+                Some(point.achievement_percent),
+                point.previous_achievement_percent,
+            ]
+        })
+        .flatten()
         .fold(f64::INFINITY, f64::min)
         .min(100.5)
 }
@@ -118,24 +144,25 @@ fn elapsed_days_since(
 
 /// Generate a PNG scatter plot by delegating to the Python script via `uv run`.
 ///
-/// * `points` — `(achievement_percent, level_tenths, days_elapsed)` for each
-///   matching score (e.g. `(100.5234, 130, 12.0)` for a 13.0 chart scored
-///   100.5234% that was last played ~12 days ago). `days_elapsed` is used by
-///   the renderer to fade older plays into the background.
+/// * `points` — plotted score points. `days_elapsed` is used by the renderer to
+///   fade older plays into the background; new-record metadata lets the
+///   renderer draw stars and optional previous-best arrows.
 /// * `x_min`  — left edge of the X axis (caller already clamped to ≤ 100.5).
 /// * `title`  — optional title override; `None` uses the Python script default.
 pub(crate) async fn generate_scatter_plot(
-    points: &[(f64, i32, f64)],
+    points: &[PlotPoint],
     x_min: f64,
     title: Option<&str>,
 ) -> Result<Vec<u8>> {
     let json_points: Vec<serde_json::Value> = points
         .iter()
-        .map(|&(achievement, level_tenths, days_elapsed)| {
+        .map(|point| {
             serde_json::json!({
-                "achievement":   achievement,
-                "level_tenths":  level_tenths,
-                "days_elapsed":  days_elapsed,
+                "achievement":   point.achievement_percent,
+                "level_tenths":  point.level_tenths,
+                "days_elapsed":  point.days_elapsed,
+                "is_new_record": point.is_new_record,
+                "previous_achievement": point.previous_achievement_percent,
             })
         })
         .collect();
@@ -222,4 +249,53 @@ pub(crate) fn parse_jst_played_at(s: &str, jst: UtcOffset) -> Option<OffsetDateT
     let date = time::Date::from_calendar_date(year, month, day).ok()?;
     let tm = time::Time::from_hms(hour, minute, 0).ok()?;
     Some(date.with_time(tm).assume_offset(jst))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{LevelMapKey, PlotFilter, PlotInputRecord, build_plot_points};
+    use models::{ChartType, DifficultyCategory};
+    use std::collections::HashMap;
+    use time::UtcOffset;
+
+    #[test]
+    fn build_plot_points_omits_previous_record_below_plot_floor() {
+        let level_map = level_map();
+        let points = build_plot_points(
+            [PlotInputRecord {
+                achievement_x10000: Some(910_000),
+                title: "Song A",
+                genre: Some("POPS"),
+                artist: Some("Artist"),
+                chart_type: ChartType::Dx,
+                diff_category: Some(DifficultyCategory::Master),
+                played_at: None,
+                is_new_record: true,
+                previous_achievement_x10000: Some(899_999),
+            }],
+            &level_map,
+            time::OffsetDateTime::UNIX_EPOCH,
+            UtcOffset::UTC,
+            &PlotFilter {
+                day_range: None,
+                level_range_tenths: None,
+            },
+        );
+
+        assert_eq!(points.len(), 1);
+        assert_eq!(points[0].previous_achievement_percent, None);
+    }
+
+    fn level_map() -> HashMap<LevelMapKey, i32> {
+        HashMap::from([(
+            (
+                "Song A".to_string(),
+                "POPS".to_string(),
+                "Artist".to_string(),
+                ChartType::Dx,
+                DifficultyCategory::Master,
+            ),
+            130,
+        )])
+    }
 }
