@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 
 import { useI18n } from '../app/i18n';
 import { formatPercent } from '../app/utils';
@@ -16,40 +16,66 @@ interface ScoreHistoryModalProps {
   onClose: () => void;
 }
 
-const CHART_WIDTH = 820;
-const CHART_HEIGHT = 360;
-const CHART_MARGIN = { top: 18, right: 28, bottom: 68, left: 84 };
-const POINT_RADIUS = 5;
-const ACTIVE_POINT_RADIUS = 7;
-const TOOLTIP_WIDTH = 196;
-const TOOLTIP_HEIGHT = 64;
-const TOOLTIP_GAP = 14;
-
-interface ChartPoint extends ScoreHistoryPoint {
-  chartX: number;
-  chartY: number;
+interface HistoryPlotTheme {
+  bg: string;
+  paperBg: string;
+  text: string;
+  muted: string;
+  grid: string;
+  axis: string;
+  accent: string;
+  accentSoft: string;
+  rankLine: string;
+  hoverBg: string;
+  hoverBorder: string;
+  markerFill: string;
+  markerLine: string;
 }
+
+const FONT_FAMILY = "'Pretendard Variable', Pretendard, -apple-system, BlinkMacSystemFont, 'Apple SD Gothic Neo', 'Malgun Gothic', sans-serif";
+const RANK_THRESHOLDS: Array<{ value: number; label: string; icon: string }> = [
+  { value: 97.0, label: 'S', icon: '/rank-icons/s.png' },
+  { value: 98.0, label: 'S+', icon: '/rank-icons/sp.png' },
+  { value: 99.0, label: 'SS', icon: '/rank-icons/ss.png' },
+  { value: 99.5, label: 'SS+', icon: '/rank-icons/ssp.png' },
+  { value: 100.0, label: 'SSS', icon: '/rank-icons/sss.png' },
+  { value: 100.5, label: 'SSS+', icon: '/rank-icons/sssp.png' },
+];
+
+const DARK_HISTORY_THEME: HistoryPlotTheme = {
+  bg: '#111116',
+  paperBg: 'rgba(0,0,0,0)',
+  text: '#dcdce8',
+  muted: '#9898b0',
+  grid: 'rgba(255,255,255,0.06)',
+  axis: 'rgba(255,255,255,0.16)',
+  accent: '#e09000',
+  accentSoft: 'rgba(224,144,0,0.18)',
+  rankLine: 'rgba(255,255,255,0.22)',
+  hoverBg: '#181820',
+  hoverBorder: 'rgba(224,144,0,0.35)',
+  markerFill: '#f3c15a',
+  markerLine: '#0b0b0f',
+};
+
+const LIGHT_HISTORY_THEME: HistoryPlotTheme = {
+  bg: '#ffffff',
+  paperBg: 'rgba(0,0,0,0)',
+  text: '#252533',
+  muted: '#6a6a78',
+  grid: 'rgba(0,0,0,0.07)',
+  axis: 'rgba(0,0,0,0.18)',
+  accent: '#c07a00',
+  accentSoft: 'rgba(192,122,0,0.16)',
+  rankLine: 'rgba(0,0,0,0.24)',
+  hoverBg: '#ffffff',
+  hoverBorder: 'rgba(192,122,0,0.32)',
+  markerFill: '#d58a0a',
+  markerLine: '#ffffff',
+};
 
 function toUnixMillis(unixtime: number): number {
   return unixtime > 10_000_000_000 ? unixtime : unixtime * 1000;
-}
-
-function buildLinearTicks(start: number, end: number, count: number): number[] {
-  if (count <= 1 || start === end) {
-    return [start];
-  }
-
-  const step = (end - start) / (count - 1);
-  return Array.from({ length: count }, (_, index) => start + step * index);
-}
-
-function formatDateTick(unixtime: number, spanMs: number, locale: string): string {
-  const date = new Date(toUnixMillis(unixtime));
-  return date.toLocaleDateString(locale, {
-    year: spanMs > 1000 * 60 * 60 * 24 * 365 ? '2-digit' : undefined,
-    month: '2-digit',
-    day: '2-digit',
-  });
 }
 
 function formatPointTime(unixtime: number, locale: string): string {
@@ -62,25 +88,47 @@ function formatPointTime(unixtime: number, locale: string): string {
   });
 }
 
-function clamp(value: number, min: number, max: number): number {
-  return Math.min(Math.max(value, min), max);
+function resolveEffectiveTheme(): 'light' | 'dark' {
+  const attr = document.documentElement.getAttribute('data-theme');
+  if (attr === 'light') return 'light';
+  if (attr === 'dark') return 'dark';
+  return window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
 }
 
-function buildAreaPath(points: ChartPoint[], baselineY: number): string {
-  if (points.length === 0) {
-    return '';
-  }
+function useEffectiveTheme(): 'light' | 'dark' {
+  const [theme, setTheme] = useState<'light' | 'dark'>(() => {
+    if (typeof window === 'undefined') return 'dark';
+    return resolveEffectiveTheme();
+  });
 
-  const [firstPoint, ...remainingPoints] = points;
-  const lastPoint = points[points.length - 1];
+  useEffect(() => {
+    const update = () => setTheme(resolveEffectiveTheme());
+    const observer = new MutationObserver(update);
+    observer.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
 
-  return [
-    `M ${firstPoint.chartX} ${baselineY}`,
-    `L ${firstPoint.chartX} ${firstPoint.chartY}`,
-    ...remainingPoints.map((point) => `L ${point.chartX} ${point.chartY}`),
-    `L ${lastPoint.chartX} ${baselineY}`,
-    'Z',
-  ].join(' ');
+    const media = window.matchMedia('(prefers-color-scheme: light)');
+    media.addEventListener('change', update);
+
+    return () => {
+      observer.disconnect();
+      media.removeEventListener('change', update);
+    };
+  }, []);
+
+  return theme;
+}
+
+function buildYRange(values: number[]): [number, number] {
+  const minAchievement = Math.min(...values);
+  const maxAchievement = Math.max(...values);
+  const span = Math.max(maxAchievement - minAchievement, 0.08);
+  const padding = Math.max(span * 0.18, 0.05);
+  const nearbyRanks = RANK_THRESHOLDS
+    .map((rank) => rank.value)
+    .filter((value) => value >= minAchievement - padding * 1.6 && value <= maxAchievement + padding * 1.6);
+  const yMin = Math.max(0, Math.min(minAchievement, ...nearbyRanks) - padding);
+  const yMax = Math.min(101.2, Math.max(maxAchievement, ...nearbyRanks) + padding);
+  return yMax > yMin ? [yMin, yMax] : [Math.max(0, yMin - 0.5), yMax + 0.5];
 }
 
 export function ScoreHistoryModal({
@@ -92,81 +140,165 @@ export function ScoreHistoryModal({
   onClose,
 }: ScoreHistoryModalProps) {
   const { locale, t } = useI18n();
-  const [hoveredPointKey, setHoveredPointKey] = useState<string | null>(null);
+  const plotRef = useRef<HTMLDivElement>(null);
+  const effectiveTheme = useEffectiveTheme();
+  const plotTheme = effectiveTheme === 'light' ? LIGHT_HISTORY_THEME : DARK_HISTORY_THEME;
   const shouldShowLoadingState = isLoading && historyPoints.length === 0;
+
+  const sortedHistoryPoints = useMemo(
+    () => [...historyPoints].sort((a, b) => a.playedAtUnix - b.playedAtUnix),
+    [historyPoints],
+  );
+
+  useEffect(() => {
+    const el = plotRef.current;
+    if (!el || !selectedHistoryRow || sortedHistoryPoints.length === 0) {
+      return;
+    }
+
+    let cancelled = false;
+
+    void (async () => {
+      const Plotly = (await import('plotly.js-dist-min')).default;
+      if (cancelled) return;
+
+      const xValues = sortedHistoryPoints.map((point) => new Date(toUnixMillis(point.playedAtUnix)));
+      const yValues = sortedHistoryPoints.map((point) => point.achievementPercent);
+      const [yMin, yMax] = buildYRange(yValues);
+      const hoverTexts = sortedHistoryPoints.map((point) => [
+        `<b>${formatPercent(point.achievementPercent)}</b>`,
+        point.playedAtLabel ?? formatPointTime(point.playedAtUnix, locale),
+      ].join('<br>'));
+
+      const shapes: Array<Record<string, unknown>> = [];
+      const images: Array<Record<string, unknown>> = [];
+      const annotations: Array<Record<string, unknown>> = [];
+      const ySpan = yMax - yMin;
+
+      for (const rank of RANK_THRESHOLDS) {
+        if (rank.value < yMin || rank.value > yMax) continue;
+        shapes.push({
+          type: 'line',
+          x0: 0,
+          x1: 1,
+          y0: rank.value,
+          y1: rank.value,
+          xref: 'paper',
+          yref: 'y',
+          line: { dash: 'dot', color: plotTheme.rankLine, width: 1.2 },
+          layer: 'below',
+        });
+        images.push({
+          source: rank.icon,
+          xref: 'paper',
+          yref: 'paper',
+          x: 1.01,
+          y: (rank.value - yMin) / ySpan,
+          sizex: 0.075,
+          sizey: 0.045,
+          xanchor: 'left',
+          yanchor: 'middle',
+          sizing: 'contain',
+          layer: 'above',
+        });
+        annotations.push({
+          xref: 'paper',
+          yref: 'y',
+          x: 1,
+          y: rank.value,
+          text: rank.label,
+          showarrow: false,
+          xanchor: 'right',
+          yanchor: 'bottom',
+          font: { size: 10, color: plotTheme.muted, family: FONT_FAMILY },
+        });
+      }
+
+      const traces = [{
+        x: xValues,
+        y: yValues,
+        type: 'scatter' as const,
+        mode: 'lines+markers' as const,
+        fill: sortedHistoryPoints.length > 1 ? 'tozeroy' : 'none',
+        fillcolor: plotTheme.accentSoft,
+        line: {
+          color: plotTheme.accent,
+          width: 3,
+          shape: 'spline' as const,
+          smoothing: 0.35,
+        },
+        marker: {
+          size: 9,
+          color: plotTheme.markerFill,
+          line: { width: 1.5, color: plotTheme.markerLine },
+        },
+        text: hoverTexts,
+        hoverinfo: 'text' as const,
+        cliponaxis: false,
+      }];
+
+      const layout: Record<string, unknown> = {
+        font: { family: FONT_FAMILY, color: plotTheme.text },
+        xaxis: {
+          title: { text: t('history.axisTime'), font: { size: 12, color: plotTheme.muted } },
+          showgrid: true,
+          gridcolor: plotTheme.grid,
+          zeroline: false,
+          fixedrange: true,
+          tickfont: { size: 11, color: plotTheme.muted, family: FONT_FAMILY },
+          linecolor: plotTheme.axis,
+        },
+        yaxis: {
+          title: { text: t('history.axisAchievement'), font: { size: 12, color: plotTheme.muted } },
+          range: [yMin, yMax],
+          ticksuffix: '%',
+          tickformat: '.2f',
+          showgrid: true,
+          gridcolor: plotTheme.grid,
+          zeroline: false,
+          fixedrange: true,
+          tickfont: { size: 11, color: plotTheme.muted, family: FONT_FAMILY },
+          linecolor: plotTheme.axis,
+        },
+        plot_bgcolor: plotTheme.bg,
+        paper_bgcolor: plotTheme.paperBg,
+        showlegend: false,
+        margin: { l: 72, r: 104, t: 20, b: 56 },
+        shapes,
+        images,
+        annotations,
+        height: 390,
+        autosize: true,
+        hovermode: 'closest',
+        hoverlabel: {
+          bgcolor: plotTheme.hoverBg,
+          bordercolor: plotTheme.hoverBorder,
+          font: { color: plotTheme.text, size: 12, family: FONT_FAMILY },
+        },
+        dragmode: false,
+      };
+
+      const config: Record<string, unknown> = {
+        displayModeBar: false,
+        displaylogo: false,
+        responsive: true,
+        scrollZoom: false,
+        doubleClick: false,
+        staticPlot: false,
+      };
+
+      Plotly.react(el, traces, layout, config);
+    })();
+
+    return () => {
+      cancelled = true;
+      void import('plotly.js-dist-min').then(({ default: Plotly }) => Plotly.purge(el));
+    };
+  }, [locale, plotTheme, selectedHistoryRow, sortedHistoryPoints, t]);
 
   if (!selectedHistoryRow) {
     return null;
   }
-
-  const innerWidth = CHART_WIDTH - CHART_MARGIN.left - CHART_MARGIN.right;
-  const innerHeight = CHART_HEIGHT - CHART_MARGIN.top - CHART_MARGIN.bottom;
-
-  const xValues = historyPoints.map((point) => point.playedAtUnix);
-  const yValues = historyPoints.map((point) => point.achievementPercent);
-
-  const minX = xValues.length > 0 ? Math.min(...xValues) : 0;
-  const maxX = xValues.length > 0 ? Math.max(...xValues) : 0;
-  const minAchievement = yValues.length > 0 ? Math.min(...yValues) : 0;
-  const maxAchievement = yValues.length > 0 ? Math.max(...yValues) : 100;
-  const yPadding = Math.max((maxAchievement - minAchievement) * 0.18, 0.04);
-  const yMin = Math.max(0, minAchievement - yPadding);
-  const yMax = maxAchievement + yPadding;
-  const effectiveYMax = yMax > yMin ? yMax : yMin + 1;
-  const xSpan = maxX - minX;
-  const ySpan = effectiveYMax - yMin;
-
-  const toChartX = (value: number) => {
-    if (historyPoints.length <= 1 || xSpan === 0) {
-      return CHART_MARGIN.left + innerWidth / 2;
-    }
-    return CHART_MARGIN.left + ((value - minX) / xSpan) * innerWidth;
-  };
-
-  const toChartY = (value: number) => {
-    const rawY = CHART_MARGIN.top + innerHeight - ((value - yMin) / ySpan) * innerHeight;
-    return Math.min(
-      CHART_MARGIN.top + innerHeight - POINT_RADIUS,
-      Math.max(CHART_MARGIN.top + POINT_RADIUS, rawY),
-    );
-  };
-
-  const xTicks = historyPoints.length === 0
-    ? []
-    : buildLinearTicks(minX, maxX, historyPoints.length === 1 ? 1 : Math.min(5, historyPoints.length));
-  const yTicks = historyPoints.length === 0 ? [] : buildLinearTicks(yMin, effectiveYMax, 5);
-  const chartPoints = historyPoints.map((point) => ({
-    ...point,
-    chartX: toChartX(point.playedAtUnix),
-    chartY: toChartY(point.achievementPercent),
-  }));
-  const hoveredPoint = chartPoints.find((point) => point.key === hoveredPointKey) ?? null;
-  const activePoint = hoveredPoint;
-  const linePoints = chartPoints
-    .map((point) => `${point.chartX},${point.chartY}`)
-    .join(' ');
-  const areaPath = buildAreaPath(chartPoints, CHART_MARGIN.top + innerHeight);
-  const tooltipMinX = CHART_MARGIN.left + 8;
-  const tooltipMaxX = CHART_MARGIN.left + innerWidth - TOOLTIP_WIDTH - 8;
-  const tooltipBaseX = activePoint ? activePoint.chartX - TOOLTIP_WIDTH / 2 : 0;
-  const tooltipX = clamp(tooltipBaseX, tooltipMinX, tooltipMaxX);
-  const shouldPlaceTooltipBelow = activePoint
-    ? activePoint.chartY - TOOLTIP_HEIGHT - TOOLTIP_GAP < CHART_MARGIN.top + 6
-    : false;
-  const tooltipMinY = CHART_MARGIN.top + 6;
-  const tooltipMaxY = CHART_MARGIN.top + innerHeight - TOOLTIP_HEIGHT - 6;
-  const tooltipBaseY = activePoint
-    ? shouldPlaceTooltipBelow
-      ? activePoint.chartY + TOOLTIP_GAP
-      : activePoint.chartY - TOOLTIP_HEIGHT - TOOLTIP_GAP
-    : 0;
-  const tooltipY = clamp(tooltipBaseY, tooltipMinY, tooltipMaxY);
-  const tooltipAnchorX = activePoint ? clamp(activePoint.chartX, tooltipX + 18, tooltipX + TOOLTIP_WIDTH - 18) : 0;
-  const tooltipAnchorY = activePoint
-    ? shouldPlaceTooltipBelow
-      ? tooltipY
-      : tooltipY + TOOLTIP_HEIGHT
-    : 0;
 
   return (
     <div className="modal-backdrop" onClick={onClose}>
@@ -207,183 +339,14 @@ export function ScoreHistoryModal({
           ) : historyPoints.length === 0 ? (
             <p className="muted">{t('history.empty')}</p>
           ) : (
-            <div
-              className="history-chart-panel"
-              onMouseLeave={() => setHoveredPointKey(null)}
-            >
+            <div className="history-chart-panel">
               <div className="history-chart-stage">
-                <svg
-                  viewBox={`0 0 ${CHART_WIDTH} ${CHART_HEIGHT}`}
-                  className="history-chart"
+                <div
+                  ref={plotRef}
+                  className="history-plotly-chart"
                   role="img"
                   aria-label={t('history.graphLabel', { title: selectedHistoryRow.title })}
-                >
-                  <defs>
-                    <linearGradient id="history-line-gradient" x1="0%" y1="0%" x2="100%" y2="0%">
-                      <stop className="history-line-stop-start" offset="0%" />
-                      <stop className="history-line-stop-end" offset="100%" />
-                    </linearGradient>
-                    <linearGradient id="history-area-gradient" x1="0%" y1="0%" x2="0%" y2="100%">
-                      <stop className="history-area-stop-start" offset="0%" />
-                      <stop className="history-area-stop-end" offset="100%" />
-                    </linearGradient>
-                  </defs>
-
-                  {yTicks.map((tick) => (
-                    <g key={`y-${tick}`} className="history-grid">
-                      <line
-                        x1={CHART_MARGIN.left}
-                        x2={CHART_MARGIN.left + innerWidth}
-                        y1={toChartY(tick)}
-                        y2={toChartY(tick)}
-                        vectorEffect="non-scaling-stroke"
-                      />
-                      <text
-                        x={CHART_MARGIN.left - 10}
-                        y={toChartY(tick)}
-                        textAnchor="end"
-                        dominantBaseline="middle"
-                      >
-                        {formatPercent(tick)}
-                      </text>
-                    </g>
-                  ))}
-
-                  {xTicks.map((tick) => (
-                    <g key={`x-${tick}`} className="history-grid history-grid-x">
-                      <line
-                        x1={toChartX(tick)}
-                        x2={toChartX(tick)}
-                        y1={CHART_MARGIN.top}
-                        y2={CHART_MARGIN.top + innerHeight}
-                        vectorEffect="non-scaling-stroke"
-                      />
-                      <text
-                        x={toChartX(tick)}
-                        y={CHART_MARGIN.top + innerHeight + 24}
-                        textAnchor="middle"
-                      >
-                        {formatDateTick(tick, xSpan, locale)}
-                      </text>
-                    </g>
-                  ))}
-
-                  <line
-                    className="history-axis"
-                    x1={CHART_MARGIN.left}
-                    x2={CHART_MARGIN.left}
-                    y1={CHART_MARGIN.top}
-                    y2={CHART_MARGIN.top + innerHeight}
-                    vectorEffect="non-scaling-stroke"
-                  />
-                  <line
-                    className="history-axis"
-                    x1={CHART_MARGIN.left}
-                    x2={CHART_MARGIN.left + innerWidth}
-                    y1={CHART_MARGIN.top + innerHeight}
-                    y2={CHART_MARGIN.top + innerHeight}
-                    vectorEffect="non-scaling-stroke"
-                  />
-
-                  <text
-                    className="history-axis-label"
-                    x={24}
-                    y={CHART_MARGIN.top + innerHeight / 2}
-                    transform={`rotate(-90 24 ${CHART_MARGIN.top + innerHeight / 2})`}
-                    textAnchor="middle"
-                  >
-                    {t('history.axisAchievement')}
-                  </text>
-                  <text
-                    className="history-axis-label"
-                    x={CHART_MARGIN.left + innerWidth / 2}
-                    y={CHART_HEIGHT - 18}
-                    textAnchor="middle"
-                  >
-                    {t('history.axisTime')}
-                  </text>
-
-                  {areaPath ? <path className="history-area" d={areaPath} /> : null}
-
-                  {activePoint ? (
-                    <g className="history-chart-tooltip" aria-live="polite">
-                      <line
-                        className="history-active-guide"
-                        x1={activePoint.chartX}
-                        x2={activePoint.chartX}
-                        y1={CHART_MARGIN.top}
-                        y2={CHART_MARGIN.top + innerHeight}
-                        vectorEffect="non-scaling-stroke"
-                      />
-                      <line
-                        className="history-tooltip-connector"
-                        x1={tooltipAnchorX}
-                        x2={activePoint.chartX}
-                        y1={tooltipAnchorY}
-                        y2={activePoint.chartY}
-                        vectorEffect="non-scaling-stroke"
-                      />
-                      <foreignObject
-                        x={tooltipX}
-                        y={tooltipY}
-                        width={TOOLTIP_WIDTH}
-                        height={TOOLTIP_HEIGHT}
-                      >
-                        <div className="history-tooltip-card">
-                          <strong className="history-tooltip-value">
-                            {formatPercent(activePoint.achievementPercent)}
-                          </strong>
-                          <div className="history-tooltip-time">
-                            {activePoint.playedAtLabel ?? formatPointTime(activePoint.playedAtUnix, locale)}
-                          </div>
-                        </div>
-                      </foreignObject>
-                    </g>
-                  ) : null}
-
-                  {historyPoints.length > 1 ? (
-                    <polyline
-                      className="history-line"
-                      fill="none"
-                      points={linePoints}
-                    />
-                  ) : null}
-
-                  {chartPoints.map((point) => {
-                    const isActive = point.key === activePoint?.key;
-
-                    return (
-                      <g key={point.key}>
-                        <circle
-                          className="history-point-hit"
-                          cx={point.chartX}
-                          cy={point.chartY}
-                          r={14}
-                          onMouseEnter={() => setHoveredPointKey(point.key)}
-                        />
-                        {isActive ? (
-                          <circle
-                            className="history-point-glow"
-                            cx={point.chartX}
-                            cy={point.chartY}
-                            r={ACTIVE_POINT_RADIUS + 5}
-                          />
-                        ) : null}
-                        <circle
-                          className={`history-point${isActive ? ' history-point-active' : ''}`}
-                          cx={point.chartX}
-                          cy={point.chartY}
-                          r={isActive ? ACTIVE_POINT_RADIUS : POINT_RADIUS}
-                          tabIndex={0}
-                          aria-label={`${point.playedAtLabel ?? formatPointTime(point.playedAtUnix, locale)} ${formatPercent(point.achievementPercent)}`}
-                          onMouseEnter={() => setHoveredPointKey(point.key)}
-                          onFocus={() => setHoveredPointKey(point.key)}
-                          onBlur={() => setHoveredPointKey((current) => (current === point.key ? null : current))}
-                        />
-                      </g>
-                    );
-                  })}
-                </svg>
+                />
               </div>
             </div>
           )}
